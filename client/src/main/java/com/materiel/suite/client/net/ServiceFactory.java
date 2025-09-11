@@ -6,6 +6,7 @@ import com.materiel.suite.client.service.mock.*;
 import com.materiel.suite.client.service.api.*;
 import com.materiel.suite.client.net.RestClient;
 
+
 public class ServiceFactory {
   private static AppConfig cfg;
   private static QuoteService quoteService;
@@ -13,6 +14,7 @@ public class ServiceFactory {
   private static DeliveryNoteService deliveryNoteService;
   private static InvoiceService invoiceService;
   private static PlanningService planningService;
+
 
   public static void init(AppConfig c) {
     cfg = c;
@@ -49,4 +51,5 @@ public class ServiceFactory {
   public static DeliveryNoteService deliveryNotes(){ return deliveryNoteService; }
   public static InvoiceService invoices(){ return invoiceService; }
   public static PlanningService planning(){ return planningService; }
+
 }

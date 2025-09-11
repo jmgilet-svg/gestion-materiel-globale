@@ -8,6 +8,7 @@ Monorepo Maven (Java 17) avec deux modules :
 > **Phase 2** : **éditeurs de lignes**, **totaux auto**, **badges de statuts**, **conversions** Devis→BC→BL→Facture (mock).  
 > **Phase 3** : **Planning DnD** (glisser-déposer + resize, calcul de voies/chevauchements, hauteur de ligne auto, entêtes alignées), **CRUD minimal Ressources**, **câblage Backend/API (SDK léger)** avec fallback mock si l’API est indisponible.
 
+
 ## Prérequis
 - Java 17+
 - Maven 3.8+
@@ -36,6 +37,7 @@ client/
   src/main/java/com/materiel/suite/client/service/mock/{MockData,MockQuoteService,MockOrderService,MockDeliveryNoteService,MockInvoiceService}.java
   src/main/java/com/materiel/suite/client/service/mock/MockPlanningService.java
   src/main/java/com/materiel/suite/client/service/api/{ApiQuoteService,ApiOrderService,ApiDeliveryNoteService,ApiInvoiceService,ApiPlanningService}.java
+
   src/main/java/com/materiel/suite/client/ui/{MainFrame,ModeChoiceDialog,StatusBadgeRenderer}.java
   src/main/java/com/materiel/suite/client/ui/doc/{DocumentLineTableModel,DocumentTotalsPanel}.java
   src/main/java/com/materiel/suite/client/ui/quotes/{QuotesPanel,QuoteEditor}.java
@@ -52,6 +54,7 @@ client/
 - **Backend/API** : `ServiceFactory` sélectionne **Api*** en mode backend (base URL par défaut `http://localhost:8080`). En cas d’échec réseau/parsing, **fallback** transparent sur **Mock*** pour garder l’UX fluide hors-ligne.
 
 > Le SDK léger repose sur `java.net.http.HttpClient` sans dépendances. `SimpleJson` fournit un parsing minimal pour les champs nécessaires.
+
 
 ## Phase 2 — Utilisation rapide
 - **Devis** : onglet Devis → **Nouveau** / **Modifier** → éditez les lignes (désignation, Qté, Unité, PU HT, Remise %, TVA %).  
@@ -74,4 +77,5 @@ Statuts (badges) : Brouillon, Envoyé, Accepté, Refusé, Expiré, Confirmé, An
 ### Variables d’environnement utiles (optionnel)
 - `GM_API_BASE` (ex: `http://localhost:8080`)
 - `GM_API_TOKEN` (Bearer)
+
 
