@@ -9,14 +9,14 @@ import com.materiel.suite.client.ui.setup.ModeChoiceDialog;
 import javax.swing.*;
 
 public class Launcher {
-    public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            FlatLightLaf.setup();
-            AppConfig cfg = AppConfig.load();
-            cfg = ModeChoiceDialog.chooseMode(cfg);
-            ServiceFactory.init(cfg);
-            new MainFrame().setVisible(true);
-            System.out.println("CLIENT_READY_UI_OFFLINE");
-        });
-    }
+  public static void main(String[] args) {
+    SwingUtilities.invokeLater(() -> {
+      FlatLightLaf.setup();
+      AppConfig cfg = AppConfig.load();
+      cfg = ModeChoiceDialog.chooseMode(cfg);
+      ServiceFactory.init(cfg);
+      new MainFrame(cfg).setVisible(true);
+      System.out.println("CLIENT_READY_UI_OFFLINE");
+    });
+  }
 }
