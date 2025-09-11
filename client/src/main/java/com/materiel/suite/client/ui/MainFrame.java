@@ -5,6 +5,8 @@ import com.materiel.suite.client.ui.delivery.DeliveryNotesPanel;
 import com.materiel.suite.client.ui.invoices.InvoicesPanel;
 import com.materiel.suite.client.ui.orders.OrdersPanel;
 import com.materiel.suite.client.ui.quotes.QuotesPanel;
+import com.materiel.suite.client.ui.planning.PlanningPanel;
+
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -24,7 +26,7 @@ public class MainFrame extends JFrame {
     add(buildSidebar(), BorderLayout.WEST);
     add(center, BorderLayout.CENTER);
 
-    center.add(new JLabel("Planning (à implémenter)"), "planning");
+    center.add(new PlanningPanel(), "planning");
     center.add(new QuotesPanel(), "quotes");
     center.add(new OrdersPanel(), "orders");
     center.add(new DeliveryNotesPanel(), "delivery");
@@ -72,5 +74,4 @@ public class MainFrame extends JFrame {
     b.addActionListener(e -> cards.show(center, card));
     return b;
   }
-
 }
