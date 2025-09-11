@@ -41,4 +41,5 @@ public class ServiceFactory {
   public static OrderService orders(){ return orderService; }
   public static DeliveryNoteService deliveryNotes(){ return deliveryNoteService; }
   public static InvoiceService invoices(){ return invoiceService; }
+
 }
