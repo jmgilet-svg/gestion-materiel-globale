@@ -6,6 +6,7 @@ import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.ui.commands.CommandBus;
 import com.materiel.suite.client.ui.commands.MoveResizeInterventionCommand;
 
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
@@ -240,6 +241,7 @@ public class PlanningBoard extends JComponent {
     newStart = snap(newStart); newEnd = snap(newEnd);
     UUID newRes = (dragOverResource!=null? dragOverResource : dragItem.getResourceId());
     CommandBus.get().submit(new MoveResizeInterventionCommand(dragItem, newRes, newStart, newEnd));
+
     dragItem = null; dragRect=null; resizingLeft=resizingRight=false;
     reload();
   }

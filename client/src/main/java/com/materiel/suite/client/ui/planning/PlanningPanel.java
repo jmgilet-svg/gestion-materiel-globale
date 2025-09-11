@@ -5,6 +5,7 @@ import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.ui.commands.CommandBus;
 
+
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
@@ -17,15 +18,14 @@ public class PlanningPanel extends JPanel {
   private final PlanningBoard board = new PlanningBoard();
   private final AgendaBoard agenda = new AgendaBoard();
 
+
   public PlanningPanel(){
     super(new BorderLayout());
     add(buildToolbar(), BorderLayout.NORTH);
-
     var scroll = new JScrollPane(board);
     DayHeader header = new DayHeader(board);
     scroll.setColumnHeaderView(header);
     scroll.getHorizontalScrollBar().addAdjustmentListener(e -> header.repaint());
-
     var scrollAgenda = new JScrollPane(agenda);
 
     JPanel center = new JPanel(new CardLayout());
@@ -62,7 +62,6 @@ public class PlanningPanel extends JPanel {
       }
     };
     scroll.setRowHeaderView(rowHeader);
-
     add(center, BorderLayout.CENTER);
     board.reload();
     agenda.reload();
@@ -103,6 +102,7 @@ public class PlanningPanel extends JPanel {
     cl.show((Container)getComponent(1), agendaMode? "agenda" : "gantt");
   }
 
+
   private void addInterventionDialog(){
     var rs = ServiceFactory.planning().listResources();
     if (rs.isEmpty()){ JOptionPane.showMessageDialog(this,"Aucune ressource"); return; }
@@ -130,4 +130,5 @@ public class PlanningPanel extends JPanel {
     getActionMap().put("undo", new AbstractAction(){ public void actionPerformed(java.awt.event.ActionEvent e){ CommandBus.get().undo(); board.reload(); agenda.reload(); }});
     getActionMap().put("redo", new AbstractAction(){ public void actionPerformed(java.awt.event.ActionEvent e){ CommandBus.get().redo(); board.reload(); agenda.reload(); }});
   }
+
 }

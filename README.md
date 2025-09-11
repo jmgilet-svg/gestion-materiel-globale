@@ -4,6 +4,7 @@ Monorepo Maven (Java 17) avec deux modules :
 - **backend/** : snapshot OpenAPI statique (pas d’exécution requise hors-ligne)
 - **client/** : application Swing (Mode Mock par défaut), fenêtre de choix Mock/API, UI ERP + **Planning DnD**
 
+
 ## Quick Wins (UX/Qualité)
 Cette livraison ajoute des améliorations ciblées, sans casser l’existant :
 
@@ -28,6 +29,7 @@ Cette livraison ajoute des améliorations ciblées, sans casser l’existant :
 >  - Toggle Gantt/Agenda dans la barre d’outils du planning.  
 >  - Undo: `Ctrl+Z`, Redo: `Ctrl+Y`.  
 >  - DnD corrigé : calcul des minutes par delta de souris (dx/dy) + arrondi 5–60 min ; plus d’écarts catastrophiques.
+
 
 ## Prérequis
 - Java 17+
@@ -95,4 +97,3 @@ Statuts (badges) : Brouillon, Envoyé, Accepté, Refusé, Expiré, Confirmé, An
 ### Variables d’environnement utiles (optionnel)
 - `GM_API_BASE` (ex: `http://localhost:8080`)
 - `GM_API_TOKEN` (Bearer)
-
