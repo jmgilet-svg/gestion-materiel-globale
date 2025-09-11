@@ -43,7 +43,7 @@ public class MockPlanningService implements PlanningService {
   }
   @Override public Intervention saveIntervention(Intervention i){ if(i.getId()==null) i.setId(UUID.randomUUID()); interventions.put(i.getId(), i); return i; }
   @Override public void deleteIntervention(UUID id){ interventions.remove(id); }
-
+  
   @Override public List<Conflict> listConflicts(LocalDate from, LocalDate to){
     List<Conflict> out = new ArrayList<>();
     for (Resource r : resources.values()){

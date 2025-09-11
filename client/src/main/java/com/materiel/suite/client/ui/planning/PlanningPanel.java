@@ -19,6 +19,7 @@ public class PlanningPanel extends JPanel {
   private final AgendaBoard agenda = new AgendaBoard();
   private JButton conflictsBtn;
 
+
   public PlanningPanel(){
     super(new BorderLayout());
     add(buildToolbar(), BorderLayout.NORTH);
@@ -88,6 +89,7 @@ public class PlanningPanel extends JPanel {
     mode.addActionListener(e -> switchMode(mode.isSelected()));
     conflictsBtn.addActionListener(e -> openConflictsDialog());
 
+
     prev.addActionListener(e -> { board.setStartDate(board.getStartDate().minusDays(7)); agenda.setStartDate(board.getStartDate()); });
     next.addActionListener(e -> { board.setStartDate(board.getStartDate().plusDays(7)); agenda.setStartDate(board.getStartDate()); });
     today.addActionListener(e -> { board.setStartDate(LocalDate.now().with(java.time.DayOfWeek.MONDAY)); agenda.setStartDate(board.getStartDate()); });
@@ -99,6 +101,7 @@ public class PlanningPanel extends JPanel {
     bar.add(Box.createHorizontalStrut(16)); bar.add(zoomL); bar.add(zoom);
     bar.add(new JLabel("Snap (min):")); bar.add(snap);
     bar.add(Box.createHorizontalStrut(8)); bar.add(conflictsBtn);
+
     bar.add(Box.createHorizontalStrut(16)); bar.add(addI);
     return bar;
   }

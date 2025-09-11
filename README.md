@@ -24,7 +24,7 @@ Lancer localement :
 ```bash
 mvn -q -pl backend spring-boot:run
 mvn -q -pl client -DskipTests exec:java
-```
+
 
 ## Quick Wins (UX/Qualité)
 Cette livraison ajoute des améliorations ciblées, sans casser l’existant :
@@ -117,4 +117,3 @@ Statuts (badges) : Brouillon, Envoyé, Accepté, Refusé, Expiré, Confirmé, An
 ### Variables d’environnement utiles (optionnel)
 - `GM_API_BASE` (ex: `http://localhost:8080`)
 - `GM_API_TOKEN` (Bearer)
-

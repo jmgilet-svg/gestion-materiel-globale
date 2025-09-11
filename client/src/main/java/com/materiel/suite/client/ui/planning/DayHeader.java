@@ -9,6 +9,7 @@ public class DayHeader extends JComponent {
   private final PlanningBoard board;
   private final DateTimeFormatter DF = DateTimeFormatter.ofPattern("EEE dd/MM");
   public DayHeader(PlanningBoard b){ this.board=b; setPreferredSize(new Dimension(600,28)); }
+
   @Override public Dimension getPreferredSize(){
     return new Dimension(board.getPreferredSize().width, 28);
   }
