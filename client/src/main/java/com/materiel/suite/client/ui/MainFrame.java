@@ -9,7 +9,7 @@ public class MainFrame extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(800, 600);
         setLocationRelativeTo(null);
-        JLabel label = new JLabel("CLIENT_READY_UI", SwingConstants.CENTER);
+        JLabel label = new JLabel("CLIENT_READY_UI_OFFLINE", SwingConstants.CENTER);
         add(label, BorderLayout.CENTER);
     }
 }

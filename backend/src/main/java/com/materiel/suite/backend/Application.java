@@ -7,6 +7,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class Application {
     public static void main(String[] args) {
         SpringApplication.run(Application.class, args);
-        System.out.println("BACKEND_READY_API");
+        System.out.println("BACKEND_READY_API_STUB");
+
     }
 }

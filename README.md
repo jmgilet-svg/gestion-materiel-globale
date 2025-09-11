@@ -8,21 +8,22 @@ Monorepo Maven Java 17 with two modules:
 ## Build
 
 ```
-mvn -q -DskipTests compile
+mvn -q -DskipTests compile -Poffline
 ```
 
-To run backend:
-```
-cd backend
-mvn spring-boot:run
-```
-The server logs `BACKEND_READY_API` when started.
+Only the Swing client module is compiled in offline mode. The backend requires
+Spring Boot and should be built with `-Ponline` once dependencies are
+available.
 
-To run client:
+To launch the client:
+
 ```
 cd client
 mvn -q exec:java -Dexec.mainClass=com.materiel.suite.client.Launcher
 ```
-The UI shows a window and prints `CLIENT_READY_UI` in the console.
 
-This repository only implements a minimal skeleton of the full ERP described in the specification.
+The application prints `CLIENT_READY_UI_OFFLINE` on startup.
+
+This repository still contains a minimal skeleton of the much larger ERP
+described in the specification.
+

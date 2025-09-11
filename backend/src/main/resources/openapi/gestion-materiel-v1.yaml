@@ -1,0 +1,62 @@
+openapi: 3.0.1
+info:
+  title: Gestion Materiel API
+  version: '1.0'
+paths:
+  /api/v1/quotes:
+    get:
+      summary: List quotes
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Quote'
+    post:
+      summary: Create quote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Quote'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quote'
+components:
+  schemas:
+    DocumentLine:
+      type: object
+      properties:
+        designation:
+          type: string
+        quantite:
+          type: number
+        prixUnitaireHT:
+          type: number
+        remisePct:
+          type: number
+        tvaPct:
+          type: number
+    Quote:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentLine'
+        totalHT:
+          type: number
+          format: double

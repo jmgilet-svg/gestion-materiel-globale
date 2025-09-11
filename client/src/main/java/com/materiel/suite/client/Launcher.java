@@ -16,7 +16,8 @@ public class Launcher {
             cfg = ModeChoiceDialog.chooseMode(cfg);
             ServiceFactory.init(cfg);
             new MainFrame().setVisible(true);
-            System.out.println("CLIENT_READY_UI");
+            System.out.println("CLIENT_READY_UI_OFFLINE");
+
         });
     }
 }
