@@ -10,12 +10,15 @@ public class DocumentLineTableModel extends AbstractTableModel {
   private final String[] cols = {"Désignation","Qté","Unité","PU HT","Remise %","TVA %","Ligne HT","TVA €","Ligne TTC"};
   private final List<DocumentLine> lines;
   private Consumer<List<DocumentLine>> onChange;
+  private boolean editable = true;
   public DocumentLineTableModel(List<DocumentLine> lines){ this.lines = lines; }
   public void onChange(Consumer<List<DocumentLine>> c){ this.onChange=c; }
+  public void setEditable(boolean v){ this.editable = v; }
   @Override public int getRowCount(){ return lines.size(); }
   @Override public int getColumnCount(){ return cols.length; }
   @Override public String getColumnName(int col){ return cols[col]; }
-  @Override public boolean isCellEditable(int r, int c){ return c<=5; }
+  @Override public boolean isCellEditable(int r, int c){ return editable && c<=5; }
+
   @Override public Object getValueAt(int r, int c){
     DocumentLine l = lines.get(r);
     return switch (c){

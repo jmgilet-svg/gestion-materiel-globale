@@ -4,10 +4,32 @@ Monorepo Maven (Java 17) avec deux modules :
 - **backend/** : snapshot OpenAPI statique (pas d’exécution requise hors-ligne)
 - **client/** : application Swing (Mode Mock par défaut), fenêtre de choix Mock/API, UI ERP + **Planning DnD**
 
-> Objectif : livrer une base **exécutable hors-ligne**. 
+
+## Quick Wins (UX/Qualité)
+Cette livraison ajoute des améliorations ciblées, sans casser l’existant :
+
+### Planning
+- **Conflits visuels** : chevauchements par ressource détectés, tuile bordée en **rouge**, badge “⚠ conflit” au survol.
+- **Raccourcis** : `N` nouveau, `D` dupliquer, `Delete` supprimer, `←/→` ±15 min, `Shift+←/→` ±60 min sur la sélection.
+
+### ERP
+- **Statuts verrouillants** (Devis/BC/BL/Facture) : `BROUILLON → VALIDE → ENVOYE → …`. En dehors du brouillon, les champs sont **non éditables** (sauf actions permises).
+- **Export PDF (minimal)** : bouton dans les éditeurs. Utilise **OpenPDF** si dispo, sinon impression système (imprimante PDF).
+
+### Thème & style
+- **FlatLaf** clair/sombre (arrondis + hover uniformes). Fallback sur LAF par défaut si FlatLaf indisponible.
+
+> Dépendances optionnelles : `com.formdev:flatlaf` et `com.github.librepdf:openpdf`. Si elles ne sont pas résolues (hors-ligne), l’appli continue en mode dégradé.
+
+> Objectif : livrer une base **exécutable hors-ligne**.  
 > **Phase 2** : **éditeurs de lignes**, **totaux auto**, **badges de statuts**, **conversions** Devis→BC→BL→Facture (mock).
 > **Phase 3** : **Planning DnD** (glisser-déposer + resize, calcul de voies/chevauchements, hauteur de ligne auto, entêtes alignées), **CRUD minimal Ressources**, **câblage Backend/API (SDK léger)** avec fallback mock si l’API est indisponible.
 > **Phase 3.1** : **Précision horaire** (X = jours + heures), snap **15 min**, DnD **resize** bord G/D, drag vertical pour changer de ressource, tuiles arrondies & shadow.
+> **Phase 3.2** : **Mode Agenda (heures verticales)** + **Undo/Redo** global et corrections DnD (glissements précis, sans “sauts”).  
+>  - Toggle Gantt/Agenda dans la barre d’outils du planning.  
+>  - Undo: `Ctrl+Z`, Redo: `Ctrl+Y`.  
+>  - DnD corrigé : calcul des minutes par delta de souris (dx/dy) + arrondi 5–60 min ; plus d’écarts catastrophiques.
+
 
 ## Prérequis
 - Java 17+
@@ -37,7 +59,6 @@ client/
   src/main/java/com/materiel/suite/client/service/mock/{MockData,MockQuoteService,MockOrderService,MockDeliveryNoteService,MockInvoiceService}.java
   src/main/java/com/materiel/suite/client/service/mock/MockPlanningService.java
   src/main/java/com/materiel/suite/client/service/api/{ApiQuoteService,ApiOrderService,ApiDeliveryNoteService,ApiInvoiceService,ApiPlanningService}.java
-
   src/main/java/com/materiel/suite/client/ui/{MainFrame,ModeChoiceDialog,StatusBadgeRenderer}.java
   src/main/java/com/materiel/suite/client/ui/doc/{DocumentLineTableModel,DocumentTotalsPanel}.java
   src/main/java/com/materiel/suite/client/ui/quotes/{QuotesPanel,QuoteEditor}.java
@@ -54,7 +75,6 @@ client/
 - **Backend/API** : `ServiceFactory` sélectionne **Api*** en mode backend (base URL par défaut `http://localhost:8080`). En cas d’échec réseau/parsing, **fallback** transparent sur **Mock*** pour garder l’UX fluide hors-ligne.
 
 > Le SDK léger repose sur `java.net.http.HttpClient` sans dépendances. `SimpleJson` fournit un parsing minimal pour les champs nécessaires.
-
 
 ## Phase 2 — Utilisation rapide
 - **Devis** : onglet Devis → **Nouveau** / **Modifier** → éditez les lignes (désignation, Qté, Unité, PU HT, Remise %, TVA %).  

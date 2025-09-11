@@ -3,6 +3,9 @@ package com.materiel.suite.client.ui.planning;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.net.ServiceFactory;
+import com.materiel.suite.client.ui.commands.CommandBus;
+import com.materiel.suite.client.ui.commands.MoveResizeInterventionCommand;
+
 
 import javax.swing.*;
 import java.awt.*;
@@ -221,10 +224,10 @@ public class PlanningBoard extends JComponent {
 
   private void onRelease(MouseEvent e){
     if (dragItem==null){ return; }
-    int startCol = Math.max(0, Math.min(days-1, dragRect.x / colWidth));
+    int startCol = Math.max(0, Math.min(days-1, (int)Math.floor(dragRect.x / (double)colWidth)));
     int startOffsetPx = dragRect.x - startCol * colWidth;
     double startHours = startOffsetPx / (colWidth/24.0);
-    int endCol = Math.max(0, Math.min(days-1, (dragRect.x + dragRect.width) / colWidth));
+    int endCol = Math.max(startCol, Math.min(days-1, (int)Math.floor((dragRect.x + dragRect.width) / (double)colWidth)));
     int endOffsetPx = (dragRect.x + dragRect.width) - endCol * colWidth;
     double endHours = endOffsetPx / (colWidth/24.0);
     LocalDateTime newStart = startDate.atStartOfDay().plusDays(startCol).plusMinutes((long)Math.round(startHours*60));
@@ -236,10 +239,9 @@ public class PlanningBoard extends JComponent {
     }
     if (!newEnd.isAfter(newStart)) newEnd = newStart.plusMinutes(30);
     newStart = snap(newStart); newEnd = snap(newEnd);
-    if (dragOverResource!=null) dragItem.setResourceId(dragOverResource);
-    dragItem.setDateHeureDebut(newStart);
-    dragItem.setDateHeureFin(newEnd);
-    ServiceFactory.planning().saveIntervention(dragItem);
+    UUID newRes = (dragOverResource!=null? dragOverResource : dragItem.getResourceId());
+    CommandBus.get().submit(new MoveResizeInterventionCommand(dragItem, newRes, newStart, newEnd));
+
     dragItem = null; dragRect=null; resizingLeft=resizingRight=false;
     reload();
   }

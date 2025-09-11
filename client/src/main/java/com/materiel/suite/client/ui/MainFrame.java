@@ -6,6 +6,10 @@ import com.materiel.suite.client.ui.invoices.InvoicesPanel;
 import com.materiel.suite.client.ui.orders.OrdersPanel;
 import com.materiel.suite.client.ui.quotes.QuotesPanel;
 import com.materiel.suite.client.ui.planning.PlanningPanel;
+import com.materiel.suite.client.ui.theme.ThemeManager;
+import com.materiel.suite.client.ui.commands.CommandBus;
+
+
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
@@ -17,12 +21,16 @@ public class MainFrame extends JFrame {
   public MainFrame(AppConfig cfg) {
     super("Gestion Matériel — Suite");
     setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+    ThemeManager.applyInitial();
+
     setSize(1080, 720);
 
     setLayout(new BorderLayout());
     add(buildHeader(cfg), BorderLayout.NORTH);
     add(buildSidebar(), BorderLayout.WEST);
     add(center, BorderLayout.CENTER);
+    setJMenuBar(buildMenuBar());
+
 
     center.add(new PlanningPanel(), "planning");
     center.add(new QuotesPanel(), "quotes");
@@ -33,6 +41,25 @@ public class MainFrame extends JFrame {
     center.add(new JLabel("Ressources (à implémenter)"), "resources");
 
     cards.show(center, "quotes");
+  }
+
+  private JMenuBar buildMenuBar(){
+    JMenuBar mb = new JMenuBar();
+    JMenu app = new JMenu("Application");
+    JMenuItem theme = new JMenuItem("Basculer thème clair/sombre");
+    theme.addActionListener(e -> ThemeManager.toggleDark());
+    app.add(theme);
+
+    JMenu edit = new JMenu("Édition");
+    JMenuItem undo = new JMenuItem("Annuler (Ctrl+Z)");
+    JMenuItem redo = new JMenuItem("Rétablir (Ctrl+Y)");
+    undo.addActionListener(e -> CommandBus.get().undo());
+    redo.addActionListener(e -> CommandBus.get().redo());
+    edit.add(undo); edit.add(redo);
+
+    mb.add(app);
+    mb.add(edit);
+    return mb;
   }
 
   private JComponent buildHeader(AppConfig cfg) {
