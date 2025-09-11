@@ -4,10 +4,10 @@ Monorepo Maven (Java 17) avec deux modules :
 - **backend/** : snapshot OpenAPI statique (pas d’exécution requise hors-ligne)
 - **client/** : application Swing (Mode Mock par défaut), fenêtre de choix Mock/API, UI ERP + **Planning DnD**
 
-> Objectif : livrer une base **exécutable hors-ligne**.  
-> **Phase 2** : **éditeurs de lignes**, **totaux auto**, **badges de statuts**, **conversions** Devis→BC→BL→Facture (mock).  
+> Objectif : livrer une base **exécutable hors-ligne**. 
+> **Phase 2** : **éditeurs de lignes**, **totaux auto**, **badges de statuts**, **conversions** Devis→BC→BL→Facture (mock).
 > **Phase 3** : **Planning DnD** (glisser-déposer + resize, calcul de voies/chevauchements, hauteur de ligne auto, entêtes alignées), **CRUD minimal Ressources**, **câblage Backend/API (SDK léger)** avec fallback mock si l’API est indisponible.
-
+> **Phase 3.1** : **Précision horaire** (X = jours + heures), snap **15 min**, DnD **resize** bord G/D, drag vertical pour changer de ressource, tuiles arrondies & shadow.
 
 ## Prérequis
 - Java 17+
@@ -77,5 +77,3 @@ Statuts (badges) : Brouillon, Envoyé, Accepté, Refusé, Expiré, Confirmé, An
 ### Variables d’environnement utiles (optionnel)
 - `GM_API_BASE` (ex: `http://localhost:8080`)
 - `GM_API_TOKEN` (Bearer)
-
-

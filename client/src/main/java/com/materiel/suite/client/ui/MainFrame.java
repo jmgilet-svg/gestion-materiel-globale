@@ -6,8 +6,6 @@ import com.materiel.suite.client.ui.invoices.InvoicesPanel;
 import com.materiel.suite.client.ui.orders.OrdersPanel;
 import com.materiel.suite.client.ui.quotes.QuotesPanel;
 import com.materiel.suite.client.ui.planning.PlanningPanel;
-
-
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
