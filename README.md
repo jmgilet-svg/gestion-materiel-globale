@@ -16,11 +16,14 @@ Spring Boot and should be built with `-Ponline` once dependencies are
 available.
 
 To launch the client:
+
 ```
 cd client
 mvn -q exec:java -Dexec.mainClass=com.materiel.suite.client.Launcher
 ```
+
 The application prints `CLIENT_READY_UI_OFFLINE` on startup.
 
 This repository still contains a minimal skeleton of the much larger ERP
 described in the specification.
+

@@ -17,6 +17,7 @@ public class Launcher {
             ServiceFactory.init(cfg);
             new MainFrame().setVisible(true);
             System.out.println("CLIENT_READY_UI_OFFLINE");
+
         });
     }
 }
