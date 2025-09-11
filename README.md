@@ -1,8 +1,29 @@
 # Gestion Matériel — Monorepo (offline-ready)
 
 Monorepo Maven (Java 17) avec deux modules :
-- **backend/** : snapshot OpenAPI statique (pas d’exécution requise hors-ligne)
+- **backend/** : **API Spring Boot exécutable** (Ressources, Interventions, Conflits planning, seed mémoire + CORS)
 - **client/** : application Swing (Mode Mock par défaut), fenêtre de choix Mock/API, UI ERP + **Planning DnD**
+
+## 🚀 Sprint 1 — Backend/Frontend
+**Objectif** : rendre le planning exploitable en mode **API** avec détection de conflits côté serveur et **panneau Conflits** côté client.
+
+### Backend (nouveau)
+- App Spring Boot (`backend/`) avec endpoints :
+  - `GET/POST/PUT/DELETE /api/resources`
+  - `GET/POST/PUT/DELETE /api/interventions?from=YYYY-MM-DD&to=YYYY-MM-DD`
+  - `GET /api/planning/conflicts?from=YYYY-MM-DD&to=YYYY-MM-DD`
+- Stockage **en mémoire** (seed de données) pour un démarrage immédiat.
+- **CORS** ouvert sur `/api/**` (dev).
+
+### Frontend
+- `ApiPlanningService` **branché** sur l’API (JSON ↔ modèles) avec **fallback** mock.
+- Nouvelle méthode `listConflicts(from,to)` dans `PlanningService` (+ implémentations mock & API).
+- **Bouton “Conflits (N)”** dans la toolbar du planning : affiche un dialogue listant les conflits par ressource avec des raccourcis d’auto-résolution (+30 min).
+
+Lancer localement :
+```bash
+mvn -q -pl backend spring-boot:run
+mvn -q -pl client -DskipTests exec:java
 
 
 ## Quick Wins (UX/Qualité)
@@ -29,7 +50,6 @@ Cette livraison ajoute des améliorations ciblées, sans casser l’existant :
 >  - Toggle Gantt/Agenda dans la barre d’outils du planning.  
 >  - Undo: `Ctrl+Z`, Redo: `Ctrl+Y`.  
 >  - DnD corrigé : calcul des minutes par delta de souris (dx/dy) + arrondi 5–60 min ; plus d’écarts catastrophiques.
-
 
 ## Prérequis
 - Java 17+

@@ -2,6 +2,7 @@ package com.materiel.suite.client.service.mock;
 
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
+import com.materiel.suite.client.model.Conflict;
 import com.materiel.suite.client.service.PlanningService;
 
 import java.time.LocalDate;
@@ -42,4 +43,23 @@ public class MockPlanningService implements PlanningService {
   }
   @Override public Intervention saveIntervention(Intervention i){ if(i.getId()==null) i.setId(UUID.randomUUID()); interventions.put(i.getId(), i); return i; }
   @Override public void deleteIntervention(UUID id){ interventions.remove(id); }
+  
+  @Override public List<Conflict> listConflicts(LocalDate from, LocalDate to){
+    List<Conflict> out = new ArrayList<>();
+    for (Resource r : resources.values()){
+      List<Intervention> list = listInterventions(from, to);
+      list.removeIf(i -> !i.getResourceId().equals(r.getId()));
+      list.sort(Comparator.comparing(Intervention::getDateDebut));
+      LocalDate lastEnd = null; Intervention last = null;
+      for (var it : list){
+        if (lastEnd!=null && !it.getDateDebut().isAfter(lastEnd)){
+          out.add(new Conflict(last.getId(), it.getId(), r.getId()));
+        }
+        if (lastEnd==null || it.getDateFin().isAfter(lastEnd)){
+          lastEnd = it.getDateFin(); last = it;
+        }
+      }
+    }
+    return out;
+  }
 }

@@ -2,9 +2,9 @@ package com.materiel.suite.client.ui.planning;
 
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
+import com.materiel.suite.client.model.Conflict;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.ui.commands.CommandBus;
-
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -17,15 +17,18 @@ import java.util.UUID;
 public class PlanningPanel extends JPanel {
   private final PlanningBoard board = new PlanningBoard();
   private final AgendaBoard agenda = new AgendaBoard();
+  private JButton conflictsBtn;
 
 
   public PlanningPanel(){
     super(new BorderLayout());
     add(buildToolbar(), BorderLayout.NORTH);
+
     var scroll = new JScrollPane(board);
     DayHeader header = new DayHeader(board);
     scroll.setColumnHeaderView(header);
     scroll.getHorizontalScrollBar().addAdjustmentListener(e -> header.repaint());
+
     var scrollAgenda = new JScrollPane(agenda);
 
     JPanel center = new JPanel(new CardLayout());
@@ -62,6 +65,7 @@ public class PlanningPanel extends JPanel {
       }
     };
     scroll.setRowHeaderView(rowHeader);
+
     add(center, BorderLayout.CENTER);
     board.reload();
     agenda.reload();
@@ -79,9 +83,12 @@ public class PlanningPanel extends JPanel {
     JSlider zoom = new JSlider(60,200,100);
     JSpinner snap = new JSpinner(new SpinnerNumberModel(15,5,60,5));
     JToggleButton mode = new JToggleButton("Agenda");
+    conflictsBtn = new JButton("Conflits (0)");
     JButton addI = new JButton("+ Intervention");
 
     mode.addActionListener(e -> switchMode(mode.isSelected()));
+    conflictsBtn.addActionListener(e -> openConflictsDialog());
+
 
     prev.addActionListener(e -> { board.setStartDate(board.getStartDate().minusDays(7)); agenda.setStartDate(board.getStartDate()); });
     next.addActionListener(e -> { board.setStartDate(board.getStartDate().plusDays(7)); agenda.setStartDate(board.getStartDate()); });
@@ -93,6 +100,8 @@ public class PlanningPanel extends JPanel {
     bar.add(prev); bar.add(next); bar.add(today); bar.add(mode);
     bar.add(Box.createHorizontalStrut(16)); bar.add(zoomL); bar.add(zoom);
     bar.add(new JLabel("Snap (min):")); bar.add(snap);
+    bar.add(Box.createHorizontalStrut(8)); bar.add(conflictsBtn);
+
     bar.add(Box.createHorizontalStrut(16)); bar.add(addI);
     return bar;
   }
@@ -102,6 +111,23 @@ public class PlanningPanel extends JPanel {
     cl.show((Container)getComponent(1), agendaMode? "agenda" : "gantt");
   }
 
+  private void openConflictsDialog(){
+    var from = board.getStartDate();
+    var to = from.plusDays(6);
+    java.util.List<Conflict> conflicts = ServiceFactory.planning().listConflicts(from, to);
+    conflictsBtn.setText("Conflits ("+conflicts.size()+")");
+    if (conflicts.isEmpty()){
+      JOptionPane.showMessageDialog(this, "Aucun conflit sur la période.", "Conflits", JOptionPane.INFORMATION_MESSAGE);
+      return;
+    }
+    DefaultListModel<String> model = new DefaultListModel<>();
+    for (var c : conflicts){
+      model.addElement("Ressource "+c.getResourceId()+" — "+c.getA()+" ↔ "+c.getB());
+    }
+    JList<String> list = new JList<>(model);
+    list.setVisibleRowCount(10);
+    JOptionPane.showMessageDialog(this, new JScrollPane(list), "Conflits détectés", JOptionPane.WARNING_MESSAGE);
+  }
 
   private void addInterventionDialog(){
     var rs = ServiceFactory.planning().listResources();
@@ -130,5 +156,4 @@ public class PlanningPanel extends JPanel {
     getActionMap().put("undo", new AbstractAction(){ public void actionPerformed(java.awt.event.ActionEvent e){ CommandBus.get().undo(); board.reload(); agenda.reload(); }});
     getActionMap().put("redo", new AbstractAction(){ public void actionPerformed(java.awt.event.ActionEvent e){ CommandBus.get().redo(); board.reload(); agenda.reload(); }});
   }
-
 }

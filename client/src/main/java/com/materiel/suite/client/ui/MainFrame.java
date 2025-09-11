@@ -9,7 +9,6 @@ import com.materiel.suite.client.ui.planning.PlanningPanel;
 import com.materiel.suite.client.ui.theme.ThemeManager;
 import com.materiel.suite.client.ui.commands.CommandBus;
 
-
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
@@ -22,7 +21,6 @@ public class MainFrame extends JFrame {
     super("Gestion Matériel — Suite");
     setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
     ThemeManager.applyInitial();
-
     setSize(1080, 720);
 
     setLayout(new BorderLayout());
@@ -30,7 +28,6 @@ public class MainFrame extends JFrame {
     add(buildSidebar(), BorderLayout.WEST);
     add(center, BorderLayout.CENTER);
     setJMenuBar(buildMenuBar());
-
 
     center.add(new PlanningPanel(), "planning");
     center.add(new QuotesPanel(), "quotes");

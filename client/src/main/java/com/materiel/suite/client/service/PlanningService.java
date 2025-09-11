@@ -2,6 +2,8 @@ package com.materiel.suite.client.service;
 
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
+import com.materiel.suite.client.model.Conflict;
+
 
 import java.time.LocalDate;
 import java.util.List;
@@ -15,4 +17,7 @@ public interface PlanningService {
   List<Intervention> listInterventions(LocalDate from, LocalDate to);
   Intervention saveIntervention(Intervention i);
   void deleteIntervention(UUID id);
+
+  List<Conflict> listConflicts(LocalDate from, LocalDate to);
+
 }
