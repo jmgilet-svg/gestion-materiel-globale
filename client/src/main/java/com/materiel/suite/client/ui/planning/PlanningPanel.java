@@ -18,7 +18,7 @@ public class PlanningPanel extends JPanel {
   public PlanningPanel(){
     super(new BorderLayout());
     add(buildToolbar(), BorderLayout.NORTH);
-
+    
     var scroll = new JScrollPane(board);
     DayHeader header = new DayHeader(board);
     scroll.setColumnHeaderView(header);
@@ -28,6 +28,7 @@ public class PlanningPanel extends JPanel {
       @Override public Dimension getPreferredSize(){ return new Dimension(220, board.getPreferredSize().height); }
       @Override protected void paintComponent(Graphics g){
         Graphics2D g2 = (Graphics2D) g;
+
         g2.setColor(new Color(0xF7F7F7));
         g2.fillRect(0,0,getWidth(),getHeight());
         g2.setColor(new Color(0xDDDDDD));
@@ -54,7 +55,6 @@ public class PlanningPanel extends JPanel {
       }
     };
     scroll.setRowHeaderView(rowHeader);
-
     add(scroll, BorderLayout.CENTER);
     board.reload();
   }
