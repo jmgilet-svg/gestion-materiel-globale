@@ -30,6 +30,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Quote'
+  /api/v1/orders:
+    get:
+      summary: List orders
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+    post:
+      summary: Create order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Order'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
 components:
   schemas:
     DocumentLine:
@@ -46,6 +73,21 @@ components:
         tvaPct:
           type: number
     Quote:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentLine'
+        totalHT:
+          type: number
+          format: double
+    Order:
       type: object
       properties:
         id:
