@@ -35,6 +35,7 @@ public class AgendaBoard extends JComponent {
   private Map<String, Integer> dayLaneMax = new HashMap<>();
   private Map<UUID, Integer> rowHeights = new HashMap<>();
   private int totalHeight = 0;
+  private Map<UUID, String> labelCache = new HashMap<>(); // FIX: cache labels
 
   private Intervention dragItem;
   private Rectangle dragRect;
@@ -42,6 +43,8 @@ public class AgendaBoard extends JComponent {
   private Point dragStart;
   private UUID dragOverResource;
   private LocalDateTime dragStartStart, dragStartEnd;
+  private boolean dragging; // FIX: threshold control
+  private boolean creating; // FIX: creation mode
 
   public AgendaBoard(){
     setOpaque(true);
@@ -65,6 +68,10 @@ public class AgendaBoard extends JComponent {
   public void reload(){
     resources = ServiceFactory.planning().listResources();
     interventions = ServiceFactory.planning().listInterventions(startDate, startDate.plusDays(days-1));
+    for (Intervention it : interventions){ // FIX: preserve labels
+      if (it.getLabel()!=null) labelCache.put(it.getId(), it.getLabel());
+      else if (labelCache.containsKey(it.getId())) it.setLabel(labelCache.get(it.getId()));
+    }
     byResource = interventions.stream().collect(Collectors.groupingBy(Intervention::getResourceId));
     computeDayLanes();
     computeHeights();
@@ -226,62 +233,114 @@ public class AgendaBoard extends JComponent {
             dragStartEnd = it.getDateHeureFin();
             resizingTop = Math.abs(p.y - rect.y) < 8;
             resizingBottom = Math.abs(p.y - (rect.y+rect.height)) < 8;
+            dragging = false; // FIX: wait for threshold
+            creating = false; // FIX: existing item
             return;
           }
         }
+        dragItem = null; dragRect = new Rectangle(p.x, p.y, 0, 0); // FIX: prepare creation
+        dragStart = p; dragOverResource = r.getId();
+        dragging = false; creating = true; // FIX:
+        return;
       }
       y += rowH;
     }
   }
 
   private void onDrag(MouseEvent e){
-    if (dragItem==null) return;
+    if (dragItem!=null){
+      int dx = e.getX() - dragStart.x;
+      int dy = e.getY() - dragStart.y;
+      if (!dragging && Math.hypot(dx, dy) < 6) return; // FIX: start threshold
+      dragging = true; // FIX:
+      Rectangle r = new Rectangle(dragRect);
+      if (resizingTop){
+        r.y += dy; r.height -= dy;
+        if (r.height<12){ r.height=12; r.y = dragRect.y + (dragRect.height - 12); }
+      } else if (resizingBottom){
+        r.height += dy; if (r.height<12) r.height = 12;
+      } else {
+        r.x += dx; r.y += dy;
+      }
+      int pointerY = e.getY(); int rowTop = 0; UUID over = dragOverResource; // FIX: use pointer
+      for (Resource res : resources){
+        int rh = rowHeights.get(res.getId());
+        if (pointerY>=rowTop && pointerY<rowTop+rh){ over = res.getId(); break; }
+        rowTop += rh;
+      }
+      dragOverResource = over;
+      int minutePx = (int)Math.round(hourHeight/60.0); int snap = snapMinutes*minutePx; // FIX: stable snap
+      r.y = rowTop + ((r.y - rowTop)/snap)*snap;
+      dragRect = r;
+      repaint();
+      return;
+    }
+    if (!creating) return;
     int dx = e.getX() - dragStart.x;
     int dy = e.getY() - dragStart.y;
-    Rectangle r = new Rectangle(dragRect);
-    if (resizingTop){
-      r.y += dy; r.height -= dy;
-      if (r.height<12){ r.height=12; r.y = dragRect.y + (dragRect.height - 12); }
-    } else if (resizingBottom){
-      r.height += dy; if (r.height<12) r.height = 12;
-    } else {
-      r.x += dx; r.y += dy;
-    }
-    // snap ressource (vertical segment)
-    int rowTop = 0; UUID over = dragOverResource;
+    if (!dragging && Math.hypot(dx, dy) < 12) return; // FIX: creation threshold
+    dragging = true; // FIX:
+    int pointerY = e.getY(); int rowTop = 0;
     for (Resource res : resources){
       int rh = rowHeights.get(res.getId());
-      if (r.y>=rowTop && r.y<rowTop+rh){ over = res.getId(); break; }
+      if (pointerY>=rowTop && pointerY<rowTop+rh){ dragOverResource = res.getId(); break; }
       rowTop += rh;
     }
-    dragOverResource = over;
-
-    // snap minutes
-    int minutePx = (int)Math.round(hourHeight/60.0);
-    int mod = r.y % (snapMinutes*minutePx);
-    r.y -= mod;
-    dragRect = r;
+    int dayIdx = Math.max(0, Math.min(days-1, dragStart.x / dayWidth));
+    int x = dayIdx * dayWidth + 6;
+    int w = dayWidth - 12;
+    int minutePx = (int)Math.round(hourHeight/60.0); int snap = snapMinutes*minutePx;
+    int y1 = Math.min(dragStart.y, pointerY);
+    int y2 = Math.max(dragStart.y, pointerY);
+    y1 = rowTop + ((y1 - rowTop)/snap)*snap;
+    y2 = rowTop + ((y2 - rowTop + snap -1)/snap)*snap;
+    dragRect = new Rectangle(x, y1, w, Math.max(12, y2 - y1));
     repaint();
   }
 
   private void onRelease(MouseEvent e){
-    if (dragItem==null) return;
-    // delta jours
-    int startDay = Math.max(0, Math.min(days-1, dragRect.x / dayWidth));
-    int deltaDay = startDay - (int) java.time.temporal.ChronoUnit.DAYS.between(startDate, dragStartStart.toLocalDate());
-    // delta minutes
-    int dy = dragRect.y - rectOf(dragItem, rowTopOf(dragOverResource)).y;
-    int minutesDelta = (int) Math.round(dy * (60.0/hourHeight));
+    if (dragItem!=null){
+      if (!dragging){ dragItem=null; dragRect=null; resizingTop=resizingBottom=false; dragging=false; creating=false; repaint(); return; } // FIX: ignore click
+      int startDay = Math.max(0, Math.min(days-1, dragRect.x / dayWidth));
+      int deltaDay = startDay - (int) java.time.temporal.ChronoUnit.DAYS.between(startDate, dragStartStart.toLocalDate());
+      int dy = dragRect.y - rectOf(dragItem, rowTopOf(dragOverResource)).y;
+      int minutesDelta = (int) Math.round(dy * (60.0/hourHeight));
 
-    var newStart = dragStartStart.plusDays(deltaDay).plusMinutes(minutesDelta);
-    var newEnd = dragStartEnd.plusDays(deltaDay);
-    if (resizingTop){ newEnd = dragStartEnd; }
-    if (resizingBottom){ newStart = dragStartStart; newEnd = newStart.plusMinutes(Math.max(30, (int)Math.round(dragRect.height * (60.0/hourHeight)))); }
-    if (!newEnd.isAfter(newStart)) newEnd = newStart.plusMinutes(30);
+      var newStart = dragStartStart.plusDays(deltaDay).plusMinutes(minutesDelta);
+      var newEnd = dragStartEnd.plusDays(deltaDay);
+      if (resizingTop){ newEnd = dragStartEnd; }
+      if (resizingBottom){ newStart = dragStartStart; newEnd = newStart.plusMinutes(Math.max(30, (int)Math.round(dragRect.height * (60.0/hourHeight)))); }
+      if (!newEnd.isAfter(newStart)) newEnd = newStart.plusMinutes(30);
 
-    CommandBus.get().submit(new MoveResizeInterventionCommand(dragItem, dragOverResource, newStart, newEnd));
-    dragItem=null; dragRect=null; resizingTop=resizingBottom=false;
-    reload();
+      CommandBus.get().submit(new MoveResizeInterventionCommand(dragItem, dragOverResource, newStart, newEnd));
+      dragItem=null; dragRect=null; resizingTop=resizingBottom=false; dragging=false; creating=false; // FIX: reset
+      reload();
+      return;
+    }
+    if (creating && dragging){ // FIX: create by drag
+      int dayIdx = Math.max(0, Math.min(days-1, dragStart.x / dayWidth));
+      LocalDate day = startDate.plusDays(dayIdx);
+      int rowTop = rowTopOf(dragOverResource);
+      int startMin = (dragRect.y - rowTop) * 60 / hourHeight;
+      int durMin = Math.max(30, (int)Math.round(dragRect.height * (60.0/hourHeight)));
+      LocalDateTime newStart = day.atStartOfDay().plusMinutes(startMin);
+      LocalDateTime newEnd = newStart.plusMinutes(durMin);
+      String label = JOptionPane.showInputDialog(this, "Libellé"); // FIX: prompt label
+      if (label != null){
+        label = label.strip();
+        if (!label.isEmpty()){
+          var it = new Intervention();
+          it.setResourceId(dragOverResource);
+          it.setDateHeureDebut(newStart);
+          it.setDateHeureFin(newEnd);
+          it.setLabel(label);
+          ServiceFactory.planning().saveIntervention(it);
+          reload();
+        }
+      }
+    }
+    dragItem=null; dragRect=null; resizingTop=resizingBottom=false; dragging=false; creating=false; // FIX: reset state
+    repaint(); // FIX: clear ghost
   }
 
   private int rowTopOf(UUID resourceId){
