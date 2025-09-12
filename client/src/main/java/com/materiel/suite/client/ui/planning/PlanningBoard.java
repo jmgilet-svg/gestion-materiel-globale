@@ -28,6 +28,7 @@ public class PlanningBoard extends JComponent {
   private Map<UUID, java.util.List<Intervention>> byResource = new HashMap<>();
   private Map<Intervention, LaneLayout.Lane> lanes = new HashMap<>();
   private Map<UUID, Integer> rowHeights = new HashMap<>();
+  private Map<UUID, Integer> rowTileHeights = new HashMap<>();
   private int totalHeight = 0;
   private int lastLayoutHash = 0;
 
@@ -38,6 +39,7 @@ public class PlanningBoard extends JComponent {
   private Intervention hovered;
   private Intervention selected;
   private final InterventionTileRenderer tile = new InterventionTileRenderer();
+  private boolean compact = false;
 
   // DnD
   private Intervention dragItem;
@@ -109,6 +111,8 @@ public class PlanningBoard extends JComponent {
   public int rowHeight(UUID resId){ return rowHeights.getOrDefault(resId, tile.height() + PlanningUx.ROW_GAP); }
   /** Durée d'un slot en minutes. */
   public int getSlotMinutes(){ return slotMinutes; }
+  public boolean isCompact(){ return compact; }
+  public void setCompact(boolean c){ this.compact = c; this.tile.setCompact(c); reload(); }
   /** Largeur d'un slot en pixels. */
   public int getSlotWidth(){ return slotWidth; }
   /** Nombre de slots par jour. */
@@ -158,14 +162,22 @@ public class PlanningBoard extends JComponent {
   }
 
   private void computeLanesAndHeights(){
-    lanes.clear(); rowHeights.clear(); totalHeight = 0;
+    lanes.clear(); rowHeights.clear(); rowTileHeights.clear(); totalHeight = 0;
     for (Resource r : resources){
       List<Intervention> list = byResource.getOrDefault(r.getId(), List.of());
       Map<Intervention, LaneLayout.Lane> m = LaneLayout.computeLanes(list,
           Intervention::getStartDateTime, Intervention::getEndDateTime);
       lanes.putAll(m);
       int lanesCount = m.values().stream().mapToInt(l -> l.index).max().orElse(-1) + 1;
-      int rowH = Math.max(tile.height(), lanesCount * (tile.height() + PlanningUx.LANE_GAP)) + PlanningUx.ROW_GAP;
+
+      int rowTileH = tile.height();
+      for (Intervention it : list){
+        int width = tilePixelWidthFor(it);
+        rowTileH = Math.max(rowTileH, tile.heightFor(it, width));
+      }
+      rowTileHeights.put(r.getId(), rowTileH);
+
+      int rowH = Math.max(rowTileH, lanesCount * (rowTileH + PlanningUx.LANE_GAP)) + PlanningUx.ROW_GAP;
       rowHeights.put(r.getId(), rowH);
       totalHeight += rowH;
     }
@@ -245,8 +257,19 @@ public class PlanningBoard extends JComponent {
     int x = xFromSlot(sIdx);
     int w = Math.max(slotWidth, (eIdx - sIdx + 1) * slotWidth);
     int lane = Optional.ofNullable(lanes.get(it)).map(l -> l.index).orElse(0);
-    int y = baseY + lane * (tile.height() + PlanningUx.LANE_GAP);
-    return new Rectangle(x, y, w, tile.height());
+    int rowTileH = rowTileHeights.getOrDefault(it.getResourceId(), tile.height());
+    int y = baseY + lane * (rowTileH + PlanningUx.LANE_GAP);
+    return new Rectangle(x, y, w, rowTileH);
+  }
+
+  private int tilePixelWidthFor(Intervention it){
+    var s = it.getStartDateTime();
+    var e = it.getEndDateTime();
+    int sIdx = slotIndex(s);
+    int eIdx = slotIndex(e) - 1;
+    eIdx = Math.max(eIdx, sIdx);
+    int slots = (eIdx - sIdx + 1);
+    return Math.max(slotWidth, slots * slotWidth) - 8;
   }
 
   private String safeLabel(Intervention it){

@@ -51,7 +51,7 @@ public class PlanningPanel extends JPanel {
     super(new BorderLayout());
     add(buildToolbar(), BorderLayout.NORTH);
 
-    var scroll = new JScrollPane(board);
+    var scroll = new JScrollPane(board, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
     DayHeader header = new DayHeader(board);
     scroll.setColumnHeaderView(header);
     scroll.getHorizontalScrollBar().addAdjustmentListener(e -> header.repaint());
@@ -114,12 +114,17 @@ public class PlanningPanel extends JPanel {
     JLabel granL = new JLabel("Pas:");
     JComboBox<String> gran = new JComboBox<>(new String[]{"5 min","10 min","15 min","30 min","60 min"});
     gran.setSelectedItem(board.getSlotMinutes()+" min");
+    JToggleButton compact = new JToggleButton("Mode compact");
     JToggleButton mode = new JToggleButton("Agenda");
     conflictsBtn = new JButton("Conflits (0)");
     JButton addI = new JButton("+ Intervention");
 
     mode.addActionListener(e -> switchMode(mode.isSelected()));
     conflictsBtn.addActionListener(e -> openConflictsDialog());
+    compact.addActionListener(e -> {
+      board.setCompact(compact.isSelected());
+      revalidate(); repaint();
+    });
 
     prev.addActionListener(e -> { board.setStartDate(board.getStartDate().minusDays(7)); agenda.setStartDate(board.getStartDate()); });
     next.addActionListener(e -> { board.setStartDate(board.getStartDate().plusDays(7)); agenda.setStartDate(board.getStartDate()); });
@@ -142,6 +147,7 @@ public class PlanningPanel extends JPanel {
     bar.add(prev); bar.add(next); bar.add(today); bar.add(mode);
     bar.add(Box.createHorizontalStrut(16)); bar.add(zoomL); bar.add(zoom);
     bar.add(Box.createHorizontalStrut(12)); bar.add(granL); bar.add(gran);
+    bar.add(Box.createHorizontalStrut(12)); bar.add(compact);
     bar.add(Box.createHorizontalStrut(8)); bar.add(conflictsBtn);
     bar.add(Box.createHorizontalStrut(16)); bar.add(addI);
     return bar;
