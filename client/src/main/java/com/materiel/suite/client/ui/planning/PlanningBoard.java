@@ -28,9 +28,11 @@ public class PlanningBoard extends JComponent {
   private Map<UUID, java.util.List<Intervention>> byResource = new HashMap<>();
   private Map<Intervention, LaneLayout.Lane> lanes = new HashMap<>();
   private Map<UUID, Integer> rowHeights = new HashMap<>();
-  private Map<UUID, Integer> rowTileHeights = new HashMap<>();
   private int totalHeight = 0;
   private int lastLayoutHash = 0;
+  private Map<UUID, Integer> rowTileHeights = new HashMap<>();
+  private Map<UUID, Integer> rowTops = new HashMap<>();
+  private java.util.List<UUID> resourceOrder = new java.util.ArrayList<>();
 
   // UX
   private boolean showIndispo = true;
@@ -45,14 +47,15 @@ public class PlanningBoard extends JComponent {
   public enum Density { COMPACT, NORMAL, ROOMY }
   private Density density = Density.NORMAL;
 
-  // DnD
+  // DnD state
   private Intervention dragItem;
   private Rectangle dragRect;
   private boolean resizingLeft, resizingRight;
+  private static final int DM_NONE=0, DM_MOVE=1, DM_RESIZE_L=2, DM_RESIZE_R=3;
+  private int dragMode = DM_NONE;
+  private int initialStartSlot, initialEndSlot, dragDurationSlots, pressOffsetX;
   private Point dragStart;
-  private boolean dragArmed;
   private UUID dragOverResource;
-  private boolean dragging;
 
   public PlanningBoard(){
     setOpaque(true);
@@ -174,8 +177,9 @@ public class PlanningBoard extends JComponent {
   }
 
   private void computeLanesAndHeights(){
-    lanes.clear(); rowHeights.clear(); rowTileHeights.clear(); totalHeight = 0;
+    lanes.clear(); rowHeights.clear(); rowTileHeights.clear(); rowTops.clear(); resourceOrder.clear(); totalHeight = 0;
     for (Resource r : resources){
+      resourceOrder.add(r.getId());
       List<Intervention> list = byResource.getOrDefault(r.getId(), List.of());
       Map<Intervention, LaneLayout.Lane> m = LaneLayout.computeLanes(list,
           Intervention::getStartDateTime, Intervention::getEndDateTime);
@@ -189,11 +193,11 @@ public class PlanningBoard extends JComponent {
       }
       rowTileHeights.put(r.getId(), rowTileH);
 
+      rowTops.put(r.getId(), totalHeight);
       int rowH = Math.max(rowTileH, lanesCount * (rowTileH + PlanningUx.LANE_GAP)) + rowGap;
       rowHeights.put(r.getId(), rowH);
       totalHeight += rowH;
     }
-    // Permet de déclencher un repaint du header uniquement si nécessaire
     lastLayoutHash = Objects.hash(resources.size(), rowHeights.hashCode(), days, slotWidth, slotMinutes);
   }
 
@@ -256,6 +260,16 @@ public class PlanningBoard extends JComponent {
     g2.dispose();
   }
 
+  private UUID resourceAtY(int yPx){
+    int acc = 0;
+    for (UUID id : resourceOrder){
+      int rowH = rowHeights.getOrDefault(id, tile.heightBase()+rowGap);
+      if (yPx >= acc && yPx < acc + rowH) return id;
+      acc += rowH;
+    }
+    return resourceOrder.isEmpty()? null : resourceOrder.get(resourceOrder.size()-1);
+  }
+
   private int slotIndex(LocalDateTime dt){
     int dayIdx = (int) java.time.temporal.ChronoUnit.DAYS.between(startDate, dt.toLocalDate());
     int mins = dt.getHour()*60 + dt.getMinute();
@@ -310,20 +324,14 @@ public class PlanningBoard extends JComponent {
     return null;
   }
 
-  // Helpers de snap robuste
-  private int clamp(int v, int min, int max){ return Math.max(min, Math.min(max, v)); }
-  private int slotAtLeft(int x){ return clamp((int)Math.floor(x/(double)slotWidth), 0, days*slotsPerDay-1); }
-  private int slotAtRight(int x){ return clamp((int)Math.ceil(x/(double)slotWidth)-1, 0, days*slotsPerDay-1); }
-  private int slotSnap(int x){ return clamp((int)Math.round(x/(double)slotWidth), 0, days*slotsPerDay-1); }
-
   // DnD handlers
   private void onPress(MouseEvent e){
-    dragItem=null; dragRect=null; resizingLeft=false; resizingRight=false; dragArmed=false; dragOverResource=null; dragging=false;
+    dragItem=null; dragRect=null; resizingLeft=false; resizingRight=false; dragMode=DM_NONE; dragOverResource=null;
 
     Point p = e.getPoint();
     int y=0;
     for (Resource r : resources){
-      int rowH = rowHeights.getOrDefault(r.getId(), tile.heightBase()+rowGap);
+      int rowH = rowHeights.get(r.getId());
       if (p.y>=y && p.y<y+rowH){
         for (Intervention it : byResource.getOrDefault(r.getId(), List.of())){
           Rectangle rect = rectOf(it, y);
@@ -331,11 +339,19 @@ public class PlanningBoard extends JComponent {
             dragItem = it;
             dragRect = new Rectangle(rect);
             dragStart = p;
-            dragArmed = true;
             resizingLeft = Math.abs(p.x - rect.x) < PlanningUx.HANDLE;
             resizingRight = Math.abs(p.x - (rect.x+rect.width)) < PlanningUx.HANDLE;
+            pressOffsetX = p.x - rect.x;
             dragOverResource = r.getId();
-            selected = it; // FIX: select tile on press
+
+            int sSlot = rect.x / slotWidth;
+            int eSlot = (rect.x + rect.width) / slotWidth - 1;
+            initialStartSlot = sSlot;
+            initialEndSlot = eSlot;
+            dragDurationSlots = Math.max(1, eSlot - sSlot + 1);
+
+            dragMode = resizingLeft? DM_RESIZE_L : (resizingRight? DM_RESIZE_R : DM_MOVE);
+            selected = it;
             return;
           }
         }
@@ -346,50 +362,41 @@ public class PlanningBoard extends JComponent {
 
   private void onDrag(MouseEvent e){
     if (dragItem==null) return;
-    if (dragArmed && e.getPoint().distance(dragStart) < PlanningUx.DRAG_THRESHOLD){
-      return; // FIX: ignore micro-mouvements
-    } else {
-      dragArmed = false;
-    }
-    int dx = e.getX() - dragStart.x;
-    int dy = e.getY() - dragStart.y;
-    if (!dragging && Math.hypot(dx, dy) < 6) return; // FIX: start threshold
-    dragging = true; // FIX:
     Rectangle r = new Rectangle(dragRect);
 
-    if (resizingLeft){
-      int newStart = slotAtLeft(e.getX());
-      int end = slotAtRight(r.x + r.width);
-      if (newStart > end) newStart = end;
+    if (dragMode == DM_MOVE){
+      int dx = e.getX() - dragStart.x;
+      int deltaSlots = Math.round(dx / (float)slotWidth);
+      int newStart = initialStartSlot + deltaSlots;
+      newStart = Math.max(0, Math.min(days*slotsPerDay - dragDurationSlots, newStart));
+      int newEnd = newStart + dragDurationSlots - 1;
       r.x = xFromSlot(newStart);
-      r.width = Math.max(slotWidth, xFromSlot(end+1) - r.x);
-    } else if (resizingRight){
-      int start = slotAtLeft(r.x);
-      int newEnd = slotAtRight(e.getX());
-      if (newEnd < start) newEnd = start;
-      r.width = Math.max(slotWidth, xFromSlot(newEnd+1) - xFromSlot(start));
-    } else {
-      int start = slotSnap(r.x + dx);
-      start = clamp(start, 0, days*slotsPerDay-1);
-      int widthSlots = Math.max(1, (int)Math.round(r.width/(double)slotWidth));
-      int end = clamp(start + widthSlots - 1, 0, days*slotsPerDay-1);
-      start = end - widthSlots + 1;
-      r.x = xFromSlot(start);
-      r.y += dy;
+      r.width = Math.max(slotWidth, (newEnd - newStart + 1) * slotWidth);
+
+      UUID over = resourceAtY(e.getY());
+      if (over!=null){
+        dragOverResource = over;
+        int baseY = rowTops.getOrDefault(over, 0);
+        int rowTileH = rowTileHeights.getOrDefault(over, tile.heightBase());
+        r.y = baseY;
+        r.height = rowTileH;
+      }
+    } else if (dragMode == DM_RESIZE_L){
+      int rawStart = (e.getX() - pressOffsetX) / slotWidth;
+      int newStart = Math.min(initialEndSlot, Math.max(0, Math.round(rawStart)));
+      if (initialEndSlot - newStart + 1 < 1) newStart = initialEndSlot;
+      r.x = xFromSlot(newStart);
+      r.width = Math.max(slotWidth, (initialEndSlot - newStart + 1) * slotWidth);
+      dragDurationSlots = initialEndSlot - newStart + 1;
+    } else if (dragMode == DM_RESIZE_R){
+      int rawEnd = (e.getX()) / slotWidth - 1;
+      int newEnd = Math.max(initialStartSlot, Math.min(days*slotsPerDay-1, Math.round(rawEnd)));
+      if (newEnd - initialStartSlot + 1 < 1) newEnd = initialStartSlot;
+      r.x = xFromSlot(initialStartSlot);
+      r.width = Math.max(slotWidth, (newEnd - initialStartSlot + 1) * slotWidth);
+      dragDurationSlots = newEnd - initialStartSlot + 1;
     }
-    // snap vertical à la ressource cible
-    int y=0; UUID overRes = dragOverResource;
-    for (Resource res : resources){
-      int rowH = rowHeights.get(res.getId());
-      if (r.y>=y && r.y<y+rowH){ overRes = res.getId(); r.y = y + (lanes.getOrDefault(dragItem, new LaneLayout.Lane(0)).index)*(tile.heightBase()+PlanningUx.LANE_GAP); break; }
-      y+=rowH;
-    }
-    dragOverResource = overRes;
-    // snap horizontal aux slots
-    int startSlot = slotAtLeft(r.x);
-    int endSlot = slotAtRight(r.x + r.width);
-    r.x = xFromSlot(startSlot);
-    r.width = Math.max(slotWidth, xFromSlot(endSlot+1) - r.x);
+
     dragRect = r;
     repaint();
   }
@@ -397,25 +404,25 @@ public class PlanningBoard extends JComponent {
   private void onRelease(MouseEvent e){
     if (dragItem==null){ return; }
     if (dragRect==null){ dragItem=null; return; }
-    // compute new dates and/or resource
-    int startSlot = slotAtLeft(dragRect.x);
-    int endSlot = slotAtRight(dragRect.x + dragRect.width);
-    int startDay = startSlot / slotsPerDay;
-    int startMins = (startSlot % slotsPerDay) * slotMinutes;
-    int endDay = endSlot / slotsPerDay;
-    int endMins = ((endSlot % slotsPerDay) + 1) * slotMinutes;
-    LocalDateTime s = startDate.plusDays(startDay).atStartOfDay().plusMinutes(startMins);
-    LocalDateTime e2 = startDate.plusDays(endDay).atStartOfDay().plusMinutes(endMins);
+    int startSlot = dragRect.x / slotWidth;
+    int endSlot = (dragRect.x + dragRect.width) / slotWidth - 1;
+    int dayIdxStart = startSlot / slotsPerDay;
+    int minutesStart = (startSlot % slotsPerDay) * slotMinutes;
+    int dayIdxEnd = endSlot / slotsPerDay;
+    int minutesEnd = ((endSlot % slotsPerDay) + 1) * slotMinutes; // end is exclusive
+
+    LocalDateTime sdt = startDate.plusDays(dayIdxStart).atStartOfDay().plusMinutes(minutesStart);
+    LocalDateTime edt = startDate.plusDays(dayIdxEnd).atStartOfDay().plusMinutes(minutesEnd);
     if (dragItem.getId()!=null && dragItem.getLabel()!=null && !dragItem.getLabel().isBlank()){
       labelCache.put(dragItem.getId(), dragItem.getLabel());
     }
     if (dragOverResource!=null) dragItem.setResourceId(dragOverResource);
-    dragItem.setDateHeureDebut(s);
-    dragItem.setDateHeureFin(e2);
-    dragItem.setDateDebut(s.toLocalDate());
-    dragItem.setDateFin(e2.toLocalDate());
+    dragItem.setDateHeureDebut(sdt);
+    dragItem.setDateHeureFin(edt);
+    dragItem.setDateDebut(sdt.toLocalDate());
+    dragItem.setDateFin(edt.minusMinutes(1).toLocalDate());
     ServiceFactory.planning().saveIntervention(dragItem);
-    dragItem = null; dragRect=null; resizingLeft=resizingRight=false; dragging=false;
+    dragItem = null; dragRect=null; resizingLeft=resizingRight=false; dragMode=DM_NONE;
     reload();
   }
 
