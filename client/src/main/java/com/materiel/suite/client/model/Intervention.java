@@ -22,6 +22,7 @@ public class Intervention {
   private String agency;
   private String status; // PLANNED, CONFIRMED, DONE, CANCELED...
   private boolean favorite;
+  private boolean locked;
   private String quoteNumber;
   private String orderNumber;
   private String deliveryNumber;
@@ -73,6 +74,8 @@ public class Intervention {
   public void setStatus(String status){ this.status = status; }
   public boolean isFavorite(){ return favorite; }
   public void setFavorite(boolean favorite){ this.favorite = favorite; }
+  public boolean isLocked(){ return locked; }
+  public void setLocked(boolean locked){ this.locked = locked; }
   public String getQuoteNumber(){ return quoteNumber; }
   public void setQuoteNumber(String quoteNumber){ this.quoteNumber = quoteNumber; }
   public String getOrderNumber(){ return orderNumber; }
@@ -82,11 +85,15 @@ public class Intervention {
   public String getInvoiceNumber(){ return invoiceNumber; }
   public void setInvoiceNumber(String invoiceNumber){ this.invoiceNumber = invoiceNumber; }
 
-  /** Heures lisibles pour la carte (08:00–17:00). */
+  /** Libellé heure pour rendu. */
   public String prettyTimeRange(){
-    LocalTime s = dateHeureDebut != null ? dateHeureDebut.toLocalTime() : LocalTime.of(8,0);
-    LocalTime e = dateHeureFin != null ? dateHeureFin.toLocalTime() : LocalTime.of(17,0);
-    return String.format("%02d:%02d–%02d:%02d", s.getHour(), s.getMinute(), e.getHour(), e.getMinute());
+    if (dateHeureDebut!=null && dateHeureFin!=null){
+      LocalTime s = dateHeureDebut.toLocalTime();
+      LocalTime e = dateHeureFin.toLocalTime();
+      return String.format("%02d:%02d–%02d:%02d", s.getHour(), s.getMinute(), e.getHour(), e.getMinute());
+    }
+    return (getDateDebut()!=null? getDateDebut().toString() : "—")+
+        " → "+(getDateFin()!=null? getDateFin().toString() : "—");
   }
   public String driverInitials(){
     if (driverName==null || driverName.isBlank()) return "";
