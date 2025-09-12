@@ -157,5 +157,4 @@ Statuts (badges) : Brouillon, Envoyé, Accepté, Refusé, Expiré, Confirmé, An
 - `GM_API_BASE` (ex: `http://localhost:8080`)
 - `GM_API_TOKEN` (Bearer)
 
-
 > Note: Maven build currently requires network access to resolve Spring Boot parent POM.
