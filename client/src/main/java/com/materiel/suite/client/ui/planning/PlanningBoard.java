@@ -162,7 +162,7 @@ public class PlanningBoard extends JComponent {
     for (Resource r : resources){
       List<Intervention> list = byResource.getOrDefault(r.getId(), List.of());
       Map<Intervention, LaneLayout.Lane> m = LaneLayout.computeLanes(list,
-          Intervention::getDateDebut, Intervention::getDateFin);
+          Intervention::getStartDateTime, Intervention::getEndDateTime);
       lanes.putAll(m);
       int lanesCount = m.values().stream().mapToInt(l -> l.index).max().orElse(-1) + 1;
       int rowH = Math.max(tile.height(), lanesCount * (tile.height() + PlanningUx.LANE_GAP)) + PlanningUx.ROW_GAP;

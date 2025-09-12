@@ -58,6 +58,26 @@ public class Intervention {
   public String getColor(){ return color; }
   public void setColor(String color){ this.color = color; }
 
+  /** Start/End en LocalDateTime, toujours non-nulls (avec fallback raisonnable). */
+  public LocalDateTime getStartDateTime(){
+    if (dateHeureDebut != null) return dateHeureDebut;
+    LocalDate d = getDateDebut();
+    if (d != null) return d.atStartOfDay();
+    // Fallback minimal : maintenant
+    return LocalDateTime.now();
+  }
+
+  public LocalDateTime getEndDateTime(){
+    if (dateHeureFin != null) return dateHeureFin;
+    LocalDate d = getDateFin();
+    if (d != null){
+      // Inclusif journée : fin = début de jour suivant
+      return d.plusDays(1).atStartOfDay();
+    }
+    // Fallback : +1h après le début pour rester valide
+    return getStartDateTime().plusHours(1);
+  }
+
   public String getClientName(){ return clientName; }
   public void setClientName(String clientName){ this.clientName = clientName; }
   public String getSiteLabel(){ return siteLabel; }
