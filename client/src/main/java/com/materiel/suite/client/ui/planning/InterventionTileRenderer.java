@@ -7,17 +7,33 @@ import java.awt.*;
 
 /** Rendu "carte" riche pour une intervention (vue Planning). */
 final class InterventionTileRenderer {
-  /** Hauteur standard de la carte. */
-  int height(){ return PlanningUx.TILE_CARD_H; }
+  private static final int CHIP_H = 24;
+  private static final int CHIP_GAP = 8;
+  private boolean compact = false;
+  private PlanningBoard.Density density = PlanningBoard.Density.NORMAL;
+  private double scaleY = 1.0;
+
+  int heightBase(){ return (int)Math.round(PlanningUx.TILE_CARD_H * scaleY); }
+  int height(){ return heightBase(); }
   void setCompact(boolean c){ compact = c; }
+  void setDensity(PlanningBoard.Density d){
+    density = d;
+    scaleY = switch(d){
+      case COMPACT -> 0.88;
+      case ROOMY -> 1.15;
+      default -> 1.0;
+    };
+  }
   int heightFor(Intervention it, int widthPx){
-    int base = compact? 84 : PlanningUx.TILE_CARD_H;
-    int lines = chipLines(it, widthPx);
-    return base + (lines>1? 30*(lines-1) : 0);
+    int base = compact? (int)Math.round(84 * scaleY) : heightBase();
+    base += wrappedTextExtraHeight(it, widthPx);
+    int chips = chipLines(it, widthPx);
+    return base + (chips>0? (CHIP_H + CHIP_GAP)*(chips-1) : 0);
   }
 
+  private int wrappedTextExtraHeight(Intervention it, int widthPx){ return 0; }
+
   private static final int GAP = 10;
-  private boolean compact = false;
   void paint(Graphics2D g2, Rectangle r, Intervention it, boolean hover, boolean selected){
     if (compact){
       paintCompact(g2, r, it, hover, selected);
@@ -169,7 +185,7 @@ final class InterventionTileRenderer {
     for (String s : labels){
       int w = approxChipWidth(s);
       if (x>0 && x + w > max){ line++; x=0; }
-      x += (x==0? w : w + 8);
+      x += (x==0? w : w + CHIP_GAP);
     }
     return line;
   }
