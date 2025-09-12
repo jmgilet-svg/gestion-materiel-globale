@@ -7,12 +7,12 @@ import java.time.format.DateTimeFormatter;
 
 public class DayHeader extends JComponent {
   private final PlanningBoard board;
-  private final DateTimeFormatter DF = DateTimeFormatter.ofPattern("EEE dd MMM");
+  private final DateTimeFormatter DF = DateTimeFormatter.ofPattern("EEE dd/MM");
   public DayHeader(PlanningBoard b){
-    this.board=b; setPreferredSize(new Dimension(600,34)); setFont(PlanningUx.uiFont(this));
+    this.board=b; setPreferredSize(new Dimension(600,32)); setFont(PlanningUx.uiFont(this));
   }
   @Override public Dimension getPreferredSize(){
-    return new Dimension(board.getPreferredSize().width, 34);
+    return new Dimension(board.getPreferredSize().width, 32);
   }
   @Override protected void paintComponent(Graphics g){
     Graphics2D g2 = (Graphics2D) g;
@@ -20,18 +20,22 @@ public class DayHeader extends JComponent {
     g2.fillRect(0,0,getWidth(),getHeight());
     g2.setColor(PlanningUx.GRID);
     g2.drawLine(0,getHeight()-1,getWidth(),getHeight()-1);
-    int x=0, w = board.getColWidth();
+    int x=0, dayW = board.getDayPixelWidth();
     LocalDate d = board.getStartDate();
-    for (int i=0;i<getWidth()/w+1;i++){
+    for (int i=0;i<getWidth()/dayW+1;i++){
       g2.setColor(PlanningUx.GRID);
       g2.drawLine(x,0,x,getHeight());
       g2.setColor(PlanningUx.HEADER_TX);
-      String txt = DF.format(d.plusDays(i));
-      FontMetrics fm = g2.getFontMetrics();
-      int tx = x + Math.max(8, (w - fm.stringWidth(txt))/2);
-      int ty = (getHeight() + fm.getAscent())/2 - 2;
-      g2.drawString(txt, tx, ty);
-      x+=w;
+      g2.drawString(DF.format(d.plusDays(i)), x+8, 14);
+      g2.setFont(getFont().deriveFont(11f));
+      g2.setColor(new Color(0x4B5563));
+      int sph = board.getSlotsPerDay()/24; // slots per hour
+      for (int h=0; h<24; h+=2){
+        int px = x + h*sph*board.getSlotWidth();
+        String label = (h<10? "0":"")+h+":00";
+        g2.drawString(label, px+4, getHeight()-12);
+      }
+      x+=dayW;
     }
   }
 }
