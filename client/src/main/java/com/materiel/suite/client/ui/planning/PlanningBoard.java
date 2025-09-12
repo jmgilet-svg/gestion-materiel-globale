@@ -107,7 +107,9 @@ public class PlanningBoard extends JComponent {
   public java.util.List<Resource> getResourcesList(){ return resources; }
   /** Hauteur d'une ligne (ressource). */
   public int rowHeight(UUID resId){ return rowHeights.getOrDefault(resId, tile.height() + PlanningUx.ROW_GAP); }
-  /** Largeur d'un slot (15 min). */
+  /** Durée d'un slot en minutes. */
+  public int getSlotMinutes(){ return slotMinutes; }
+  /** Largeur d'un slot en pixels. */
   public int getSlotWidth(){ return slotWidth; }
   /** Nombre de slots par jour. */
   public int getSlotsPerDay(){ return slotsPerDay; }
@@ -127,12 +129,13 @@ public class PlanningBoard extends JComponent {
   public void setDays(int d){ days = d; reload(); }
   public void setShowIndispo(boolean b){ showIndispo = b; repaint(); }
   public void setResourceNameFilter(String f){ resourceFilter = f==null? "" : f.toLowerCase(); reload(); }
-  public void setSnapMinutes(int m){
-    slotMinutes = Math.max(5, Math.min(60, m));
+  public void setSlotMinutes(int minutes){
+    slotMinutes = Math.max(5, Math.min(60, minutes));
     slotsPerDay = (60/slotMinutes)*24;
     revalidate(); repaint();
     firePropertyChange("layout", 0, 1);
   }
+  public void setSnapMinutes(int m){ setSlotMinutes(m); }
   public int tileHeight(){ return tile.height(); }
 
   public void reload(){

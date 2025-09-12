@@ -23,15 +23,15 @@ public class DayHeader extends JComponent {
     int x=0, dayW = board.getDayPixelWidth();
     LocalDate d = board.getStartDate();
     for (int i=0;i<getWidth()/dayW+1;i++){
+      int slotW = board.getSlotWidth();
       g2.setColor(PlanningUx.GRID);
       g2.drawLine(x,0,x,getHeight());
       g2.setColor(PlanningUx.HEADER_TX);
       g2.drawString(DF.format(d.plusDays(i)), x+8, 14);
       g2.setFont(getFont().deriveFont(11f));
       g2.setColor(new Color(0x4B5563));
-      int sph = board.getSlotsPerDay()/24; // slots per hour
       for (int h=0; h<24; h+=2){
-        int px = x + h*sph*board.getSlotWidth();
+        int px = x + h*(60/board.getSlotMinutes())*slotW;
         String label = (h<10? "0":"")+h+":00";
         g2.drawString(label, px+4, getHeight()-12);
       }
