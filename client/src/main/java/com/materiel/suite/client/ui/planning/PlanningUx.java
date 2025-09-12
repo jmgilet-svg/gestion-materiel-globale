@@ -23,8 +23,8 @@ final class PlanningUx {
   // Métriques
   static final int COL_MIN = 80;
   static final int COL_MAX = 220;
-  static final int TILE_H = 26;        // tuile compacte (agenda, liste)
-  static final int TILE_CARD_H = 108;   // tuile "carte" du planning
+  static final int TILE_H = 26;         // tuile compacte (agenda, liste)
+  static final int TILE_CARD_H = 132;   // tuile "carte" du planning (plus grande, meilleure lisibilité)
   static final int LANE_GAP = 6;
   static final int ROW_GAP = 8;
   static final int RADIUS = 10;

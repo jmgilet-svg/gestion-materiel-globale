@@ -26,6 +26,7 @@ public class PlanningBoard extends JComponent {
   private Map<Intervention, LaneLayout.Lane> lanes = new HashMap<>();
   private Map<UUID, Integer> rowHeights = new HashMap<>();
   private int totalHeight = 0;
+  private int lastLayoutHash = 0;
 
   // UX
   private boolean showIndispo = true;
@@ -99,8 +100,14 @@ public class PlanningBoard extends JComponent {
   }
 
   // API publique
-  public void setZoom(int w){ colWidth = Math.max(PlanningUx.COL_MIN, Math.min(PlanningUx.COL_MAX, w)); revalidate(); repaint(); }
+  /** Expose les ressources visibles pour synchroniser le RowHeader. */
+  public java.util.List<Resource> getResourcesList(){ return resources; }
+  /** Hauteur d'une ligne (ressource). */
+  public int rowHeight(UUID resId){ return rowHeights.getOrDefault(resId, tile.height() + PlanningUx.ROW_GAP); }
+  /** Largeur d'une colonne (jour). */
   public int getColWidth(){ return colWidth; }
+
+  public void setZoom(int w){ colWidth = Math.max(60, Math.min(200, w)); revalidate(); repaint(); }
   public LocalDate getStartDate(){ return startDate; }
   public void setStartDate(LocalDate d){ startDate = d; reload(); }
   public void setDays(int d){ days = d; reload(); }
@@ -125,6 +132,7 @@ public class PlanningBoard extends JComponent {
     }
     computeLanesAndHeights();
     revalidate(); repaint();
+    firePropertyChange("layout", 0, 1);
   }
 
   private void computeLanesAndHeights(){
@@ -132,13 +140,15 @@ public class PlanningBoard extends JComponent {
     for (Resource r : resources){
       List<Intervention> list = byResource.getOrDefault(r.getId(), List.of());
       Map<Intervention, LaneLayout.Lane> m = LaneLayout.computeLanes(list,
-          Intervention::getDateHeureDebut, Intervention::getDateHeureFin);
+          Intervention::getDateDebut, Intervention::getDateFin);
       lanes.putAll(m);
       int lanesCount = m.values().stream().mapToInt(l -> l.index).max().orElse(-1) + 1;
       int rowH = Math.max(tile.height(), lanesCount * (tile.height() + PlanningUx.LANE_GAP)) + PlanningUx.ROW_GAP;
       rowHeights.put(r.getId(), rowH);
       totalHeight += rowH;
     }
+    // Permet de déclencher un repaint du header uniquement si nécessaire
+    lastLayoutHash = Objects.hash(resources.size(), rowHeights.hashCode(), days, colWidth);
   }
 
   @Override public Dimension getPreferredSize(){
@@ -224,6 +234,12 @@ public class PlanningBoard extends JComponent {
     return null;
   }
 
+  // Helpers de snap robuste
+  private int clamp(int v, int min, int max){ return Math.max(min, Math.min(max, v)); }
+  private int colAtLeft(int x){ return clamp((int)Math.floor(x/(double)colWidth), 0, days-1); }
+  private int colAtRight(int x){ return clamp((int)Math.ceil(x/(double)colWidth)-1, 0, days-1); }
+  private int colSnap(int x){ return clamp((int)Math.round(x/(double)colWidth), 0, days-1); }
+
   // DnD handlers
   private void onPress(MouseEvent e){
     dragItem=null; dragRect=null; resizingLeft=false; resizingRight=false; dragArmed=false; dragOverResource=null; dragging=false;
@@ -264,31 +280,40 @@ public class PlanningBoard extends JComponent {
     if (!dragging && Math.hypot(dx, dy) < 6) return; // FIX: start threshold
     dragging = true; // FIX:
     Rectangle r = new Rectangle(dragRect);
+
     if (resizingLeft){
-      r.x += dx; r.width -= dx;
-      if (r.width<colWidth) { r.width = colWidth; r.x = dragRect.x + (dragRect.width-colWidth); }
+      // calcule la colonne de gauche en fonction du curseur
+      int newStartCol = colAtLeft(e.getX());
+      int endCol = colAtRight(r.x + r.width);
+      if (newStartCol > endCol) newStartCol = endCol;
+      r.x = newStartCol * colWidth;
+      r.width = (endCol - newStartCol + 1) * colWidth;
     } else if (resizingRight){
-      r.width += dx;
-      if (r.width<colWidth) r.width = colWidth;
+      int startCol = colAtLeft(r.x);
+      int newEndCol = colAtRight(e.getX());
+      if (newEndCol < startCol) newEndCol = startCol;
+      r.width = (newEndCol - startCol + 1) * colWidth;
     } else {
-      r.x += dx; r.y += dy;
+      // déplacement : snap par colonne entière
+      int startCol = colSnap(r.x + dx);
+      startCol = clamp(startCol, 0, days-1);
+      int widthCols = Math.max(1, (int)Math.round(r.width/(double)colWidth));
+      int endCol = clamp(startCol + widthCols - 1, 0, days-1);
+      startCol = endCol - widthCols + 1;
+      r.x = startCol * colWidth;
+      r.y += dy;
     }
-    // snap vertical to resource row
+    // snap vertical à la ressource cible
     int y=0; UUID overRes = dragOverResource;
     for (Resource res : resources){
-      int rowH = rowHeights.getOrDefault(res.getId(), tile.height()+PlanningUx.ROW_GAP);
-      if (r.y>=y && r.y<y+rowH){
-        overRes = res.getId();
-        int lane = Optional.ofNullable(lanes.get(dragItem)).map(l -> l.index).orElse(0);
-        r.y = y + lane*(tile.height() + PlanningUx.LANE_GAP);
-        break;
-      }
+      int rowH = rowHeights.get(res.getId());
+      if (r.y>=y && r.y<y+rowH){ overRes = res.getId(); r.y = y + (lanes.getOrDefault(dragItem, new LaneLayout.Lane(0)).index)*(tile.height()+PlanningUx.LANE_GAP); break; }
       y+=rowH;
     }
     dragOverResource = overRes;
     // snap horizontal to day grid
-    int startCol = Math.max(0, Math.min(days-1, Math.round(r.x/(float)colWidth)));
-    int endCol = Math.max(startCol, Math.min(days-1, Math.round((r.x+r.width)/(float)colWidth)-1));
+    int startCol = colAtLeft(r.x);
+    int endCol = colAtRight(r.x + r.width);
     r.x = startCol * colWidth; r.width = (endCol-startCol+1) * colWidth;
     dragRect = r;
     repaint();
@@ -297,8 +322,9 @@ public class PlanningBoard extends JComponent {
   private void onRelease(MouseEvent e){
     if (dragItem==null){ return; }
     if (dragRect==null){ dragItem=null; return; }
-    int startCol = dragRect.x / colWidth;
-    int endCol = (dragRect.x + dragRect.width) / colWidth - 1;
+    // compute new dates and/or resource
+    int startCol = colAtLeft(dragRect.x);
+    int endCol = colAtRight(dragRect.x + dragRect.width);
     LocalDate newStart = startDate.plusDays(startCol);
     LocalDate newEnd = startDate.plusDays(Math.max(startCol, endCol));
     if (dragItem.getId()!=null && dragItem.getLabel()!=null && !dragItem.getLabel().isBlank()){
