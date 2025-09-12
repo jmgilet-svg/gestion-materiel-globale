@@ -1,6 +1,7 @@
 package com.materiel.suite.client.ui.planning;
 
 import com.materiel.suite.client.model.Intervention;
+import java.util.List;
 
 import java.awt.*;
 
@@ -9,6 +10,7 @@ final class InterventionTileRenderer {
   /** Hauteur standard de la carte. */
   int height(){ return PlanningUx.TILE_CARD_H; }
 
+  private static final int GAP = 10;
   void paint(Graphics2D g2, Rectangle r, Intervention it, boolean hover, boolean selected){
     // Ombre
     g2.setColor(PlanningUx.TILE_SHADOW);
@@ -35,10 +37,12 @@ final class InterventionTileRenderer {
 
     // Ligne 1 : heure, status, favoris, agence, menu
     Font f0 = g2.getFont();
-    g2.setFont(f0.deriveFont(Font.BOLD, 18f));
+    Font fTime = f0.deriveFont(Font.BOLD, 18f);
+    g2.setFont(fTime);
     String time = it.prettyTimeRange();
     g2.setColor(new Color(0x0F172A));
     g2.drawString(time, x, y+2);
+    int timeW = g2.getFontMetrics().stringWidth(time);
     g2.setFont(f0);
 
     int right = r.x + r.width - 12;
@@ -61,12 +65,21 @@ final class InterventionTileRenderer {
     };
     Color sFg = new Color(0x0F172A);
     int wStatus = Math.max(96, g2.getFontMetrics().stringWidth(status)+24);
-    PlanningUx.pill(g2, new Rectangle(x+92, y-18, wStatus, 28), sBg, sFg, status);
+    int statusX = x + timeW + GAP;
 
     // Agence pill
     String agency = it.getAgency()==null? "Agence ?" : it.getAgency();
     int wAgency = Math.max(80, g2.getFontMetrics().stringWidth(agency)+24);
-    PlanningUx.pill(g2, new Rectangle(x+92+wStatus+8, y-18, wAgency, 28), new Color(0xEEF2FF), new Color(0x0F172A), agency);
+    int agencyX = statusX + wStatus + GAP;
+
+    // Wrap si collision avec bord droit
+    int rightLimit = r.x + r.width - 80;
+    boolean wrap = agencyX + wAgency > rightLimit;
+    if (wrap){ statusX = x; agencyX = x + wStatus + GAP; y += 22; }
+
+    PlanningUx.pill(g2, new Rectangle(statusX, y-18, wStatus, 28), sBg, sFg, status);
+
+    PlanningUx.pill(g2, new Rectangle(agencyX, y-18, wAgency, 28), new Color(0xEEF2FF), new Color(0x0F172A), agency);
 
     // Ligne 2 : client
     y += 24;
@@ -109,11 +122,28 @@ final class InterventionTileRenderer {
 
     // Ligne 6 : chips documents
     y += 26;
-    int cx = x;
-    cx = chip(g2, cx, y, it.getQuoteNumber(), new Color(0xD1FAE5), new Color(0x176E43), "Devis ");
-    cx = chip(g2, cx+8, y, it.getOrderNumber(), new Color(0xFEF3C7), new Color(0xA16207), "Commande ");
-    cx = chip(g2, cx+8, y, it.getDeliveryNumber(), new Color(0xE5E7EB), new Color(0x374151), "BL ");
-    cx = chip(g2, cx+8, y, it.getInvoiceNumber(), new Color(0xE5E7EB), new Color(0x374151), "Fact. ");
+    wrapChips(g2, r, x, y, List.of(
+        chipSpec(it.getQuoteNumber(), new Color(0xD1FAE5), new Color(0x176E43), "Devis "),
+        chipSpec(it.getOrderNumber(), new Color(0xFEF3C7), new Color(0xA16207), "Commande "),
+        chipSpec(it.getDeliveryNumber(), new Color(0xE5E7EB), new Color(0x374151), "BL "),
+        chipSpec(it.getInvoiceNumber(), new Color(0xE5E7EB), new Color(0x374151), "Fact. ")
+    ));
+  }
+
+  private record Chip(String text, Color bg, Color fg){}
+  private Chip chipSpec(String value, Color bg, Color fg, String prefix){
+    String text = prefix + ((value==null || value.isBlank())? "—" : value);
+    return new Chip(text, bg, fg);
+  }
+  private void wrapChips(Graphics2D g2, Rectangle r, int x, int y, List<Chip> chips){
+    int cx = x, cy = y;
+    int maxX = r.x + r.width - 16;
+    for (Chip c : chips){
+      int w = Math.max(90, g2.getFontMetrics().stringWidth(c.text)+24);
+      if (cx + w > maxX){ cx = x; cy += 30; }
+      PlanningUx.pill(g2, new Rectangle(cx, cy, w, 28), c.bg, c.fg, c.text);
+      cx += w + 8;
+    }
   }
 
   /* Helpers de rendu */
@@ -154,11 +184,5 @@ final class InterventionTileRenderer {
     int tx = x + (w - g2.getFontMetrics().stringWidth(txt))/2;
     int ty = y + g2.getFontMetrics().getAscent()/2 + 2;
     g2.drawString(txt, tx, ty);
-  }
-  private static int chip(Graphics2D g2, int x, int y, String value, Color bg, Color fg, String prefix){
-    String text = prefix + (value==null? "—" : value);
-    int w = Math.max(90, g2.getFontMetrics().stringWidth(text)+24);
-    PlanningUx.pill(g2, new Rectangle(x, y, w, 28), bg, fg, text);
-    return x + w;
   }
 }
