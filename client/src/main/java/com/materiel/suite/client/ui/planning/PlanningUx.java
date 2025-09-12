@@ -11,14 +11,14 @@ final class PlanningUx {
   static final Color BG_ALT1 = new Color(0xFAFAFA);
   static final Color BG_ALT2 = new Color(0xF2F2F2);
   static final Color GRID = new Color(0xDDDDDD);
-  static final Color HEADER_BG = new Color(0xF6F7F9);
+  static final Color HEADER_BG = new Color(0xF5F5F5);
   static final Color HEADER_TX = new Color(0x2D2D2D);
   static final Color ROW_DIV = new Color(0xE6E6E6);
   static final Color TILE_TX = new Color(0x111111);
-  static final Color TILE_SHADOW = new Color(0,0,0,35);
+  static final Color TILE_SHADOW = new Color(0,0,0,18);
   static final Color TILE_HOVER = new Color(0,0,0,20);
-  static final Color TILE_SELECT = new Color(0,0,0,28);
-  static final Color HATCH = new Color(0,0,0,50);
+  static final Color TILE_SELECT = new Color(0,0,0,24);
+  static final Color HATCH = new Color(0,0,0,36);
 
   // Métriques
   static final int COL_MIN = 80;
@@ -32,6 +32,11 @@ final class PlanningUx {
   static final int HANDLE = 6;
   static final int DRAG_THRESHOLD = 6;
   static final int CREATE_THRESHOLD = 12;
+
+  // Typo (utilise police par défaut mais harmonise les tailles)
+  static java.awt.Font fontRegular(java.awt.Graphics2D g){ return g.getFont().deriveFont(13f); }
+  static java.awt.Font fontSmall(java.awt.Graphics2D g){ return g.getFont().deriveFont(12f); }
+  static java.awt.Font fontLarge(java.awt.Graphics2D g){ return g.getFont().deriveFont(java.awt.Font.BOLD, 18f); }
 
   static Font uiFont(Component c){
     Font f = c.getFont();

@@ -12,6 +12,12 @@ final class InterventionTileRenderer {
 
   private static final int GAP = 10;
   void paint(Graphics2D g2, Rectangle r, Intervention it, boolean hover, boolean selected){
+    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+    g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+    // Police harmonisée
+    g2.setFont(PlanningUx.fontRegular(g2));
+
     // Ombre
     g2.setColor(PlanningUx.TILE_SHADOW);
     g2.fillRoundRect(r.x+3,r.y+3,r.width-6,r.height-6, PlanningUx.RADIUS, PlanningUx.RADIUS);
@@ -37,9 +43,9 @@ final class InterventionTileRenderer {
 
     // Ligne 1 : heure, status, favoris, agence, menu
     Font f0 = g2.getFont();
-    Font fTime = f0.deriveFont(Font.BOLD, 18f);
+    Font fTime = PlanningUx.fontLarge(g2);
     g2.setFont(fTime);
-    String time = it.prettyTimeRange();
+    String time = it.prettyTimeRange()==null? "—" : it.prettyTimeRange();
     g2.setColor(new Color(0x0F172A));
     g2.drawString(time, x, y+2);
     int timeW = g2.getFontMetrics().stringWidth(time);
@@ -86,17 +92,15 @@ final class InterventionTileRenderer {
     g2.setFont(f0.deriveFont(Font.BOLD, 16f));
     String client = it.getClientName()==null? (it.getLabel()==null? "—" : it.getLabel()) : it.getClientName();
     g2.setColor(new Color(0x111827));
-    g2.drawString(client, x, y+18);
+    g2.drawString(client, x, y);
+    y += 18;
+    g2.setFont(PlanningUx.fontRegular(g2));
 
-    // Ligne 3 : chantier
-    y += 22;
-    g2.setFont(f0.deriveFont(Font.PLAIN, 16f));
-    String site = "Chantier : " + (it.getSiteLabel()==null? "—" : it.getSiteLabel());
-    g2.setColor(new Color(0x1F2937));
-    g2.drawString(site, x, y+18);
+    g2.setColor(new Color(0x374151));
+    g2.drawString("Chantier : " + nullToDash(it.getSiteLabel()), x, y);
+    y += 16;
 
     // Séparateur
-    y += 28;
     g2.setColor(new Color(0xE5E7EB));
     g2.drawLine(x, y, r.x + r.width - 16, y);
 
