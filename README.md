@@ -34,6 +34,7 @@ mvn -q -DskipTests clean install
 > Si vous gardez un backend séparé ailleurs, installez‑le d’abord : `cd ../gestion-materiel && mvn -q install`,
 > ou référencez‑le comme **module** du parent au lieu d’une dépendance.
 
+
 ## 🚀 Sprint 1 — Backend/Frontend
 **Objectif** : rendre le planning exploitable en mode **API** avec détection de conflits côté serveur et **panneau Conflits** côté client.
 
@@ -186,7 +187,6 @@ Statuts (badges) : Brouillon, Envoyé, Accepté, Refusé, Expiré, Confirmé, An
 ### Variables d’environnement utiles (optionnel)
 - `GM_API_BASE` (ex: `http://localhost:8080`)
 - `GM_API_TOKEN` (Bearer)
-
 
 > Note: Maven build currently requires network access to resolve Spring Boot parent POM.
 
