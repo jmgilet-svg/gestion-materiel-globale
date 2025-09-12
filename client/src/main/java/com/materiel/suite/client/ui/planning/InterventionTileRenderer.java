@@ -9,9 +9,20 @@ import java.awt.*;
 final class InterventionTileRenderer {
   /** Hauteur standard de la carte. */
   int height(){ return PlanningUx.TILE_CARD_H; }
+  void setCompact(boolean c){ compact = c; }
+  int heightFor(Intervention it, int widthPx){
+    int base = compact? 84 : PlanningUx.TILE_CARD_H;
+    int lines = chipLines(it, widthPx);
+    return base + (lines>1? 30*(lines-1) : 0);
+  }
 
   private static final int GAP = 10;
+  private boolean compact = false;
   void paint(Graphics2D g2, Rectangle r, Intervention it, boolean hover, boolean selected){
+    if (compact){
+      paintCompact(g2, r, it, hover, selected);
+      return;
+    }
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 
@@ -148,6 +159,104 @@ final class InterventionTileRenderer {
       PlanningUx.pill(g2, new Rectangle(cx, cy, w, 28), c.bg, c.fg, c.text);
       cx += w + 8;
     }
+  }
+
+  private int chipLines(Intervention it, int widthPx){
+    String[] labels = chipLabels(it);
+    if (labels.length==0) return 0;
+    int max = Math.max(80, widthPx - 32);
+    int line=1, x=0;
+    for (String s : labels){
+      int w = approxChipWidth(s);
+      if (x>0 && x + w > max){ line++; x=0; }
+      x += (x==0? w : w + 8);
+    }
+    return line;
+  }
+
+  private String[] chipLabels(Intervention it){
+    return new String[]{
+        "Devis " + nullToDash(it.getQuoteNumber()),
+        "Commande " + nullToDash(it.getOrderNumber()),
+        "BL " + nullToDash(it.getDeliveryNumber()),
+        "Fact. " + nullToDash(it.getInvoiceNumber())
+    };
+  }
+
+  private int approxChipWidth(String s){
+    int text = (s==null? 1 : Math.max(1, s.length()));
+    return Math.max(90, text*7 + 24);
+  }
+
+  private void paintCompact(Graphics2D g2, Rectangle r, Intervention it, boolean hover, boolean selected){
+    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+    g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+    g2.setFont(PlanningUx.fontRegular(g2));
+
+    g2.setColor(PlanningUx.TILE_SHADOW);
+    g2.fillRoundRect(r.x+3,r.y+3,r.width-6,r.height-6, PlanningUx.RADIUS, PlanningUx.RADIUS);
+    g2.setColor(Color.WHITE);
+    g2.fillRoundRect(r.x,r.y,r.width,r.height, PlanningUx.RADIUS, PlanningUx.RADIUS);
+    g2.setColor(new Color(0xDADEE3));
+    g2.drawRoundRect(r.x,r.y,r.width,r.height, PlanningUx.RADIUS, PlanningUx.RADIUS);
+    Color accent = PlanningUx.colorOr(it.getColor(), new Color(0x3B82F6));
+    g2.setColor(accent);
+    g2.fillRoundRect(r.x-8, r.y+8, 10, r.height-16, 6, 6);
+    if (hover || selected){
+      g2.setColor(hover? PlanningUx.TILE_HOVER : PlanningUx.TILE_SELECT);
+      g2.fillRoundRect(r.x,r.y,r.width,r.height, PlanningUx.RADIUS, PlanningUx.RADIUS);
+    }
+
+    int x = r.x + 16;
+    int y = r.y + 14;
+
+    Font f0 = g2.getFont();
+    Font fTime = PlanningUx.fontLarge(g2);
+    g2.setFont(fTime);
+    String time = it.prettyTimeRange()==null? "—" : it.prettyTimeRange();
+    g2.setColor(new Color(0x0F172A));
+    g2.drawString(time, x, y+2);
+    int timeW = g2.getFontMetrics().stringWidth(time);
+    g2.setFont(f0);
+
+    String status = it.getStatus()==null? "PLANNED" : it.getStatus().toUpperCase();
+    Color sBg = switch(status){
+      case "CONFIRMED" -> new Color(0xD1FAE5);
+      case "DONE"      -> new Color(0xDBEAFE);
+      case "CANCELED"  -> new Color(0xFEE2E2);
+      default          -> new Color(0xE5E7EB);
+    };
+    Color sFg = new Color(0x0F172A);
+    int wStatus = Math.max(96, g2.getFontMetrics().stringWidth(status)+24);
+    int statusX = x + timeW + GAP;
+
+    String agency = it.getAgency()==null? "Agence ?" : it.getAgency();
+    int wAgency = Math.max(80, g2.getFontMetrics().stringWidth(agency)+24);
+    int agencyX = statusX + wStatus + GAP;
+    int rightLimit = r.x + r.width - 80;
+    boolean wrap = agencyX + wAgency > rightLimit;
+    if (wrap){ statusX = x; agencyX = x + wStatus + GAP; y += 22; }
+
+    PlanningUx.pill(g2, new Rectangle(statusX, y-18, wStatus, 28), sBg, sFg, status);
+    PlanningUx.pill(g2, new Rectangle(agencyX, y-18, wAgency, 28), new Color(0xEEF2FF), new Color(0x0F172A), agency);
+
+    y += 24;
+    g2.setFont(f0.deriveFont(Font.BOLD, 15f));
+    String client = it.getClientName()==null? (it.getLabel()==null? "—" : it.getLabel()) : it.getClientName();
+    g2.setColor(new Color(0x111827));
+    String line = client;
+    String site = it.getSiteLabel()==null? "" : " — " + it.getSiteLabel();
+    int space = r.width - 32;
+    if (g2.getFontMetrics().stringWidth(line + site) < space){ line += site; }
+    g2.drawString(line, x, y);
+    y += 18;
+
+    wrapChips(g2, r, x, y, List.of(
+        chipSpec(it.getQuoteNumber(), new Color(0xD1FAE5), new Color(0x176E43), "Devis "),
+        chipSpec(it.getOrderNumber(), new Color(0xFEF3C7), new Color(0xA16207), "Commande "),
+        chipSpec(it.getDeliveryNumber(), new Color(0xE5E7EB), new Color(0x374151), "BL "),
+        chipSpec(it.getInvoiceNumber(), new Color(0xE5E7EB), new Color(0x374151), "Fact. ")
+    ));
   }
 
   /* Helpers de rendu */
