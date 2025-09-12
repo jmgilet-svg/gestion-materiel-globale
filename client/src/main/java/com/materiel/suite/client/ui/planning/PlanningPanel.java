@@ -9,6 +9,7 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.FontMetrics;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -64,35 +65,38 @@ public class PlanningPanel extends JPanel {
     center.add(scrollAgenda, "agenda");
 
     JComponent rowHeader = new JComponent(){
-      @Override public Dimension getPreferredSize(){ return new Dimension(220, board.getPreferredSize().height); }
+      @Override public Dimension getPreferredSize(){ return new Dimension(240, board.getPreferredSize().height); }
       @Override protected void paintComponent(Graphics g){
         Graphics2D g2 = (Graphics2D) g;
-        g2.setColor(PlanningUx.HEADER_BG);
+        g2.setColor(new Color(0xF7F7F7));
         g2.fillRect(0,0,getWidth(),getHeight());
-        g2.setColor(PlanningUx.GRID);
+        g2.setColor(new Color(0xDDDDDD));
         g2.drawLine(getWidth()-1,0,getWidth()-1,getHeight());
         int y=0;
-        List<Resource> rs = ServiceFactory.planning().listResources();
+        java.util.List<Resource> rs = board.getResourcesList();
         for (Resource r : rs){
-          int rowH = boardRowHeight(r);
-          g2.setColor(PlanningUx.HEADER_BG);
+          int rowH = board.rowHeight(r.getId());
+          g2.setColor(new Color(0xF7F7F7));
           g2.fillRect(0,y,getWidth(),rowH);
-          g2.setColor(new Color(0x0F172A));
-          g2.drawString(r.getName(), 12, y + rowH/2 + 5);
-          g2.setColor(PlanningUx.ROW_DIV);
+          g2.setColor(Color.DARK_GRAY);
+          // libellé (wrap simple si manque de place)
+          String name = r.getName()==null? "—" : r.getName();
+          FontMetrics fm = g2.getFontMetrics();
+          int textY = y + Math.max(fm.getAscent()+6, rowH/2 + fm.getAscent()/2);
+          g2.drawString(name, 12, textY);
+          g2.setColor(new Color(0xE0E0E0));
           g2.drawLine(0, y+rowH-1, getWidth(), y+rowH-1);
           y+=rowH;
         }
       }
-      private int boardRowHeight(Resource r){
-        var list = ServiceFactory.planning().listInterventions(board.getStartDate(), board.getStartDate().plusDays(6));
-        list.removeIf(it -> !it.getResourceId().equals(r.getId()));
-        var lanes = LaneLayout.computeLanes(list, Intervention::getDateHeureDebut, Intervention::getDateHeureFin);
-        int lanesCount = lanes.values().stream().mapToInt(l -> l.index).max().orElse(-1) + 1;
-        return Math.max(board.tileHeight(), lanesCount * (board.tileHeight() + PlanningUx.LANE_GAP)) + PlanningUx.ROW_GAP;
-      }
     };
     scroll.setRowHeaderView(rowHeader);
+
+    // Repeindre le header quand le layout du board change
+    board.addPropertyChangeListener("layout", e -> {
+      rowHeader.revalidate();
+      rowHeader.repaint();
+    });
 
     add(center, BorderLayout.CENTER);
     board.reload();
