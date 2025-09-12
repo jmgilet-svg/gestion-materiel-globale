@@ -19,6 +19,7 @@ public interface PlanningService {
   void deleteIntervention(UUID id);
 
   List<Conflict> listConflicts(LocalDate from, LocalDate to);
+
   // Sprint 2 — auto-résolutions
   boolean resolveShift(UUID id, int minutes);
   boolean resolveReassign(UUID id, UUID resourceId);

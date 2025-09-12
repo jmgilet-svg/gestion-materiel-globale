@@ -137,10 +137,18 @@ public class PlanningBoard extends JComponent {
     g2.drawRoundRect(r.x+1,r.y+1,r.width-2,r.height-2,10,10);
     g2.setColor(new Color(0,0,0,30));
     g2.fillRoundRect(r.x+3, r.y+r.height-3, r.width-6, 3, 6,6);
-    g2.setColor(new Color(20,20,20));
-    g2.setClip(r.x+8, r.y+4, r.width-16, r.height-8);
-    g2.drawString(it.getLabel(), r.x+10, r.y + r.height/2 + 4);
-    g2.setClip(null);
+    // Texte sûr et élidé si nécessaire
+    String label = it.getLabel();
+    if (label == null || label.isBlank()) label = "(sans titre)";
+    int maxTextW = Math.max(0, r.width - 16);
+    if (maxTextW > 0){
+      g2.setColor(new Color(20,20,20));
+      g2.setClip(r.x+8, r.y+4, r.width-16, r.height-8);
+      label = ellipsize(label, g2.getFontMetrics(), maxTextW);
+      int baseline = r.y + Math.max(14, Math.min(r.height-6, (r.height + g2.getFontMetrics().getAscent())/2));
+      g2.drawString(label, r.x+10, baseline);
+      g2.setClip(null);
+    }
   }
 
   private Rectangle rectOf(Intervention it, int baseY){
@@ -169,6 +177,19 @@ public class PlanningBoard extends JComponent {
       if (hex==null || hex.isBlank()) return def;
       return new Color(Integer.parseInt(hex.replace("#",""), 16));
     } catch(Exception e){ return def; }
+  }
+
+  private static String ellipsize(String s, FontMetrics fm, int maxW){
+    if (fm.stringWidth(s) <= maxW) return s;
+    String ell = "…";
+    int ellW = fm.stringWidth(ell);
+    if (ellW >= maxW) return "";
+    StringBuilder b = new StringBuilder();
+    for (int i=0;i<s.length();i++){
+      if (fm.stringWidth(b.toString() + s.charAt(i)) + ellW > maxW) break;
+      b.append(s.charAt(i));
+    }
+    return b.toString() + ell;
   }
 
   private void onPress(MouseEvent e){
