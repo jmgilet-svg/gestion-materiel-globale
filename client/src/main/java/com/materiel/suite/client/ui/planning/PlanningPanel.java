@@ -29,11 +29,9 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSlider;
-import javax.swing.JSpinner;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.KeyStroke;
-import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 
@@ -111,9 +109,11 @@ public class PlanningPanel extends JPanel {
     JButton prev = new JButton("◀ Semaine");
     JButton next = new JButton("Semaine ▶");
     JButton today = new JButton("Aujourd'hui");
-    JLabel zoomL = new JLabel("Zoom:");
-    JSlider zoom = new JSlider(PlanningUx.COL_MIN, PlanningUx.COL_MAX, 120);
-    JSpinner snap = new JSpinner(new SpinnerNumberModel(15,5,60,5));
+    JLabel zoomL = new JLabel("Zoom (slot):");
+    JSlider zoom = new JSlider(6,24,board.getSlotWidth());
+    JLabel granL = new JLabel("Pas:");
+    JComboBox<String> gran = new JComboBox<>(new String[]{"5 min","10 min","15 min","30 min","60 min"});
+    gran.setSelectedItem(board.getSlotMinutes()+" min");
     JToggleButton mode = new JToggleButton("Agenda");
     conflictsBtn = new JButton("Conflits (0)");
     JButton addI = new JButton("+ Intervention");
@@ -124,13 +124,24 @@ public class PlanningPanel extends JPanel {
     prev.addActionListener(e -> { board.setStartDate(board.getStartDate().minusDays(7)); agenda.setStartDate(board.getStartDate()); });
     next.addActionListener(e -> { board.setStartDate(board.getStartDate().plusDays(7)); agenda.setStartDate(board.getStartDate()); });
     today.addActionListener(e -> { board.setStartDate(LocalDate.now().with(java.time.DayOfWeek.MONDAY)); agenda.setStartDate(board.getStartDate()); });
-    zoom.addChangeListener(e -> { board.setZoom(zoom.getValue()); agenda.setDayWidth(zoom.getValue()); revalidate(); repaint(); });
-    snap.addChangeListener(e -> { board.setSnapMinutes((Integer) snap.getValue()); agenda.setSnapMinutes((Integer) snap.getValue()); });
+    zoom.addChangeListener(e -> {
+      int w = zoom.getValue();
+      board.setZoom(w);
+      agenda.setDayWidth(w*10);
+      revalidate(); repaint();
+    });
+    gran.addActionListener(e -> {
+      String s = String.valueOf(gran.getSelectedItem());
+      int m = Integer.parseInt(s.replace(" min",""));
+      board.setSlotMinutes(m);
+      agenda.setSnapMinutes(m);
+      revalidate(); repaint();
+    });
     addI.addActionListener(e -> addInterventionDialog());
 
     bar.add(prev); bar.add(next); bar.add(today); bar.add(mode);
     bar.add(Box.createHorizontalStrut(16)); bar.add(zoomL); bar.add(zoom);
-    bar.add(new JLabel("Snap (min):")); bar.add(snap);
+    bar.add(Box.createHorizontalStrut(12)); bar.add(granL); bar.add(gran);
     bar.add(Box.createHorizontalStrut(8)); bar.add(conflictsBtn);
     bar.add(Box.createHorizontalStrut(16)); bar.add(addI);
     return bar;
