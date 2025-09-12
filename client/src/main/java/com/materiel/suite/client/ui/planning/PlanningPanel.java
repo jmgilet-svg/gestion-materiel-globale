@@ -87,9 +87,9 @@ public class PlanningPanel extends JPanel {
       private int boardRowHeight(Resource r){
         var list = ServiceFactory.planning().listInterventions(board.getStartDate(), board.getStartDate().plusDays(6));
         list.removeIf(it -> !it.getResourceId().equals(r.getId()));
-        var lanes = LaneLayout.computeLanes(list, Intervention::getDateDebut, Intervention::getDateFin);
+        var lanes = LaneLayout.computeLanes(list, Intervention::getDateHeureDebut, Intervention::getDateHeureFin);
         int lanesCount = lanes.values().stream().mapToInt(l -> l.index).max().orElse(-1) + 1;
-        return Math.max(PlanningUx.TILE_H, lanesCount * (PlanningUx.TILE_H + PlanningUx.LANE_GAP)) + PlanningUx.ROW_GAP;
+        return Math.max(board.tileHeight(), lanesCount * (board.tileHeight() + PlanningUx.LANE_GAP)) + PlanningUx.ROW_GAP;
       }
     };
     scroll.setRowHeaderView(rowHeader);
