@@ -330,6 +330,7 @@ public class AgendaBoard extends JComponent {
           it.setLabel(label);
           ServiceFactory.planning().saveIntervention(it);
           labelCache.put(it.getId(), label); // FIX: cache new label
+
           reload();
         }
       }
