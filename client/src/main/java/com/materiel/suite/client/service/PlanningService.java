@@ -6,7 +6,6 @@ import com.materiel.suite.client.model.Conflict;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-
 import java.util.List;
 import java.util.UUID;
 
@@ -24,5 +23,4 @@ public interface PlanningService {
   boolean resolveShift(UUID id, int minutes);
   boolean resolveReassign(UUID id, UUID resourceId);
   boolean resolveSplit(UUID id, LocalDateTime splitAt);
-
 }

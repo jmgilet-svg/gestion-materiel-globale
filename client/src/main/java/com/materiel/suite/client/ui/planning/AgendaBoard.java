@@ -33,7 +33,6 @@ public class AgendaBoard extends JComponent {
   // lanes par jour : clé "itId|dayIdx" -> lane index; et "resId|dayIdx" -> max lanes
   private Map<String, Integer> dayLaneIndex = new HashMap<>();
   private Map<String, Integer> dayLaneMax = new HashMap<>();
-
   private Map<UUID, Integer> rowHeights = new HashMap<>();
   private int totalHeight = 0;
 
@@ -110,6 +109,7 @@ public class AgendaBoard extends JComponent {
       }
     }
   }
+
   @Override public Dimension getPreferredSize(){
     return new Dimension(days*dayWidth, Math.max(totalHeight, 400));
   }
@@ -186,7 +186,6 @@ public class AgendaBoard extends JComponent {
     int x = xBase + 6 + lane * colW + pad;
     int w = Math.max(30, colW - 2*pad);
     return new Rectangle(x, y, w, h);
-
   }
 
   private void onPress(MouseEvent e){

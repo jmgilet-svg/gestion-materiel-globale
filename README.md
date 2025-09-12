@@ -43,6 +43,29 @@ Mesures de done : tuiles correctement fractionnées lors de chevauchements, act
 
 ---
 
+## 🚀 Sprint 3 — Indispos ressources + Création par glisser + Filtres rapides
+**Objectif** : confort d'usage du planning.
+
+### Backend
+- **Indisponibilités de ressource** (ex : maintenance, panne) :
+  - `GET/POST/DELETE /api/resources/{id}/unavailability?from=&to=`
+  - Modèle `ResourceUnavailability { id, resourceId, start, end, reason }`
+
+### Frontend
+- **Overlays d'indispos** : bandes hachurées grisées par-dessus les jours/heure concernés (Gantt & Agenda).
+- **Création par glisser (Agenda)** : cliquer-glisser sur une plage vide → saisie rapide du libellé → création d'une intervention.
+- **Filtres rapides** : champ *Filtrer ressources* dans la toolbar (filtre par nom), toggle *Afficher indispos*.
+- **DnD plus “doux”** : seuil de démarrage (6 px), poignées de resize ±6 px, snapping conservé.
+
+Lancer :
+```bash
+mvn -q -pl backend spring-boot:run
+mvn -q -pl client -DskipTests exec:java
+```
+
+---
+
+
 ## Quick Wins (UX/Qualité)
 Cette livraison ajoute des améliorations ciblées, sans casser l’existant :
 

@@ -7,7 +7,6 @@ import com.materiel.suite.client.service.PlanningService;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-n
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
