@@ -114,15 +114,22 @@ public class PlanningPanel extends JPanel {
     JLabel granL = new JLabel("Pas:");
     JComboBox<String> gran = new JComboBox<>(new String[]{"5 min","10 min","15 min","30 min","60 min"});
     gran.setSelectedItem(board.getSlotMinutes()+" min");
-    JToggleButton compact = new JToggleButton("Mode compact");
+    JLabel densL = new JLabel("Densité:");
+    JComboBox<String> density = new JComboBox<>(new String[]{"Compact","Normal","Spacieux"});
     JToggleButton mode = new JToggleButton("Agenda");
     conflictsBtn = new JButton("Conflits (0)");
     JButton addI = new JButton("+ Intervention");
 
     mode.addActionListener(e -> switchMode(mode.isSelected()));
     conflictsBtn.addActionListener(e -> openConflictsDialog());
-    compact.addActionListener(e -> {
-      board.setCompact(compact.isSelected());
+    density.setSelectedIndex(1);
+    density.addActionListener(e -> {
+      String sel = String.valueOf(density.getSelectedItem());
+      switch (sel){
+        case "Compact" -> board.setDensity(PlanningBoard.Density.COMPACT);
+        case "Spacieux" -> board.setDensity(PlanningBoard.Density.ROOMY);
+        default -> board.setDensity(PlanningBoard.Density.NORMAL);
+      }
       revalidate(); repaint();
     });
 
@@ -147,7 +154,7 @@ public class PlanningPanel extends JPanel {
     bar.add(prev); bar.add(next); bar.add(today); bar.add(mode);
     bar.add(Box.createHorizontalStrut(16)); bar.add(zoomL); bar.add(zoom);
     bar.add(Box.createHorizontalStrut(12)); bar.add(granL); bar.add(gran);
-    bar.add(Box.createHorizontalStrut(12)); bar.add(compact);
+    bar.add(Box.createHorizontalStrut(12)); bar.add(densL); bar.add(density);
     bar.add(Box.createHorizontalStrut(8)); bar.add(conflictsBtn);
     bar.add(Box.createHorizontalStrut(16)); bar.add(addI);
     return bar;
