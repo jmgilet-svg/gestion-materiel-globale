@@ -134,4 +134,3 @@ Statuts (badges) : Brouillon, Envoyé, Accepté, Refusé, Expiré, Confirmé, An
 ### Variables d’environnement utiles (optionnel)
 - `GM_API_BASE` (ex: `http://localhost:8080`)
 - `GM_API_TOKEN` (Bearer)
-

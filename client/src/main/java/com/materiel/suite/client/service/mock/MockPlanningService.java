@@ -7,6 +7,7 @@ import com.materiel.suite.client.service.PlanningService;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+n
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -44,7 +45,6 @@ public class MockPlanningService implements PlanningService {
   }
   @Override public Intervention saveIntervention(Intervention i){ if(i.getId()==null) i.setId(UUID.randomUUID()); interventions.put(i.getId(), i); return i; }
   @Override public void deleteIntervention(UUID id){ interventions.remove(id); }
-
   @Override public List<Conflict> listConflicts(LocalDate from, LocalDate to){
     List<Conflict> out = new ArrayList<>();
     for (Resource r : resources.values()){
@@ -63,7 +63,6 @@ public class MockPlanningService implements PlanningService {
     }
     return out;
   }
-
   @Override public boolean resolveShift(UUID id, int minutes){
     Intervention i = interventions.get(id);
     if (i==null) return false;

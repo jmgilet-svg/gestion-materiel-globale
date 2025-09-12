@@ -60,7 +60,6 @@ public class ApiPlanningService implements PlanningService {
       return list;
     } catch(Exception e){ return fb.listConflicts(from,to); }
   }
-
   @Override public boolean resolveShift(UUID id, int minutes){
     try {
       String body = "{\"action\":\"shift\",\"id\":\""+id+"\",\"minutes\":"+minutes+"}";
