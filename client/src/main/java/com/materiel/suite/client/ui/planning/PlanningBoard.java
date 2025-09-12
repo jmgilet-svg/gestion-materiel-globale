@@ -25,6 +25,7 @@ public class PlanningBoard extends JComponent {
   private Map<Intervention, LaneLayout.Lane> lanes = new HashMap<>();
   private Map<UUID, Integer> rowHeights = new HashMap<>();
   private int totalHeight = 0;
+  private Map<UUID, String> labelCache = new HashMap<>(); // FIX: cache labels
 
   // UX
   private boolean showIndispo = true;
@@ -40,6 +41,7 @@ public class PlanningBoard extends JComponent {
   private Point dragStart;
   private boolean dragArmed;
   private UUID dragOverResource;
+
 
   public PlanningBoard(){
     setOpaque(true);
@@ -109,6 +111,10 @@ public class PlanningBoard extends JComponent {
         .filter(r -> resourceFilter.isBlank() || r.getName().toLowerCase().contains(resourceFilter))
         .collect(Collectors.toList());
     interventions = ServiceFactory.planning().listInterventions(startDate, startDate.plusDays(days-1));
+    for (Intervention it : interventions){ // FIX: preserve labels
+      if (it.getLabel()!=null) labelCache.put(it.getId(), it.getLabel());
+      else if (labelCache.containsKey(it.getId())) it.setLabel(labelCache.get(it.getId()));
+    }
     byResource = interventions.stream().collect(Collectors.groupingBy(Intervention::getResourceId));
     for (Intervention it : interventions){
       if (it.getLabel()!=null) labelCache.put(it.getId(), it.getLabel()); // FIX: cache label
@@ -263,6 +269,7 @@ public class PlanningBoard extends JComponent {
             resizingRight = Math.abs(p.x - (rect.x+rect.width)) < PlanningUx.HANDLE;
             dragOverResource = r.getId();
             selected = it; // FIX: select tile on press
+
             return;
           }
         }
@@ -280,6 +287,8 @@ public class PlanningBoard extends JComponent {
     }
     int dx = e.getX() - dragStart.x;
     int dy = e.getY() - dragStart.y;
+    if (!dragging && Math.hypot(dx, dy) < 6) return; // FIX: start threshold
+    dragging = true; // FIX:
     Rectangle r = new Rectangle(dragRect);
     if (resizingLeft){
       r.x += dx; r.width -= dx;
