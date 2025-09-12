@@ -5,11 +5,12 @@
     <groupId>com.materiel.suite</groupId>
     <artifactId>gestion-materiel-globale</artifactId>
     <version>1.0.0-SNAPSHOT</version>
+    <relativePath>../pom.xml</relativePath>
   </parent>
+
   <artifactId>client</artifactId>
-  <properties>
-    <java.version>17</java.version>
-  </properties>
+  <name>Gestion Matériel — Client</name>
+  <packaging>jar</packaging>
   <dependencies>
     <!-- Quick Wins: dépendances optionnelles (l'app fonctionne sans) -->
     <dependency>

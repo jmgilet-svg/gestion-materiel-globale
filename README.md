@@ -1,5 +1,18 @@
 # Gestion Matériel — Monorepo (offline-ready)
 
+> **Note Maven (parent introuvable)**  \
+> Si vous voyez :
+> ```
+> Could not find artifact com.materiel.suite:gestion-materiel-globale:pom:1.0.0-SNAPSHOT
+> ```
+> c’est que le **POM parent** n’était pas présent/installé. Solution :
+> 1) Assurez-vous d’avoir ce dépôt à la **racine** avec `pom.xml` (parent).  \
+> 2) Lancez la build depuis la racine :
+> ```bash
+> mvn -q -DskipTests install      # ou simplement: mvn -q install
+> ```
+> Maven résoudra alors les modules `backend` et `client` avec le parent local.
+
 Monorepo Maven (Java 17) avec deux modules :
 - **backend/** : **API Spring Boot exécutable** (Ressources, Interventions, Conflits planning, seed mémoire + CORS)
 - **client/** : application Swing (Mode Mock par défaut), fenêtre de choix Mock/API, UI ERP + **Planning DnD**
