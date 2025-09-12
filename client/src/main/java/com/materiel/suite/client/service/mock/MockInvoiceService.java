@@ -26,7 +26,7 @@ public class MockInvoiceService implements InvoiceService {
   @Override public Invoice createFromQuote(UUID quoteId){
     Quote q = MockData.findById(MockData.QUOTES, quoteId);
     if (q==null) return null;
-    Invoice inv = MockData.fromQuote(q);
+    Invoice inv = MockData.fromQuoteToInvoice(q);
     MockData.INVOICES.add(inv);
     return inv;
   }

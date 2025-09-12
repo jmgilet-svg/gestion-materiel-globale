@@ -1,20 +1,34 @@
 package com.materiel.suite.client.ui.planning;
 
+import java.awt.Color;
+import java.awt.Cursor;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.GradientPaint;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.RenderingHints;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+import javax.swing.JComponent;
+
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.ui.commands.CommandBus;
 import com.materiel.suite.client.ui.commands.MoveResizeInterventionCommand;
-
-import javax.swing.*;
-import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.util.*;
-import java.util.stream.Collectors;
 
 public class PlanningBoard extends JComponent {
   private LocalDate startDate = LocalDate.now().with(java.time.DayOfWeek.MONDAY);

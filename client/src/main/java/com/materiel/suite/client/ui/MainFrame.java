@@ -62,7 +62,7 @@ public class MainFrame extends JFrame {
   private JComponent buildHeader(AppConfig cfg) {
     JPanel p = new JPanel(new BorderLayout());
     p.setBorder(new EmptyBorder(8,8,8,8));
-    JLabel title = new JLabel("Gestion Matériel — Mode " + (cfg.getMode()==null?"(non défini)":cfg.getMode().name()));
+    JLabel title = new JLabel("Gestion Matériel — Mode " + (cfg.getMode()==null?"(non défini)":cfg.getMode()));
     title.setFont(title.getFont().deriveFont(Font.BOLD, 16f));
     p.add(title, BorderLayout.WEST);
     return p;

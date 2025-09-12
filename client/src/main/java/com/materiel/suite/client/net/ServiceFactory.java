@@ -17,8 +17,8 @@ public class ServiceFactory {
   public static void init(AppConfig c) {
     cfg = c;
     switch (cfg.getMode()) {
-      case mock -> initMock();
-      case backend -> initBackend();
+      case "mock" -> initMock();
+      case "backend" -> initBackend();
       default -> initMock();
     }
   }

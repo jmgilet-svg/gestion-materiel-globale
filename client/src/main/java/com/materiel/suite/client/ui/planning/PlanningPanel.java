@@ -1,18 +1,47 @@
 package com.materiel.suite.client.ui.planning;
 
-import com.materiel.suite.client.model.Intervention;
-import com.materiel.suite.client.model.Resource;
-import com.materiel.suite.client.model.Conflict;
-import com.materiel.suite.client.net.ServiceFactory;
-import com.materiel.suite.client.ui.commands.CommandBus;
-
-import javax.swing.*;
-import javax.swing.border.EmptyBorder;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.CardLayout;
+import java.awt.Color;
+import java.awt.Container;
+import java.awt.Dialog;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
+
+import javax.swing.AbstractAction;
+import javax.swing.Box;
+import javax.swing.DefaultListModel;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JComponent;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JSlider;
+import javax.swing.JSpinner;
+import javax.swing.JTextField;
+import javax.swing.JToggleButton;
+import javax.swing.KeyStroke;
+import javax.swing.SpinnerNumberModel;
+import javax.swing.SwingUtilities;
+import javax.swing.border.EmptyBorder;
+
+import com.materiel.suite.client.model.Conflict;
+import com.materiel.suite.client.model.Intervention;
+import com.materiel.suite.client.model.Resource;
+import com.materiel.suite.client.net.ServiceFactory;
+import com.materiel.suite.client.service.PlanningService;
+import com.materiel.suite.client.ui.commands.CommandBus;
 
 public class PlanningPanel extends JPanel {
   private final PlanningBoard board = new PlanningBoard();

@@ -68,7 +68,7 @@ public final class MockData {
     d.recomputeTotals();
     return d;
   }
-  public static Invoice fromQuote(Quote q){
+  public static Invoice fromQuoteToInvoice(Quote q){
     var i = new Invoice();
     i.setId(UUID.randomUUID());
     i.setNumber(nextNumber("FAC", seqInv));
