@@ -44,6 +44,7 @@ public class PlanningBoard extends JComponent {
   private Map<Intervention, LaneLayout.Lane> lanes = new HashMap<>();
   private Map<UUID, Integer> rowHeights = new HashMap<>();
   private int totalHeight = 0;
+  private Map<UUID, String> labelCache = new HashMap<>(); // FIX: cache labels
 
   // DnD state
   private Intervention dragItem;
@@ -52,6 +53,7 @@ public class PlanningBoard extends JComponent {
   private Point dragStart;
   private UUID dragOverResource;
   private LocalDateTime dragStartStart, dragStartEnd;
+  private boolean dragging; // FIX: threshold control
 
   public PlanningBoard(){
     setOpaque(true);
@@ -77,6 +79,10 @@ public class PlanningBoard extends JComponent {
   public void reload(){
     resources = ServiceFactory.planning().listResources();
     interventions = ServiceFactory.planning().listInterventions(startDate, startDate.plusDays(days-1));
+    for (Intervention it : interventions){ // FIX: preserve labels
+      if (it.getLabel()!=null) labelCache.put(it.getId(), it.getLabel());
+      else if (labelCache.containsKey(it.getId())) it.setLabel(labelCache.get(it.getId()));
+    }
     byResource = interventions.stream().collect(Collectors.groupingBy(Intervention::getResourceId));
     computeLanesAndHeights();
     revalidate(); repaint();
@@ -223,6 +229,7 @@ public class PlanningBoard extends JComponent {
             resizingLeft = Math.abs(p.x - rect.x) < 8;
             resizingRight = Math.abs(p.x - (rect.x+rect.width)) < 8;
             dragOverResource = r.getId();
+            dragging = false; // FIX: wait for threshold
             return;
           }
         }
@@ -235,6 +242,8 @@ public class PlanningBoard extends JComponent {
     if (dragItem==null) return;
     int dx = e.getX() - dragStart.x;
     int dy = e.getY() - dragStart.y;
+    if (!dragging && Math.hypot(dx, dy) < 6) return; // FIX: start threshold
+    dragging = true; // FIX:
     Rectangle r = new Rectangle(dragRect);
     if (resizingLeft){
       r.x += dx; r.width -= dx;
@@ -245,10 +254,14 @@ public class PlanningBoard extends JComponent {
     } else {
       r.x += dx; r.y += dy;
     }
-    int y=0; UUID overRes = dragOverResource;
+    int pointerY = e.getY(); int y=0; UUID overRes = dragOverResource; // FIX: use pointer
     for (Resource res : resources){
       int rowH = rowHeights.get(res.getId());
-      if (r.y>=y && r.y<y+rowH){ overRes = res.getId(); r.y = y + (lanes.getOrDefault(dragItem, new LaneLayout.Lane(0)).index)*(tileHeight+4); break; }
+      if (pointerY>=y && pointerY<y+rowH){
+        overRes = res.getId();
+        r.y = y + (lanes.getOrDefault(dragItem, new LaneLayout.Lane(0)).index)*(tileHeight+4);
+        break;
+      }
       y+=rowH;
     }
     dragOverResource = overRes;
@@ -257,7 +270,9 @@ public class PlanningBoard extends JComponent {
   }
 
   private void onRelease(MouseEvent e){
-    if (dragItem==null){ return; }
+    if (dragItem==null || !dragging){ // FIX: ignore simple click
+      dragItem = null; dragRect=null; resizingLeft=resizingRight=false; dragging=false; repaint(); return;
+    }
     int startCol = Math.max(0, Math.min(days-1, (int)Math.floor(dragRect.x / (double)colWidth)));
     int startOffsetPx = dragRect.x - startCol * colWidth;
     double startHours = startOffsetPx / (colWidth/24.0);
@@ -275,7 +290,7 @@ public class PlanningBoard extends JComponent {
     newStart = snap(newStart); newEnd = snap(newEnd);
     UUID newRes = (dragOverResource!=null? dragOverResource : dragItem.getResourceId());
     CommandBus.get().submit(new MoveResizeInterventionCommand(dragItem, newRes, newStart, newEnd));
-    dragItem = null; dragRect=null; resizingLeft=resizingRight=false;
+    dragItem = null; dragRect=null; resizingLeft=resizingRight=false; dragging=false; // FIX: reset flag
     reload();
   }
 
