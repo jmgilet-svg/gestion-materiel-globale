@@ -12,6 +12,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.*;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -29,7 +30,10 @@ public class AgendaBoard extends JComponent {
   private List<Resource> resources = List.of();
   private List<Intervention> interventions = List.of();
   private Map<UUID, List<Intervention>> byResource = new HashMap<>();
-  private Map<Intervention, Integer> widthLane = new HashMap<>();
+  // lanes par jour : clé "itId|dayIdx" -> lane index; et "resId|dayIdx" -> max lanes
+  private Map<String, Integer> dayLaneIndex = new HashMap<>();
+  private Map<String, Integer> dayLaneMax = new HashMap<>();
+
   private Map<UUID, Integer> rowHeights = new HashMap<>();
   private int totalHeight = 0;
 
@@ -63,6 +67,7 @@ public class AgendaBoard extends JComponent {
     resources = ServiceFactory.planning().listResources();
     interventions = ServiceFactory.planning().listInterventions(startDate, startDate.plusDays(days-1));
     byResource = interventions.stream().collect(Collectors.groupingBy(Intervention::getResourceId));
+    computeDayLanes();
     computeHeights();
     revalidate(); repaint();
   }
@@ -76,6 +81,35 @@ public class AgendaBoard extends JComponent {
     }
   }
 
+  private void computeDayLanes(){
+    dayLaneIndex.clear(); dayLaneMax.clear();
+    for (Resource r : resources){
+      for (int d=0; d<days; d++){
+        LocalDate day = startDate.plusDays(d);
+        LocalDateTime dayStart = day.atStartOfDay();
+        LocalDateTime dayEnd = day.atTime(LocalTime.MAX);
+        List<Intervention> list = byResource.getOrDefault(r.getId(), List.of()).stream()
+            .filter(it -> !(it.getDateHeureFin().isBefore(dayStart) || it.getDateHeureDebut().isAfter(dayEnd)))
+            .sorted(Comparator.comparing(Intervention::getDateHeureDebut))
+            .collect(Collectors.toList());
+        List<LocalDateTime> laneEnds = new ArrayList<>();
+        int maxLane = 0;
+        for (Intervention it : list){
+          LocalDateTime s = it.getDateHeureDebut().isBefore(dayStart)? dayStart : it.getDateHeureDebut();
+          LocalDateTime e = it.getDateHeureFin().isAfter(dayEnd)? dayEnd : it.getDateHeureFin();
+          int lane = -1;
+          for (int i=0;i<laneEnds.size();i++){
+            if (laneEnds.get(i).isBefore(s)) { lane = i; break; }
+          }
+          if (lane==-1){ lane = laneEnds.size(); laneEnds.add(e); }
+          else { laneEnds.set(lane, e); }
+          dayLaneIndex.put(it.getId()+"|"+d, lane);
+          maxLane = Math.max(maxLane, lane+1);
+        }
+        dayLaneMax.put(r.getId()+"|"+d, Math.max(1, maxLane));
+      }
+    }
+  }
   @Override public Dimension getPreferredSize(){
     return new Dimension(days*dayWidth, Math.max(totalHeight, 400));
   }
@@ -140,11 +174,19 @@ public class AgendaBoard extends JComponent {
     // colonne = jour, y = heure
     int dayIdx = (int) java.time.temporal.ChronoUnit.DAYS.between(startDate, it.getDateHeureDebut().toLocalDate());
     dayIdx = Math.max(0, Math.min(days-1, dayIdx));
-    int x = dayIdx * dayWidth;
+    int xBase = dayIdx * dayWidth;
     int y = rowTop + (int) Math.round(it.getDateHeureDebut().getHour()*hourHeight + it.getDateHeureDebut().getMinute()*(hourHeight/60.0));
     int y2 = rowTop + (int) Math.round(it.getDateHeureFin().getHour()*hourHeight + it.getDateHeureFin().getMinute()*(hourHeight/60.0));
     int h = Math.max(12, y2 - y);
-    return new Rectangle(x+6, y, dayWidth-12, h);
+    int lane = dayLaneIndex.getOrDefault(it.getId()+"|"+dayIdx, 0);
+    int max = dayLaneMax.getOrDefault(it.getResourceId()+"|"+dayIdx, 1);
+    int inner = dayWidth - 12;
+    int colW = Math.max(40, inner / Math.max(1, max));
+    int pad = 4;
+    int x = xBase + 6 + lane * colW + pad;
+    int w = Math.max(30, colW - 2*pad);
+    return new Rectangle(x, y, w, h);
+
   }
 
   private void onPress(MouseEvent e){

@@ -18,7 +18,6 @@ public class DocumentLineTableModel extends AbstractTableModel {
   @Override public int getColumnCount(){ return cols.length; }
   @Override public String getColumnName(int col){ return cols[col]; }
   @Override public boolean isCellEditable(int r, int c){ return editable && c<=5; }
-
   @Override public Object getValueAt(int r, int c){
     DocumentLine l = lines.get(r);
     return switch (c){

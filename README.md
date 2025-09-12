@@ -24,7 +24,24 @@ Lancer localement :
 ```bash
 mvn -q -pl backend spring-boot:run
 mvn -q -pl client -DskipTests exec:java
+```
 
+## 🚀 Sprint 2 — Agenda ++ (largeurs fractionnées) & Auto‑résolution
+**Objectif** : améliorer la lisibilité de l’Agenda en répartissant les tuiles chevauchées **côte à côte**, et offrir des **actions de résolution** directement depuis le panneau Conflits.
+
+### Backend
+- `POST /api/planning/resolve` : actions `shift`, `reassign`, `split` sur une intervention.
+  - `shift` : décale début+fin de `minutes` (positif ou négatif).
+  - `reassign` : change de ressource (si pas de conflit sur la cible).
+  - `split` : coupe l’intervention à `splitAt` (création d’une deuxième intervention).
+
+### Frontend
+- **AgendaBoard** : calcul de “lanes” par **jour/ressource** → largeur = 1/N, avec marges, type Google Calendar.
+- Panneau **Conflits** : trois boutons d’action — *Décaler +30 min*, *Changer de ressource…*, *Couper à…* — branchés sur l’API (fallback mock si offline).
+
+Mesures de done : tuiles correctement fractionnées lors de chevauchements, actions exécutées sans erreur, Undo/Redo possible côté client pour DnD (inchangé).
+
+---
 
 ## Quick Wins (UX/Qualité)
 Cette livraison ajoute des améliorations ciblées, sans casser l’existant :

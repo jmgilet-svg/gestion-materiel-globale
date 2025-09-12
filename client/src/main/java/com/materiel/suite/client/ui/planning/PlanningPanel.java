@@ -19,7 +19,6 @@ public class PlanningPanel extends JPanel {
   private final AgendaBoard agenda = new AgendaBoard();
   private JButton conflictsBtn;
 
-
   public PlanningPanel(){
     super(new BorderLayout());
     add(buildToolbar(), BorderLayout.NORTH);
@@ -89,7 +88,6 @@ public class PlanningPanel extends JPanel {
     mode.addActionListener(e -> switchMode(mode.isSelected()));
     conflictsBtn.addActionListener(e -> openConflictsDialog());
 
-
     prev.addActionListener(e -> { board.setStartDate(board.getStartDate().minusDays(7)); agenda.setStartDate(board.getStartDate()); });
     next.addActionListener(e -> { board.setStartDate(board.getStartDate().plusDays(7)); agenda.setStartDate(board.getStartDate()); });
     today.addActionListener(e -> { board.setStartDate(LocalDate.now().with(java.time.DayOfWeek.MONDAY)); agenda.setStartDate(board.getStartDate()); });
@@ -101,7 +99,6 @@ public class PlanningPanel extends JPanel {
     bar.add(Box.createHorizontalStrut(16)); bar.add(zoomL); bar.add(zoom);
     bar.add(new JLabel("Snap (min):")); bar.add(snap);
     bar.add(Box.createHorizontalStrut(8)); bar.add(conflictsBtn);
-
     bar.add(Box.createHorizontalStrut(16)); bar.add(addI);
     return bar;
   }
@@ -120,14 +117,59 @@ public class PlanningPanel extends JPanel {
       JOptionPane.showMessageDialog(this, "Aucun conflit sur la période.", "Conflits", JOptionPane.INFORMATION_MESSAGE);
       return;
     }
-    DefaultListModel<String> model = new DefaultListModel<>();
-    for (var c : conflicts){
-      model.addElement("Ressource "+c.getResourceId()+" — "+c.getA()+" ↔ "+c.getB());
-    }
-    JList<String> list = new JList<>(model);
-    list.setVisibleRowCount(10);
-    JOptionPane.showMessageDialog(this, new JScrollPane(list), "Conflits détectés", JOptionPane.WARNING_MESSAGE);
+    DefaultListModel<Conflict> model = new DefaultListModel<>();
+    conflicts.forEach(model::addElement);
+    JList<Conflict> list = new JList<>(model);
+    list.setCellRenderer((jl,c,idx,sel,focus)->{
+      JLabel l = new JLabel("Ressource "+c.getResourceId()+" — "+c.getA()+" ↔ "+c.getB());
+      if(sel) l.setOpaque(true);
+      return l;
+    });
+    list.setVisibleRowCount(12);
+
+    JButton shift = new JButton("Décaler +30 min");
+    JButton reassign = new JButton("Changer ressource…");
+    JButton split = new JButton("Couper à…");
+    JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+    actions.add(shift); actions.add(reassign); actions.add(split);
+
+    JPanel panel = new JPanel(new BorderLayout());
+    panel.add(new JScrollPane(list), BorderLayout.CENTER);
+    panel.add(actions, BorderLayout.SOUTH);
+
+    JDialog dlg = new JDialog(SwingUtilities.getWindowAncestor(this), "Conflits détectés", Dialog.ModalityType.APPLICATION_MODAL);
+    dlg.setContentPane(panel);
+    dlg.setSize(560,420);
+    dlg.setLocationRelativeTo(this);
+
+    PlanningService svc = ServiceFactory.planning();
+
+    shift.addActionListener(e->{
+      Conflict c=list.getSelectedValue(); if(c==null) return;
+      svc.resolveShift(c.getB(),30); refreshPlanning(); conflictsBtn.setText("Conflits (?)");
+    });
+    reassign.addActionListener(e->{
+      Conflict c=list.getSelectedValue(); if(c==null) return;
+      var rs=ServiceFactory.planning().listResources();
+      String[] names=rs.stream().map(Resource::getName).toArray(String[]::new);
+      int idx=JOptionPane.showOptionDialog(dlg,"Choisir la ressource cible :","Reassigner",JOptionPane.OK_CANCEL_OPTION,
+          JOptionPane.QUESTION_MESSAGE,null,names,names[0]);
+      if(idx>=0){ svc.resolveReassign(c.getB(), rs.get(idx).getId()); refreshPlanning(); conflictsBtn.setText("Conflits (?)"); }
+    });
+    split.addActionListener(e->{
+      Conflict c=list.getSelectedValue(); if(c==null) return;
+      String at=JOptionPane.showInputDialog(dlg,"Heure de coupe (HH:mm) :","10:00");
+      try{
+        LocalTime t=LocalTime.parse(at);
+        LocalDateTime dt=from.atTime(t);
+        svc.resolveSplit(c.getB(), dt); refreshPlanning(); conflictsBtn.setText("Conflits (?)");
+      }catch(Exception ex){ JOptionPane.showMessageDialog(dlg,"Format invalide."); }
+    });
+
+    dlg.setVisible(true);
   }
+
+  private void refreshPlanning(){ board.reload(); agenda.reload(); }
 
   private void addInterventionDialog(){
     var rs = ServiceFactory.planning().listResources();

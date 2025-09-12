@@ -4,15 +4,11 @@ import com.materiel.suite.backend.model.Conflict;
 import com.materiel.suite.backend.model.Intervention;
 import com.materiel.suite.backend.store.InMemoryStore;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
+import java.time.LocalDateTime;
+import java.util.*;
 
 @RestController
 @RequestMapping("/api/planning")
@@ -38,5 +34,63 @@ public class PlanningController {
       }
     });
     return out;
+  }
+
+  public static record ResolveRequest(
+      String action,      // shift | reassign | split
+      UUID id,
+      Integer minutes,    // for shift
+      UUID resourceId,    // for reassign
+      LocalDateTime splitAt // for split
+  ){}
+
+  @PostMapping("/resolve")
+  public Intervention resolve(@RequestBody ResolveRequest req){
+    if (req==null || req.id()==null || req.action()==null) throw new IllegalArgumentException("action/id requis");
+    Optional<Intervention> opt = store.findIntervention(req.id());
+    if (opt.isEmpty()) throw new IllegalArgumentException("Intervention introuvable: "+req.id());
+    Intervention it = opt.get();
+    switch (req.action()){
+      case "shift" -> {
+        int m = Optional.ofNullable(req.minutes()).orElse(30);
+        it.setDateHeureDebut(it.getDateHeureDebut().plusMinutes(m));
+        it.setDateHeureFin(it.getDateHeureFin().plusMinutes(m));
+        return store.save(it);
+      }
+      case "reassign" -> {
+        if (req.resourceId()==null) throw new IllegalArgumentException("resourceId requis");
+        var dayFrom = it.getDateHeureDebut().toLocalDate();
+        var dayTo = it.getDateHeureFin().toLocalDate();
+        var existing = store.interventions(dayFrom, dayTo);
+        for (var other : existing){
+          if (!other.getResourceId().equals(req.resourceId())) continue;
+          boolean overlap = !it.getDateHeureFin().isBefore(other.getDateHeureDebut())
+              && !it.getDateHeureDebut().isAfter(other.getDateHeureFin());
+          if (overlap && !other.getId().equals(it.getId())){
+            throw new IllegalStateException("Conflit sur la ressource cible");
+          }
+        }
+        it.setResourceId(req.resourceId());
+        return store.save(it);
+      }
+      case "split" -> {
+        if (req.splitAt()==null) throw new IllegalArgumentException("splitAt requis");
+        LocalDateTime t = req.splitAt();
+        if (!t.isAfter(it.getDateHeureDebut()) || !it.getDateHeureFin().isAfter(t)){
+          throw new IllegalArgumentException("splitAt hors intervalle");
+        }
+        Intervention tail = new Intervention();
+        tail.setId(UUID.randomUUID());
+        tail.setResourceId(it.getResourceId());
+        tail.setLabel(it.getLabel()+" (suite)");
+        tail.setColor(it.getColor());
+        tail.setDateHeureDebut(t);
+        tail.setDateHeureFin(it.getDateHeureFin());
+        store.save(tail);
+        it.setDateHeureFin(t.minusMinutes(1));
+        return store.save(it);
+      }
+      default -> throw new IllegalArgumentException("action inconnue: "+req.action());
+    }
   }
 }

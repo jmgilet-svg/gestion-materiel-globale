@@ -6,6 +6,8 @@ import com.materiel.suite.client.model.Conflict;
 import com.materiel.suite.client.service.PlanningService;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+n
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -43,7 +45,6 @@ public class MockPlanningService implements PlanningService {
   }
   @Override public Intervention saveIntervention(Intervention i){ if(i.getId()==null) i.setId(UUID.randomUUID()); interventions.put(i.getId(), i); return i; }
   @Override public void deleteIntervention(UUID id){ interventions.remove(id); }
-  
   @Override public List<Conflict> listConflicts(LocalDate from, LocalDate to){
     List<Conflict> out = new ArrayList<>();
     for (Resource r : resources.values()){
@@ -61,5 +62,36 @@ public class MockPlanningService implements PlanningService {
       }
     }
     return out;
+  }
+  @Override public boolean resolveShift(UUID id, int minutes){
+    Intervention i = interventions.get(id);
+    if (i==null) return false;
+    i.setDateHeureDebut(i.getDateHeureDebut().plusMinutes(minutes));
+    i.setDateHeureFin(i.getDateHeureFin().plusMinutes(minutes));
+    return true;
+  }
+  @Override public boolean resolveReassign(UUID id, UUID resourceId){
+    Intervention i = interventions.get(id);
+    if (i==null) return false;
+    for (var it : interventions.values()){
+      if (!it.getResourceId().equals(resourceId) || it.getId().equals(id)) continue;
+      boolean overlap = !i.getDateHeureFin().isBefore(it.getDateHeureDebut())
+          && !i.getDateHeureDebut().isAfter(it.getDateHeureFin());
+      if (overlap) return false;
+    }
+    i.setResourceId(resourceId);
+    return true;
+  }
+  @Override public boolean resolveSplit(UUID id, LocalDateTime splitAt){
+    Intervention i = interventions.get(id);
+    if (i==null) return false;
+    if (!splitAt.isAfter(i.getDateHeureDebut()) || !i.getDateHeureFin().isAfter(splitAt)) return false;
+    Intervention tail = new Intervention(UUID.randomUUID(), i.getResourceId(), i.getLabel()+" (suite)",
+        splitAt.toLocalDate(), i.getDateHeureFin().toLocalDate(), i.getColor());
+    tail.setDateHeureDebut(splitAt);
+    tail.setDateHeureFin(i.getDateHeureFin());
+    interventions.put(tail.getId(), tail);
+    i.setDateHeureFin(splitAt.minusMinutes(1));
+    return true;
   }
 }

@@ -60,4 +60,25 @@ public class ApiPlanningService implements PlanningService {
       return list;
     } catch(Exception e){ return fb.listConflicts(from,to); }
   }
+  @Override public boolean resolveShift(UUID id, int minutes){
+    try {
+      String body = "{\"action\":\"shift\",\"id\":\""+id+"\",\"minutes\":"+minutes+"}";
+      rc.post("/api/planning/resolve", body);
+      return true;
+    } catch(Exception e){ return fb.resolveShift(id, minutes); }
+  }
+  @Override public boolean resolveReassign(UUID id, UUID resourceId){
+    try {
+      String body = "{\"action\":\"reassign\",\"id\":\""+id+"\",\"resourceId\":\""+resourceId+"\"}";
+      rc.post("/api/planning/resolve", body);
+      return true;
+    } catch(Exception e){ return fb.resolveReassign(id, resourceId); }
+  }
+  @Override public boolean resolveSplit(UUID id, LocalDateTime splitAt){
+    try {
+      String body = "{\"action\":\"split\",\"id\":\""+id+"\",\"splitAt\":\""+splitAt+"\"}";
+      rc.post("/api/planning/resolve", body);
+      return true;
+    } catch(Exception e){ return fb.resolveSplit(id, splitAt); }
+  }
 }
