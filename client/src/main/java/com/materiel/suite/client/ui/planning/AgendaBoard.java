@@ -3,8 +3,6 @@ package com.materiel.suite.client.ui.planning;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.net.ServiceFactory;
-import com.materiel.suite.client.ui.commands.CommandBus;
-import com.materiel.suite.client.ui.commands.MoveResizeInterventionCommand;
 
 import javax.swing.*;
 import java.awt.*;
@@ -26,6 +24,8 @@ public class AgendaBoard extends JComponent {
   private int dayWidth = 140;
   private int hourHeight = 40; // 40 px = 1h
   private int snapMinutes = 15;
+  private static final int DRAG_THRESHOLD = PlanningUx.DRAG_THRESHOLD; // FIX: shared drag threshold
+  private static final int CREATE_THRESHOLD = PlanningUx.CREATE_THRESHOLD; // FIX: shared create threshold
 
   private List<Resource> resources = List.of();
   private List<Intervention> interventions = List.of();
@@ -35,6 +35,7 @@ public class AgendaBoard extends JComponent {
   private Map<String, Integer> dayLaneMax = new HashMap<>();
   private Map<UUID, Integer> rowHeights = new HashMap<>();
   private int totalHeight = 0;
+  private Map<UUID, String> labelCache = new HashMap<>(); // FIX: cache labels
 
   private Intervention dragItem;
   private Rectangle dragRect;
@@ -42,6 +43,8 @@ public class AgendaBoard extends JComponent {
   private Point dragStart;
   private UUID dragOverResource;
   private LocalDateTime dragStartStart, dragStartEnd;
+  private boolean dragging; // FIX: threshold control
+  private boolean creating; // FIX: creation mode
 
   public AgendaBoard(){
     setOpaque(true);
@@ -65,6 +68,10 @@ public class AgendaBoard extends JComponent {
   public void reload(){
     resources = ServiceFactory.planning().listResources();
     interventions = ServiceFactory.planning().listInterventions(startDate, startDate.plusDays(days-1));
+    for (Intervention it : interventions){ // FIX: preserve labels
+      if (it.getLabel()!=null) labelCache.put(it.getId(), it.getLabel());
+      else if (labelCache.containsKey(it.getId())) it.setLabel(labelCache.get(it.getId()));
+    }
     byResource = interventions.stream().collect(Collectors.groupingBy(Intervention::getResourceId));
     computeDayLanes();
     computeHeights();
@@ -117,29 +124,29 @@ public class AgendaBoard extends JComponent {
   @Override protected void paintComponent(Graphics g){
     Graphics2D g2 = (Graphics2D) g.create();
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-    g2.setColor(Color.WHITE);
+    g2.setColor(PlanningUx.BG); // FIX: palette
     g2.fillRect(0,0,getWidth(),getHeight());
 
     // colonnes jours
     int x=0;
     for (int d=0; d<days; d++){
-      g2.setColor((d%2==0)? new Color(0xFBFBFB) : new Color(0xF4F4F4));
+      g2.setColor((d%2==0)? PlanningUx.BG_ALT1 : PlanningUx.BG_ALT2); // FIX: alternating bg
       g2.fillRect(x,0,dayWidth,getHeight());
-      g2.setColor(new Color(0xDDDDDD));
+      g2.setColor(PlanningUx.GRID); // FIX: grid color
       g2.drawLine(x,0,x,getHeight());
       x += dayWidth;
     }
     // lignes heures
     for (int h=0; h<=24; h++){
       int y = h*hourHeight;
-      g2.setColor(h%6==0? new Color(0xCCCCCC) : new Color(0xE8E8E8));
+      g2.setColor(h%6==0? new Color(0xCCCCCC) : new Color(0xE5E7EB));
       g2.drawLine(0,y,getWidth(),y);
     }
 
     int y=0;
     for (Resource r : resources){
       int rowH = rowHeights.get(r.getId());
-      g2.setColor(new Color(0xE0E0E0));
+      g2.setColor(PlanningUx.ROW_DIV); // FIX: row divider
       g2.drawLine(0,y+rowH-1,getWidth(),y+rowH-1);
 
       for (Intervention it : byResource.getOrDefault(r.getId(), List.of())){
@@ -150,7 +157,7 @@ public class AgendaBoard extends JComponent {
     }
 
     if (dragItem!=null && dragRect!=null){
-      g2.setColor(new Color(0,0,0,40));
+      g2.setColor(PlanningUx.TILE_SHADOW); // FIX: ghost tile shadow
       g2.fill(dragRect);
       g2.setColor(new Color(0,0,0,120));
       g2.draw(dragRect);
@@ -159,19 +166,19 @@ public class AgendaBoard extends JComponent {
   }
 
   private void paintTile(Graphics2D g2, Intervention it, Rectangle r){
-    Color base = parseColor(it.getColor(), new Color(0x8FBCBB));
+    Color base = PlanningUx.colorOr(it.getColor(), new Color(0x8FBCBB)); // FIX: parse color
     g2.setColor(base);
     g2.fillRoundRect(r.x+2,r.y+2,r.width-4,r.height-4,10,10);
     g2.setColor(base.darker());
     g2.drawRoundRect(r.x+2,r.y+2,r.width-4,r.height-4,10,10);
     // Texte safe + ellipsize
     String label = it.getLabel();
-    if (label == null || label.isBlank()) label = "(sans titre)";
+    if (label == null || label.isBlank()) label = labelCache.getOrDefault(it.getId(), "(sans titre)"); // FIX: cache fallback
     int maxTextW = Math.max(0, r.width - 20);
     if (maxTextW > 0){
-      g2.setColor(new Color(20,20,20));
+      g2.setColor(PlanningUx.TILE_TX); // FIX: text color
       g2.setClip(r.x+8, r.y+4, r.width-16, r.height-8);
-      label = ellipsize(label, g2.getFontMetrics(), maxTextW);
+      label = PlanningUx.ellipsize(label, g2.getFontMetrics(), maxTextW); // FIX: shared ellipsize
       int baseline = r.y + Math.min(r.height-6, Math.max(14, g2.getFontMetrics().getAscent()+2));
       g2.drawString(label, r.x+10, baseline);
       g2.setClip(null);
@@ -196,18 +203,6 @@ public class AgendaBoard extends JComponent {
     return new Rectangle(x, y, w, h);
   }
 
-  private static String ellipsize(String s, FontMetrics fm, int maxW){
-    if (fm.stringWidth(s) <= maxW) return s;
-    String ell = "…";
-    int ellW = fm.stringWidth(ell);
-    if (ellW >= maxW) return "";
-    StringBuilder b = new StringBuilder();
-    for (int i=0;i<s.length();i++){
-      if (fm.stringWidth(b.toString() + s.charAt(i)) + ellW > maxW) break;
-      b.append(s.charAt(i));
-    }
-    return b.toString() + ell;
-  }
 
   private void onPress(MouseEvent e){
     Point p = e.getPoint();
@@ -224,64 +219,123 @@ public class AgendaBoard extends JComponent {
             dragOverResource = r.getId();
             dragStartStart = it.getDateHeureDebut();
             dragStartEnd = it.getDateHeureFin();
-            resizingTop = Math.abs(p.y - rect.y) < 8;
-            resizingBottom = Math.abs(p.y - (rect.y+rect.height)) < 8;
+            resizingTop = Math.abs(p.y - rect.y) < PlanningUx.HANDLE; // FIX: handle zone
+            resizingBottom = Math.abs(p.y - (rect.y+rect.height)) < PlanningUx.HANDLE; // FIX: handle zone
+            dragging = false; // FIX: wait for threshold
+            creating = false; // FIX: existing item
             return;
           }
         }
+        dragItem = null; dragRect = new Rectangle(p.x, p.y, 0, 0); // FIX: prepare creation
+        dragStart = p; dragOverResource = r.getId();
+        dragging = false; creating = true; // FIX:
+        return;
       }
       y += rowH;
     }
   }
 
   private void onDrag(MouseEvent e){
-    if (dragItem==null) return;
+    if (dragItem!=null){
+      int dx = e.getX() - dragStart.x;
+      int dy = e.getY() - dragStart.y;
+      if (!dragging && Math.hypot(dx, dy) < DRAG_THRESHOLD) return; // FIX: start threshold
+      dragging = true; // FIX:
+      Rectangle r = new Rectangle(dragRect);
+      if (resizingTop){
+        r.y += dy; r.height -= dy;
+        if (r.height<12){ r.height=12; r.y = dragRect.y + (dragRect.height - 12); }
+      } else if (resizingBottom){
+        r.height += dy; if (r.height<12) r.height = 12;
+      } else {
+        r.x += dx; r.y += dy;
+      }
+      int pointerY = e.getY(); int rowTop = 0; UUID over = dragOverResource; // FIX: use pointer
+      for (Resource res : resources){
+        int rh = rowHeights.get(res.getId());
+        if (pointerY>=rowTop && pointerY<rowTop+rh){ over = res.getId(); break; }
+        rowTop += rh;
+      }
+      dragOverResource = over;
+      int minutePx = (int)Math.round(hourHeight/60.0); int snap = snapMinutes*minutePx; // FIX: stable snap
+      r.y = rowTop + ((r.y - rowTop)/snap)*snap;
+      dragRect = r;
+      repaint();
+      return;
+    }
+    if (!creating) return;
     int dx = e.getX() - dragStart.x;
     int dy = e.getY() - dragStart.y;
-    Rectangle r = new Rectangle(dragRect);
-    if (resizingTop){
-      r.y += dy; r.height -= dy;
-      if (r.height<12){ r.height=12; r.y = dragRect.y + (dragRect.height - 12); }
-    } else if (resizingBottom){
-      r.height += dy; if (r.height<12) r.height = 12;
-    } else {
-      r.x += dx; r.y += dy;
-    }
-    // snap ressource (vertical segment)
-    int rowTop = 0; UUID over = dragOverResource;
+    if (!dragging && Math.hypot(dx, dy) < CREATE_THRESHOLD) return; // FIX: creation threshold
+    dragging = true; // FIX:
+    int pointerY = e.getY(); int rowTop = 0;
     for (Resource res : resources){
       int rh = rowHeights.get(res.getId());
-      if (r.y>=rowTop && r.y<rowTop+rh){ over = res.getId(); break; }
+      if (pointerY>=rowTop && pointerY<rowTop+rh){ dragOverResource = res.getId(); break; }
       rowTop += rh;
     }
-    dragOverResource = over;
-
-    // snap minutes
-    int minutePx = (int)Math.round(hourHeight/60.0);
-    int mod = r.y % (snapMinutes*minutePx);
-    r.y -= mod;
-    dragRect = r;
+    int dayIdx = Math.max(0, Math.min(days-1, dragStart.x / dayWidth));
+    int x = dayIdx * dayWidth + 6;
+    int w = dayWidth - 12;
+    int minutePx = (int)Math.round(hourHeight/60.0); int snap = snapMinutes*minutePx;
+    int y1 = Math.min(dragStart.y, pointerY);
+    int y2 = Math.max(dragStart.y, pointerY);
+    y1 = rowTop + ((y1 - rowTop)/snap)*snap;
+    y2 = rowTop + ((y2 - rowTop + snap -1)/snap)*snap;
+    dragRect = new Rectangle(x, y1, w, Math.max(12, y2 - y1));
     repaint();
   }
 
   private void onRelease(MouseEvent e){
-    if (dragItem==null) return;
-    // delta jours
-    int startDay = Math.max(0, Math.min(days-1, dragRect.x / dayWidth));
-    int deltaDay = startDay - (int) java.time.temporal.ChronoUnit.DAYS.between(startDate, dragStartStart.toLocalDate());
-    // delta minutes
-    int dy = dragRect.y - rectOf(dragItem, rowTopOf(dragOverResource)).y;
-    int minutesDelta = (int) Math.round(dy * (60.0/hourHeight));
+    if (dragItem!=null){
+      if (!dragging){ dragItem=null; dragRect=null; resizingTop=resizingBottom=false; dragging=false; creating=false; repaint(); return; } // FIX: ignore click
+      int startDay = Math.max(0, Math.min(days-1, dragRect.x / dayWidth));
+      int deltaDay = startDay - (int) java.time.temporal.ChronoUnit.DAYS.between(startDate, dragStartStart.toLocalDate());
+      int dy = dragRect.y - rectOf(dragItem, rowTopOf(dragOverResource)).y;
+      int minutesDelta = (int) Math.round(dy * (60.0/hourHeight));
 
-    var newStart = dragStartStart.plusDays(deltaDay).plusMinutes(minutesDelta);
-    var newEnd = dragStartEnd.plusDays(deltaDay);
-    if (resizingTop){ newEnd = dragStartEnd; }
-    if (resizingBottom){ newStart = dragStartStart; newEnd = newStart.plusMinutes(Math.max(30, (int)Math.round(dragRect.height * (60.0/hourHeight)))); }
-    if (!newEnd.isAfter(newStart)) newEnd = newStart.plusMinutes(30);
+      var newStart = dragStartStart.plusDays(deltaDay).plusMinutes(minutesDelta);
+      var newEnd = dragStartEnd.plusDays(deltaDay);
+      if (resizingTop){ newEnd = dragStartEnd; }
+      if (resizingBottom){ newStart = dragStartStart; newEnd = newStart.plusMinutes(Math.max(30, (int)Math.round(dragRect.height * (60.0/hourHeight)))); }
+      if (!newEnd.isAfter(newStart)) newEnd = newStart.plusMinutes(30);
 
-    CommandBus.get().submit(new MoveResizeInterventionCommand(dragItem, dragOverResource, newStart, newEnd));
-    dragItem=null; dragRect=null; resizingTop=resizingBottom=false;
-    reload();
+      if (dragOverResource!=null) dragItem.setResourceId(dragOverResource); // FIX: apply resource
+      dragItem.setDateHeureDebut(newStart); // FIX: persist new start
+      dragItem.setDateHeureFin(newEnd); // FIX: persist new end
+      dragItem.setDateDebut(newStart.toLocalDate());
+      dragItem.setDateFin(newEnd.toLocalDate());
+      if (dragItem.getId()!=null && dragItem.getLabel()!=null) labelCache.put(dragItem.getId(), dragItem.getLabel()); // FIX: refresh cache
+      ServiceFactory.planning().saveIntervention(dragItem); // FIX: save directly
+      dragItem=null; dragRect=null; resizingTop=resizingBottom=false; dragging=false; creating=false; // FIX: reset
+      reload();
+      return;
+    }
+    if (creating && dragging){ // FIX: create by drag
+      int dayIdx = Math.max(0, Math.min(days-1, dragStart.x / dayWidth));
+      LocalDate day = startDate.plusDays(dayIdx);
+      int rowTop = rowTopOf(dragOverResource);
+      int startMin = (dragRect.y - rowTop) * 60 / hourHeight;
+      int durMin = Math.max(30, (int)Math.round(dragRect.height * (60.0/hourHeight)));
+      LocalDateTime newStart = day.atStartOfDay().plusMinutes(startMin);
+      LocalDateTime newEnd = newStart.plusMinutes(durMin);
+      String label = JOptionPane.showInputDialog(this, "Libellé"); // FIX: prompt label
+      if (label != null){
+        label = label.strip();
+        if (!label.isEmpty()){
+          var it = new Intervention();
+          it.setResourceId(dragOverResource);
+          it.setDateHeureDebut(newStart);
+          it.setDateHeureFin(newEnd);
+          it.setLabel(label);
+          ServiceFactory.planning().saveIntervention(it);
+          labelCache.put(it.getId(), label); // FIX: cache new label
+          reload();
+        }
+      }
+    }
+    dragItem=null; dragRect=null; resizingTop=resizingBottom=false; dragging=false; creating=false; // FIX: reset state
+    repaint(); // FIX: clear ghost
   }
 
   private int rowTopOf(UUID resourceId){
@@ -293,10 +347,4 @@ public class AgendaBoard extends JComponent {
     return 0;
   }
 
-  private Color parseColor(String hex, Color def){
-    try {
-      if (hex==null || hex.isBlank()) return def;
-      return new Color(Integer.parseInt(hex.replace("#",""), 16));
-    } catch(Exception e){ return def; }
-  }
 }

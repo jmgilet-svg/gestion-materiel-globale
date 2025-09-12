@@ -67,19 +67,19 @@ public class PlanningPanel extends JPanel {
       @Override public Dimension getPreferredSize(){ return new Dimension(220, board.getPreferredSize().height); }
       @Override protected void paintComponent(Graphics g){
         Graphics2D g2 = (Graphics2D) g;
-        g2.setColor(new Color(0xF7F7F7));
+        g2.setColor(PlanningUx.HEADER_BG);
         g2.fillRect(0,0,getWidth(),getHeight());
-        g2.setColor(new Color(0xDDDDDD));
+        g2.setColor(PlanningUx.GRID);
         g2.drawLine(getWidth()-1,0,getWidth()-1,getHeight());
         int y=0;
         List<Resource> rs = ServiceFactory.planning().listResources();
         for (Resource r : rs){
           int rowH = boardRowHeight(r);
-          g2.setColor(new Color(0xF7F7F7));
+          g2.setColor(PlanningUx.HEADER_BG);
           g2.fillRect(0,y,getWidth(),rowH);
-          g2.setColor(Color.DARK_GRAY);
-          g2.drawString(r.getName(), 12, y + rowH/2 + 4);
-          g2.setColor(new Color(0xE0E0E0));
+          g2.setColor(new Color(0x0F172A));
+          g2.drawString(r.getName(), 12, y + rowH/2 + 5);
+          g2.setColor(PlanningUx.ROW_DIV);
           g2.drawLine(0, y+rowH-1, getWidth(), y+rowH-1);
           y+=rowH;
         }
@@ -87,9 +87,9 @@ public class PlanningPanel extends JPanel {
       private int boardRowHeight(Resource r){
         var list = ServiceFactory.planning().listInterventions(board.getStartDate(), board.getStartDate().plusDays(6));
         list.removeIf(it -> !it.getResourceId().equals(r.getId()));
-        var lanes = LaneLayout.computeLanes(list, Intervention::getDateHeureDebut, Intervention::getDateHeureFin);
+        var lanes = LaneLayout.computeLanes(list, Intervention::getDateDebut, Intervention::getDateFin);
         int lanesCount = lanes.values().stream().mapToInt(l -> l.index).max().orElse(-1) + 1;
-        return Math.max(22, lanesCount * (22 + 4)) + 6;
+        return Math.max(PlanningUx.TILE_H, lanesCount * (PlanningUx.TILE_H + PlanningUx.LANE_GAP)) + PlanningUx.ROW_GAP;
       }
     };
     scroll.setRowHeaderView(rowHeader);
@@ -108,7 +108,7 @@ public class PlanningPanel extends JPanel {
     JButton next = new JButton("Semaine ▶");
     JButton today = new JButton("Aujourd'hui");
     JLabel zoomL = new JLabel("Zoom:");
-    JSlider zoom = new JSlider(60,200,100);
+    JSlider zoom = new JSlider(PlanningUx.COL_MIN, PlanningUx.COL_MAX, 120);
     JSpinner snap = new JSpinner(new SpinnerNumberModel(15,5,60,5));
     JToggleButton mode = new JToggleButton("Agenda");
     conflictsBtn = new JButton("Conflits (0)");

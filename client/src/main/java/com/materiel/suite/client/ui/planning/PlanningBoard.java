@@ -1,83 +1,119 @@
 package com.materiel.suite.client.ui.planning;
 
-import java.awt.Color;
-import java.awt.Cursor;
-import java.awt.Dimension;
-import java.awt.Font;
-import java.awt.FontMetrics;
-import java.awt.GradientPaint;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.Point;
-import java.awt.Rectangle;
-import java.awt.RenderingHints;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.stream.Collectors;
-
-import javax.swing.JComponent;
-
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.net.ServiceFactory;
-import com.materiel.suite.client.ui.commands.CommandBus;
-import com.materiel.suite.client.ui.commands.MoveResizeInterventionCommand;
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class PlanningBoard extends JComponent {
+  // Modèle de données & état
   private LocalDate startDate = LocalDate.now().with(java.time.DayOfWeek.MONDAY);
   private int days = 7;
-  private int colWidth = 100; // zoomable 60–200
-  private int tileHeight = 24;
-  private int rowGap = 6;
-  private int snapMinutes = 15;
+  private int colWidth = 120; // zoomable
 
-  private List<Resource> resources = List.of();
-  private List<Intervention> interventions = List.of();
-  private Map<UUID, List<Intervention>> byResource = new HashMap<>();
+  private java.util.List<Resource> resources = java.util.List.of();
+  private java.util.List<Intervention> interventions = java.util.List.of();
+  private Map<UUID, java.util.List<Intervention>> byResource = new HashMap<>();
   private Map<Intervention, LaneLayout.Lane> lanes = new HashMap<>();
   private Map<UUID, Integer> rowHeights = new HashMap<>();
   private int totalHeight = 0;
 
-  // DnD state
+  // UX
+  private boolean showIndispo = true;
+  private String resourceFilter = "";
+  private final Map<UUID,String> labelCache = new HashMap<>();
+  private Intervention hovered;
+  private Intervention selected;
+
+  // DnD
   private Intervention dragItem;
   private Rectangle dragRect;
   private boolean resizingLeft, resizingRight;
   private Point dragStart;
+  private boolean dragArmed;
   private UUID dragOverResource;
-  private LocalDateTime dragStartStart, dragStartEnd;
 
   public PlanningBoard(){
     setOpaque(true);
-    setFont(new Font("Inter", Font.PLAIN, 12));
+    setFont(PlanningUx.uiFont(this));
+
     MouseAdapter ma = new MouseAdapter() {
       @Override public void mousePressed(MouseEvent e){ onPress(e); }
       @Override public void mouseDragged(MouseEvent e){ onDrag(e); }
       @Override public void mouseReleased(MouseEvent e){ onRelease(e); }
       @Override public void mouseMoved(MouseEvent e){ onMove(e); }
+      @Override public void mouseClicked(MouseEvent e){ onClick(e); }
     };
     addMouseListener(ma);
     addMouseMotionListener(ma);
+
+    setComponentPopupMenu(buildContextMenu());
+    setToolTipText(""); // active les tooltips
   }
 
-  public void setZoom(int w){ colWidth = Math.max(60, Math.min(200, w)); revalidate(); repaint(); }
+  private JPopupMenu buildContextMenu(){
+    JPopupMenu menu = new JPopupMenu();
+    JMenuItem miEdit = new JMenuItem("Renommer…");
+    miEdit.addActionListener(e -> {
+      if (selected==null) return;
+      String current = selected.getLabel()==null? "" : selected.getLabel();
+      String s = JOptionPane.showInputDialog(this, "Libellé :", current);
+      if (s!=null){
+        selected.setLabel(s.trim());
+        if (selected.getId()!=null) labelCache.put(selected.getId(), selected.getLabel());
+        ServiceFactory.planning().saveIntervention(selected);
+        repaint();
+      }
+    });
+    JMenuItem miDelete = new JMenuItem("Supprimer");
+    miDelete.addActionListener(e -> {
+      if (selected==null) return;
+      int ok = JOptionPane.showConfirmDialog(this, "Supprimer l'intervention « "+safeLabel(selected)+" » ?", "Confirmation", JOptionPane.OK_CANCEL_OPTION);
+      if (ok==JOptionPane.OK_OPTION){
+        ServiceFactory.planning().deleteIntervention(selected.getId());
+        reload();
+      }
+    });
+    menu.add(miEdit);
+    menu.add(miDelete);
+    return menu;
+  }
+
+  @Override public String getToolTipText(MouseEvent e){
+    Intervention hit = hitTile(e.getPoint());
+    if (hit==null) return null;
+    return String.format("<html><b>%s</b><br>%s → %s</html>",
+        safeLabel(hit),
+        hit.getDateDebut(), hit.getDateFin());
+  }
+
+  // API publique
+  public void setZoom(int w){ colWidth = Math.max(PlanningUx.COL_MIN, Math.min(PlanningUx.COL_MAX, w)); revalidate(); repaint(); }
   public int getColWidth(){ return colWidth; }
   public LocalDate getStartDate(){ return startDate; }
   public void setStartDate(LocalDate d){ startDate = d; reload(); }
   public void setDays(int d){ days = d; reload(); }
-  public void setSnapMinutes(int m){ snapMinutes = Math.max(5, Math.min(60, m)); }
-  private int pxPerHour(){ return Math.max(1, colWidth / 24); }
+  public void setShowIndispo(boolean b){ showIndispo = b; repaint(); }
+  public void setResourceNameFilter(String f){ resourceFilter = f==null? "" : f.toLowerCase(); reload(); }
 
   public void reload(){
-    resources = ServiceFactory.planning().listResources();
+    resources = ServiceFactory.planning().listResources().stream()
+        .filter(r -> resourceFilter.isBlank() || r.getName().toLowerCase().contains(resourceFilter))
+        .collect(Collectors.toList());
     interventions = ServiceFactory.planning().listInterventions(startDate, startDate.plusDays(days-1));
     byResource = interventions.stream().collect(Collectors.groupingBy(Intervention::getResourceId));
+    for (Intervention it : interventions){
+      if (it.getLabel()!=null) labelCache.put(it.getId(), it.getLabel()); // FIX: cache label
+      else if (labelCache.containsKey(it.getId())) it.setLabel(labelCache.get(it.getId())); // FIX: restore label
+    }
     computeLanesAndHeights();
     revalidate(); repaint();
   }
@@ -86,10 +122,10 @@ public class PlanningBoard extends JComponent {
     lanes.clear(); rowHeights.clear(); totalHeight = 0;
     for (Resource r : resources){
       List<Intervention> list = byResource.getOrDefault(r.getId(), List.of());
-      Map<Intervention, LaneLayout.Lane> m = LaneLayout.computeLanes(list, Intervention::getDateHeureDebut, Intervention::getDateHeureFin);
+      Map<Intervention, LaneLayout.Lane> m = LaneLayout.computeLanes(list, Intervention::getDateDebut, Intervention::getDateFin);
       lanes.putAll(m);
       int lanesCount = m.values().stream().mapToInt(l -> l.index).max().orElse(-1) + 1;
-      int rowH = Math.max(tileHeight, lanesCount * (tileHeight + 4)) + rowGap;
+      int rowH = Math.max(PlanningUx.TILE_H, lanesCount * (PlanningUx.TILE_H + PlanningUx.LANE_GAP)) + PlanningUx.ROW_GAP;
       rowHeights.put(r.getId(), rowH);
       totalHeight += rowH;
     }
@@ -102,15 +138,15 @@ public class PlanningBoard extends JComponent {
   @Override protected void paintComponent(Graphics g){
     Graphics2D g2 = (Graphics2D) g.create();
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-    g2.setColor(Color.WHITE);
+    g2.setColor(PlanningUx.BG);
     g2.fillRect(0,0,getWidth(),getHeight());
 
     // Background grid
     int x=0;
     for (int d=0; d<days; d++){
-      g2.setColor((d%2==0)? new Color(0xFAFAFA) : new Color(0xF2F2F2));
+      g2.setColor((d%2==0)? PlanningUx.BG_ALT1 : PlanningUx.BG_ALT2);
       g2.fillRect(x,0,colWidth,getHeight());
-      g2.setColor(new Color(0xDDDDDD));
+      g2.setColor(PlanningUx.GRID);
       g2.drawLine(x,0,x,getHeight());
       x += colWidth;
     }
@@ -118,19 +154,26 @@ public class PlanningBoard extends JComponent {
     // Rows + tiles
     int y=0;
     for (Resource r : resources){
-      int rowH = rowHeights.getOrDefault(r.getId(), tileHeight+rowGap);
-      g2.setColor(new Color(0xE0E0E0));
+      int rowH = rowHeights.getOrDefault(r.getId(), PlanningUx.TILE_H+PlanningUx.ROW_GAP);
+      // Indispos (hachures)
+      if (showIndispo){
+        Rectangle hatch = new Rectangle(2*colWidth, y, colWidth*2, rowH-1);
+        PlanningUx.paintHatch(g2, hatch);
+      }
+      // baseline
+      g2.setColor(PlanningUx.ROW_DIV);
       g2.drawLine(0,y+rowH-1, getWidth(), y+rowH-1);
+      // tiles for resource
       for (Intervention it : byResource.getOrDefault(r.getId(), List.of())){
         Rectangle rect = rectOf(it, y);
-        paintTile(g2, it, rect);
+        paintTile(g2, it, rect, it==hovered, it==selected);
       }
       y += rowH;
     }
 
     // Drag ghost
     if (dragItem!=null && dragRect!=null){
-      g2.setColor(new Color(0,0,0,40));
+      g2.setColor(PlanningUx.TILE_SHADOW);
       g2.fill(dragRect);
       g2.setColor(new Color(0,0,0,120));
       g2.draw(dragRect);
@@ -138,79 +181,76 @@ public class PlanningBoard extends JComponent {
     g2.dispose();
   }
 
-  private void paintTile(Graphics2D g2, Intervention it, Rectangle r){
-    Color base = parseColor(it.getColor(), new Color(0x88C0D0));
-    Color dark = base.darker();
-    Color light = new Color(
-        Math.min(255, (int)(base.getRed()*1.08)),
-        Math.min(255, (int)(base.getGreen()*1.08)),
-        Math.min(255, (int)(base.getBlue()*1.08)));
-    g2.setPaint(new GradientPaint(r.x, r.y, light, r.x, r.y+r.height, base));
-    g2.fillRoundRect(r.x+1,r.y+1,r.width-2,r.height-2,10,10);
-    g2.setColor(dark);
-    g2.drawRoundRect(r.x+1,r.y+1,r.width-2,r.height-2,10,10);
-    g2.setColor(new Color(0,0,0,30));
-    g2.fillRoundRect(r.x+3, r.y+r.height-3, r.width-6, 3, 6,6);
-    // Texte sûr et élidé si nécessaire
-    String label = it.getLabel();
-    if (label == null || label.isBlank()) label = "(sans titre)";
-    int maxTextW = Math.max(0, r.width - 16);
+  private void paintTile(Graphics2D g2, Intervention it, Rectangle r, boolean hover, boolean sel){
+    Color fill = PlanningUx.colorOr(it.getColor(), new Color(0xA3BE8C));
+    Color stroke = fill.darker();
+    g2.setColor(PlanningUx.TILE_SHADOW);
+    g2.fillRoundRect(r.x+3,r.y+3,r.width-6,r.height-6, PlanningUx.RADIUS, PlanningUx.RADIUS);
+    g2.setColor(fill);
+    g2.fillRoundRect(r.x+2,r.y+2,r.width-4,r.height-4, PlanningUx.RADIUS, PlanningUx.RADIUS);
+    g2.setColor(stroke);
+    g2.drawRoundRect(r.x+2,r.y+2,r.width-4,r.height-4, PlanningUx.RADIUS, PlanningUx.RADIUS);
+    if (hover || sel){
+      g2.setColor(hover? PlanningUx.TILE_HOVER : PlanningUx.TILE_SELECT);
+      g2.fillRoundRect(r.x+2,r.y+2,r.width-4,r.height-4, PlanningUx.RADIUS, PlanningUx.RADIUS);
+    }
+    // Texte sûr + élision
+    String label = safeLabel(it);
+    int maxTextW = Math.max(0, r.width - 2*PlanningUx.PAD);
     if (maxTextW > 0){
-      g2.setColor(new Color(20,20,20));
-      g2.setClip(r.x+8, r.y+4, r.width-16, r.height-8);
-      label = ellipsize(label, g2.getFontMetrics(), maxTextW);
-      int baseline = r.y + Math.max(14, Math.min(r.height-6, (r.height + g2.getFontMetrics().getAscent())/2));
-      g2.drawString(label, r.x+10, baseline);
+      g2.setColor(PlanningUx.TILE_TX);
+      g2.setClip(r.x+PlanningUx.PAD, r.y+4, r.width-2*PlanningUx.PAD, r.height-8);
+      label = PlanningUx.ellipsize(label, g2.getFontMetrics(), maxTextW);
+      int baseline = r.y + (r.height + g2.getFontMetrics().getAscent())/2 - 2;
+      g2.drawString(label, r.x+PlanningUx.PAD, baseline);
       g2.setClip(null);
     }
+    g2.setColor(stroke);
+    g2.fillRect(r.x+1, r.y+4, 2, r.height-8);
+    g2.fillRect(r.x+r.width-3, r.y+4, 2, r.height-8);
   }
 
   private Rectangle rectOf(Intervention it, int baseY){
-    LocalDateTime sdt = it.getDateHeureDebut();
-    LocalDateTime edt = it.getDateHeureFin();
-    int startIdx = (int) java.time.temporal.ChronoUnit.DAYS.between(startDate.atStartOfDay(), sdt.toLocalDate().atStartOfDay());
-    int endIdx = (int) java.time.temporal.ChronoUnit.DAYS.between(startDate.atStartOfDay(), edt.toLocalDate().atStartOfDay());
-    startIdx = Math.max(0, Math.min(days-1, startIdx));
-    endIdx = Math.max(startIdx, Math.min(days-1, endIdx));
-    int x = startIdx * colWidth + (int) Math.round((sdt.getHour() + sdt.getMinute()/60.0) * (colWidth/24.0));
-    int endX = endIdx * colWidth + (int) Math.round((edt.getHour() + edt.getMinute()/60.0) * (colWidth/24.0));
-    int w = Math.max(pxPerHour(), endX - x);
+    int startIdx = (int) java.time.temporal.ChronoUnit.DAYS.between(startDate, it.getDateDebut());
+    int endIdx = (int) java.time.temporal.ChronoUnit.DAYS.between(startDate, it.getDateFin());
+    startIdx = Math.max(0, startIdx); endIdx = Math.min(days-1, endIdx);
+    int x = startIdx * colWidth;
+    int w = ((endIdx - startIdx) + 1) * colWidth;
     int lane = Optional.ofNullable(lanes.get(it)).map(l -> l.index).orElse(0);
-    int y = baseY + lane * (tileHeight + 4);
-    return new Rectangle(x, y, w, tileHeight);
+    int y = baseY + lane * (PlanningUx.TILE_H + PlanningUx.LANE_GAP);
+    return new Rectangle(x, y, w, PlanningUx.TILE_H);
   }
 
-  private LocalDateTime snap(LocalDateTime dt){
-    int m = dt.getMinute();
-    int q = (m + snapMinutes/2) / snapMinutes;
-    return dt.withMinute(0).withSecond(0).withNano(0).plusMinutes((long) q * snapMinutes);
-  }
-
-  private Color parseColor(String hex, Color def){
-    try {
-      if (hex==null || hex.isBlank()) return def;
-      return new Color(Integer.parseInt(hex.replace("#",""), 16));
-    } catch(Exception e){ return def; }
-  }
-
-  private static String ellipsize(String s, FontMetrics fm, int maxW){
-    if (fm.stringWidth(s) <= maxW) return s;
-    String ell = "…";
-    int ellW = fm.stringWidth(ell);
-    if (ellW >= maxW) return "";
-    StringBuilder b = new StringBuilder();
-    for (int i=0;i<s.length();i++){
-      if (fm.stringWidth(b.toString() + s.charAt(i)) + ellW > maxW) break;
-      b.append(s.charAt(i));
+  private String safeLabel(Intervention it){
+    String label = it.getLabel();
+    if (label == null || label.isBlank()) {
+      if (it.getId()!=null) return labelCache.getOrDefault(it.getId(), "(sans titre)");
+      return "(sans titre)";
     }
-    return b.toString() + ell;
+    return label;
   }
 
+  private Intervention hitTile(Point p){
+    int y=0;
+    for (Resource r : resources){
+      int rowH = rowHeights.getOrDefault(r.getId(), PlanningUx.TILE_H+PlanningUx.ROW_GAP);
+      for (Intervention it : byResource.getOrDefault(r.getId(), List.of())){
+        Rectangle rect = rectOf(it, y);
+        if (rect.contains(p)) return it;
+      }
+      y+=rowH;
+    }
+    return null;
+  }
+
+  // DnD handlers
   private void onPress(MouseEvent e){
+    dragItem=null; dragRect=null; resizingLeft=false; resizingRight=false; dragArmed=false; dragOverResource=null;
+
     Point p = e.getPoint();
     int y=0;
     for (Resource r : resources){
-      int rowH = rowHeights.get(r.getId());
+      int rowH = rowHeights.getOrDefault(r.getId(), PlanningUx.TILE_H+PlanningUx.ROW_GAP);
       if (p.y>=y && p.y<y+rowH){
         for (Intervention it : byResource.getOrDefault(r.getId(), List.of())){
           Rectangle rect = rectOf(it, y);
@@ -218,11 +258,11 @@ public class PlanningBoard extends JComponent {
             dragItem = it;
             dragRect = new Rectangle(rect);
             dragStart = p;
-            dragStartStart = it.getDateHeureDebut();
-            dragStartEnd = it.getDateHeureFin();
-            resizingLeft = Math.abs(p.x - rect.x) < 8;
-            resizingRight = Math.abs(p.x - (rect.x+rect.width)) < 8;
+            dragArmed = true;
+            resizingLeft = Math.abs(p.x - rect.x) < PlanningUx.HANDLE;
+            resizingRight = Math.abs(p.x - (rect.x+rect.width)) < PlanningUx.HANDLE;
             dragOverResource = r.getId();
+            selected = it; // FIX: select tile on press
             return;
           }
         }
@@ -233,6 +273,11 @@ public class PlanningBoard extends JComponent {
 
   private void onDrag(MouseEvent e){
     if (dragItem==null) return;
+    if (dragArmed && e.getPoint().distance(dragStart) < PlanningUx.DRAG_THRESHOLD){
+      return; // FIX: ignore micro-mouvements
+    } else {
+      dragArmed = false;
+    }
     int dx = e.getX() - dragStart.x;
     int dy = e.getY() - dragStart.y;
     Rectangle r = new Rectangle(dragRect);
@@ -245,55 +290,73 @@ public class PlanningBoard extends JComponent {
     } else {
       r.x += dx; r.y += dy;
     }
+    // snap vertical to resource row
     int y=0; UUID overRes = dragOverResource;
     for (Resource res : resources){
-      int rowH = rowHeights.get(res.getId());
-      if (r.y>=y && r.y<y+rowH){ overRes = res.getId(); r.y = y + (lanes.getOrDefault(dragItem, new LaneLayout.Lane(0)).index)*(tileHeight+4); break; }
+      int rowH = rowHeights.getOrDefault(res.getId(), PlanningUx.TILE_H+PlanningUx.ROW_GAP);
+      if (r.y>=y && r.y<y+rowH){
+        overRes = res.getId();
+        int lane = Optional.ofNullable(lanes.get(dragItem)).map(l -> l.index).orElse(0);
+        r.y = y + lane*(PlanningUx.TILE_H + PlanningUx.LANE_GAP);
+        break;
+      }
       y+=rowH;
     }
     dragOverResource = overRes;
+    // snap horizontal to day grid
+    int startCol = Math.max(0, Math.min(days-1, Math.round(r.x/(float)colWidth)));
+    int endCol = Math.max(startCol, Math.min(days-1, Math.round((r.x+r.width)/(float)colWidth)-1));
+    r.x = startCol * colWidth; r.width = (endCol-startCol+1) * colWidth;
     dragRect = r;
     repaint();
   }
 
   private void onRelease(MouseEvent e){
     if (dragItem==null){ return; }
-    int startCol = Math.max(0, Math.min(days-1, (int)Math.floor(dragRect.x / (double)colWidth)));
-    int startOffsetPx = dragRect.x - startCol * colWidth;
-    double startHours = startOffsetPx / (colWidth/24.0);
-    int endCol = Math.max(startCol, Math.min(days-1, (int)Math.floor((dragRect.x + dragRect.width) / (double)colWidth)));
-    int endOffsetPx = (dragRect.x + dragRect.width) - endCol * colWidth;
-    double endHours = endOffsetPx / (colWidth/24.0);
-    LocalDateTime newStart = startDate.atStartOfDay().plusDays(startCol).plusMinutes((long)Math.round(startHours*60));
-    LocalDateTime newEnd = startDate.atStartOfDay().plusDays(endCol).plusMinutes((long)Math.round(endHours*60));
-    if (resizingLeft) {
-      newEnd = dragStartEnd;
-    } else if (resizingRight) {
-      newStart = dragStartStart;
+    if (dragRect==null){ dragItem=null; return; }
+    int startCol = dragRect.x / colWidth;
+    int endCol = (dragRect.x + dragRect.width) / colWidth - 1;
+    LocalDate newStart = startDate.plusDays(startCol);
+    LocalDate newEnd = startDate.plusDays(Math.max(startCol, endCol));
+    if (dragItem.getId()!=null && dragItem.getLabel()!=null && !dragItem.getLabel().isBlank()){
+      labelCache.put(dragItem.getId(), dragItem.getLabel()); // FIX: refresh cache
     }
-    if (!newEnd.isAfter(newStart)) newEnd = newStart.plusMinutes(30);
-    newStart = snap(newStart); newEnd = snap(newEnd);
-    UUID newRes = (dragOverResource!=null? dragOverResource : dragItem.getResourceId());
-    CommandBus.get().submit(new MoveResizeInterventionCommand(dragItem, newRes, newStart, newEnd));
+    if (dragOverResource!=null) dragItem.setResourceId(dragOverResource);
+    dragItem.setDateDebut(newStart);
+    dragItem.setDateFin(newEnd);
+    ServiceFactory.planning().saveIntervention(dragItem);
     dragItem = null; dragRect=null; resizingLeft=resizingRight=false;
     reload();
   }
 
   private void onMove(MouseEvent e){
     int y=0;
+    hovered = null;
     for (Resource r : resources){
-      int rowH = rowHeights.getOrDefault(r.getId(), tileHeight+rowGap);
+      int rowH = rowHeights.getOrDefault(r.getId(), PlanningUx.TILE_H+PlanningUx.ROW_GAP);
       for (Intervention it : byResource.getOrDefault(r.getId(), List.of())){
         Rectangle rect = rectOf(it, y);
         if (rect.contains(e.getPoint())){
-          if (Math.abs(e.getX()-rect.x) < 8 || Math.abs(e.getX()-(rect.x+rect.width)) < 8)
+          hovered = it;
+          if (Math.abs(e.getX()-rect.x) < PlanningUx.HANDLE || Math.abs(e.getX()-(rect.x+rect.width))<PlanningUx.HANDLE){
             setCursor(Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR));
-          else setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+          } else {
+            setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+          }
+          repaint(rect.x-2, rect.y-2, rect.width+4, rect.height+4);
           return;
         }
       }
-      y += rowH;
+      y+=rowH;
     }
     setCursor(Cursor.getDefaultCursor());
+    repaint();
+  }
+
+  private void onClick(MouseEvent e){
+    if (e.getButton()==MouseEvent.BUTTON1 && e.getClickCount()==1){
+      selected = hitTile(e.getPoint());
+      repaint();
+    }
   }
 }
