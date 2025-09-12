@@ -42,7 +42,6 @@ public class PlanningBoard extends JComponent {
   private boolean dragArmed;
   private UUID dragOverResource;
 
-
   public PlanningBoard(){
     setOpaque(true);
     setFont(PlanningUx.uiFont(this));
@@ -269,7 +268,6 @@ public class PlanningBoard extends JComponent {
             resizingRight = Math.abs(p.x - (rect.x+rect.width)) < PlanningUx.HANDLE;
             dragOverResource = r.getId();
             selected = it; // FIX: select tile on press
-
             return;
           }
         }
