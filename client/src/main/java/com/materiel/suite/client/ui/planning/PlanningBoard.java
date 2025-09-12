@@ -18,6 +18,7 @@ public class PlanningBoard extends JComponent {
   private LocalDate startDate = LocalDate.now().with(java.time.DayOfWeek.MONDAY);
   private int days = 7;
   private int colWidth = 120; // zoomable
+  private int snapMinutes = 15;
 
   private java.util.List<Resource> resources = java.util.List.of();
   private java.util.List<Intervention> interventions = java.util.List.of();
@@ -25,7 +26,6 @@ public class PlanningBoard extends JComponent {
   private Map<Intervention, LaneLayout.Lane> lanes = new HashMap<>();
   private Map<UUID, Integer> rowHeights = new HashMap<>();
   private int totalHeight = 0;
-  private Map<UUID, String> labelCache = new HashMap<>(); // FIX: cache labels
 
   // UX
   private boolean showIndispo = true;
@@ -33,6 +33,7 @@ public class PlanningBoard extends JComponent {
   private final Map<UUID,String> labelCache = new HashMap<>();
   private Intervention hovered;
   private Intervention selected;
+  private final InterventionTileRenderer tile = new InterventionTileRenderer();
 
   // DnD
   private Intervention dragItem;
@@ -41,6 +42,7 @@ public class PlanningBoard extends JComponent {
   private Point dragStart;
   private boolean dragArmed;
   private UUID dragOverResource;
+  private boolean dragging;
 
   public PlanningBoard(){
     setOpaque(true);
@@ -104,6 +106,8 @@ public class PlanningBoard extends JComponent {
   public void setDays(int d){ days = d; reload(); }
   public void setShowIndispo(boolean b){ showIndispo = b; repaint(); }
   public void setResourceNameFilter(String f){ resourceFilter = f==null? "" : f.toLowerCase(); reload(); }
+  public void setSnapMinutes(int m){ snapMinutes = Math.max(5, Math.min(60, m)); }
+  public int tileHeight(){ return tile.height(); }
 
   public void reload(){
     resources = ServiceFactory.planning().listResources().stream()
@@ -127,10 +131,11 @@ public class PlanningBoard extends JComponent {
     lanes.clear(); rowHeights.clear(); totalHeight = 0;
     for (Resource r : resources){
       List<Intervention> list = byResource.getOrDefault(r.getId(), List.of());
-      Map<Intervention, LaneLayout.Lane> m = LaneLayout.computeLanes(list, Intervention::getDateDebut, Intervention::getDateFin);
+      Map<Intervention, LaneLayout.Lane> m = LaneLayout.computeLanes(list,
+          Intervention::getDateHeureDebut, Intervention::getDateHeureFin);
       lanes.putAll(m);
       int lanesCount = m.values().stream().mapToInt(l -> l.index).max().orElse(-1) + 1;
-      int rowH = Math.max(PlanningUx.TILE_H, lanesCount * (PlanningUx.TILE_H + PlanningUx.LANE_GAP)) + PlanningUx.ROW_GAP;
+      int rowH = Math.max(tile.height(), lanesCount * (tile.height() + PlanningUx.LANE_GAP)) + PlanningUx.ROW_GAP;
       rowHeights.put(r.getId(), rowH);
       totalHeight += rowH;
     }
@@ -159,7 +164,7 @@ public class PlanningBoard extends JComponent {
     // Rows + tiles
     int y=0;
     for (Resource r : resources){
-      int rowH = rowHeights.getOrDefault(r.getId(), PlanningUx.TILE_H+PlanningUx.ROW_GAP);
+      int rowH = rowHeights.getOrDefault(r.getId(), tile.height()+PlanningUx.ROW_GAP);
       // Indispos (hachures)
       if (showIndispo){
         Rectangle hatch = new Rectangle(2*colWidth, y, colWidth*2, rowH-1);
@@ -171,7 +176,7 @@ public class PlanningBoard extends JComponent {
       // tiles for resource
       for (Intervention it : byResource.getOrDefault(r.getId(), List.of())){
         Rectangle rect = rectOf(it, y);
-        paintTile(g2, it, rect, it==hovered, it==selected);
+        tile.paint(g2, rect, it, it==hovered, it==selected);
       }
       y += rowH;
     }
@@ -186,35 +191,6 @@ public class PlanningBoard extends JComponent {
     g2.dispose();
   }
 
-  private void paintTile(Graphics2D g2, Intervention it, Rectangle r, boolean hover, boolean sel){
-    Color fill = PlanningUx.colorOr(it.getColor(), new Color(0xA3BE8C));
-    Color stroke = fill.darker();
-    g2.setColor(PlanningUx.TILE_SHADOW);
-    g2.fillRoundRect(r.x+3,r.y+3,r.width-6,r.height-6, PlanningUx.RADIUS, PlanningUx.RADIUS);
-    g2.setColor(fill);
-    g2.fillRoundRect(r.x+2,r.y+2,r.width-4,r.height-4, PlanningUx.RADIUS, PlanningUx.RADIUS);
-    g2.setColor(stroke);
-    g2.drawRoundRect(r.x+2,r.y+2,r.width-4,r.height-4, PlanningUx.RADIUS, PlanningUx.RADIUS);
-    if (hover || sel){
-      g2.setColor(hover? PlanningUx.TILE_HOVER : PlanningUx.TILE_SELECT);
-      g2.fillRoundRect(r.x+2,r.y+2,r.width-4,r.height-4, PlanningUx.RADIUS, PlanningUx.RADIUS);
-    }
-    // Texte sûr + élision
-    String label = safeLabel(it);
-    int maxTextW = Math.max(0, r.width - 2*PlanningUx.PAD);
-    if (maxTextW > 0){
-      g2.setColor(PlanningUx.TILE_TX);
-      g2.setClip(r.x+PlanningUx.PAD, r.y+4, r.width-2*PlanningUx.PAD, r.height-8);
-      label = PlanningUx.ellipsize(label, g2.getFontMetrics(), maxTextW);
-      int baseline = r.y + (r.height + g2.getFontMetrics().getAscent())/2 - 2;
-      g2.drawString(label, r.x+PlanningUx.PAD, baseline);
-      g2.setClip(null);
-    }
-    g2.setColor(stroke);
-    g2.fillRect(r.x+1, r.y+4, 2, r.height-8);
-    g2.fillRect(r.x+r.width-3, r.y+4, 2, r.height-8);
-  }
-
   private Rectangle rectOf(Intervention it, int baseY){
     int startIdx = (int) java.time.temporal.ChronoUnit.DAYS.between(startDate, it.getDateDebut());
     int endIdx = (int) java.time.temporal.ChronoUnit.DAYS.between(startDate, it.getDateFin());
@@ -222,8 +198,8 @@ public class PlanningBoard extends JComponent {
     int x = startIdx * colWidth;
     int w = ((endIdx - startIdx) + 1) * colWidth;
     int lane = Optional.ofNullable(lanes.get(it)).map(l -> l.index).orElse(0);
-    int y = baseY + lane * (PlanningUx.TILE_H + PlanningUx.LANE_GAP);
-    return new Rectangle(x, y, w, PlanningUx.TILE_H);
+    int y = baseY + lane * (tile.height() + PlanningUx.LANE_GAP);
+    return new Rectangle(x, y, w, tile.height());
   }
 
   private String safeLabel(Intervention it){
@@ -238,7 +214,7 @@ public class PlanningBoard extends JComponent {
   private Intervention hitTile(Point p){
     int y=0;
     for (Resource r : resources){
-      int rowH = rowHeights.getOrDefault(r.getId(), PlanningUx.TILE_H+PlanningUx.ROW_GAP);
+      int rowH = rowHeights.getOrDefault(r.getId(), tile.height()+PlanningUx.ROW_GAP);
       for (Intervention it : byResource.getOrDefault(r.getId(), List.of())){
         Rectangle rect = rectOf(it, y);
         if (rect.contains(p)) return it;
@@ -250,12 +226,12 @@ public class PlanningBoard extends JComponent {
 
   // DnD handlers
   private void onPress(MouseEvent e){
-    dragItem=null; dragRect=null; resizingLeft=false; resizingRight=false; dragArmed=false; dragOverResource=null;
+    dragItem=null; dragRect=null; resizingLeft=false; resizingRight=false; dragArmed=false; dragOverResource=null; dragging=false;
 
     Point p = e.getPoint();
     int y=0;
     for (Resource r : resources){
-      int rowH = rowHeights.getOrDefault(r.getId(), PlanningUx.TILE_H+PlanningUx.ROW_GAP);
+      int rowH = rowHeights.getOrDefault(r.getId(), tile.height()+PlanningUx.ROW_GAP);
       if (p.y>=y && p.y<y+rowH){
         for (Intervention it : byResource.getOrDefault(r.getId(), List.of())){
           Rectangle rect = rectOf(it, y);
@@ -300,11 +276,11 @@ public class PlanningBoard extends JComponent {
     // snap vertical to resource row
     int y=0; UUID overRes = dragOverResource;
     for (Resource res : resources){
-      int rowH = rowHeights.getOrDefault(res.getId(), PlanningUx.TILE_H+PlanningUx.ROW_GAP);
+      int rowH = rowHeights.getOrDefault(res.getId(), tile.height()+PlanningUx.ROW_GAP);
       if (r.y>=y && r.y<y+rowH){
         overRes = res.getId();
         int lane = Optional.ofNullable(lanes.get(dragItem)).map(l -> l.index).orElse(0);
-        r.y = y + lane*(PlanningUx.TILE_H + PlanningUx.LANE_GAP);
+        r.y = y + lane*(tile.height() + PlanningUx.LANE_GAP);
         break;
       }
       y+=rowH;
@@ -332,7 +308,7 @@ public class PlanningBoard extends JComponent {
     dragItem.setDateDebut(newStart);
     dragItem.setDateFin(newEnd);
     ServiceFactory.planning().saveIntervention(dragItem);
-    dragItem = null; dragRect=null; resizingLeft=resizingRight=false;
+    dragItem = null; dragRect=null; resizingLeft=resizingRight=false; dragging=false;
     reload();
   }
 
@@ -340,7 +316,7 @@ public class PlanningBoard extends JComponent {
     int y=0;
     hovered = null;
     for (Resource r : resources){
-      int rowH = rowHeights.getOrDefault(r.getId(), PlanningUx.TILE_H+PlanningUx.ROW_GAP);
+      int rowH = rowHeights.getOrDefault(r.getId(), tile.height()+PlanningUx.ROW_GAP);
       for (Intervention it : byResource.getOrDefault(r.getId(), List.of())){
         Rectangle rect = rectOf(it, y);
         if (rect.contains(e.getPoint())){

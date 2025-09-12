@@ -23,7 +23,8 @@ final class PlanningUx {
   // Métriques
   static final int COL_MIN = 80;
   static final int COL_MAX = 220;
-  static final int TILE_H = 26;
+  static final int TILE_H = 26;        // tuile compacte (agenda, liste)
+  static final int TILE_CARD_H = 108;   // tuile "carte" du planning
   static final int LANE_GAP = 6;
   static final int ROW_GAP = 8;
   static final int RADIUS = 10;
@@ -72,5 +73,18 @@ final class PlanningUx {
       b.append(s.charAt(i));
     }
     return b.toString() + ell;
+  }
+
+  /** Pastille arrondie (status / agence / chips). */
+  static void pill(Graphics2D g2, Rectangle r, Color bg, Color fg, String text){
+    g2.setColor(bg);
+    g2.fillRoundRect(r.x, r.y, r.width, r.height, r.height, r.height);
+    g2.setColor(new Color(bg.darker().getRGB() & 0x33FFFFFF, true));
+    g2.drawRoundRect(r.x, r.y, r.width, r.height, r.height, r.height);
+    g2.setColor(fg);
+    FontMetrics fm = g2.getFontMetrics();
+    int tx = r.x + (r.width - fm.stringWidth(text))/2;
+    int ty = r.y + (r.height + fm.getAscent())/2 - 2;
+    g2.drawString(text, tx, ty);
   }
 }

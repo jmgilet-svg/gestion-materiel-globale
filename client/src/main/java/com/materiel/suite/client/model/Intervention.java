@@ -13,6 +13,20 @@ public class Intervention {
   private LocalDateTime dateHeureFin;
   private String color; // hex
 
+  // Champs enrichis pour rendu "carte"
+  private String clientName;
+  private String siteLabel;
+  private String craneName;
+  private String truckName;
+  private String driverName;
+  private String agency;
+  private String status; // PLANNED, CONFIRMED, DONE, CANCELED...
+  private boolean favorite;
+  private String quoteNumber;
+  private String orderNumber;
+  private String deliveryNumber;
+  private String invoiceNumber;
+
   public Intervention(){}
   public Intervention(UUID id, UUID resourceId, String label, LocalDate start, LocalDate end, String color){
     this(id, resourceId, label, start.atStartOfDay(), end.atTime(LocalTime.of(18,0)), color);
@@ -42,4 +56,43 @@ public class Intervention {
 
   public String getColor(){ return color; }
   public void setColor(String color){ this.color = color; }
+
+  public String getClientName(){ return clientName; }
+  public void setClientName(String clientName){ this.clientName = clientName; }
+  public String getSiteLabel(){ return siteLabel; }
+  public void setSiteLabel(String siteLabel){ this.siteLabel = siteLabel; }
+  public String getCraneName(){ return craneName; }
+  public void setCraneName(String craneName){ this.craneName = craneName; }
+  public String getTruckName(){ return truckName; }
+  public void setTruckName(String truckName){ this.truckName = truckName; }
+  public String getDriverName(){ return driverName; }
+  public void setDriverName(String driverName){ this.driverName = driverName; }
+  public String getAgency(){ return agency; }
+  public void setAgency(String agency){ this.agency = agency; }
+  public String getStatus(){ return status; }
+  public void setStatus(String status){ this.status = status; }
+  public boolean isFavorite(){ return favorite; }
+  public void setFavorite(boolean favorite){ this.favorite = favorite; }
+  public String getQuoteNumber(){ return quoteNumber; }
+  public void setQuoteNumber(String quoteNumber){ this.quoteNumber = quoteNumber; }
+  public String getOrderNumber(){ return orderNumber; }
+  public void setOrderNumber(String orderNumber){ this.orderNumber = orderNumber; }
+  public String getDeliveryNumber(){ return deliveryNumber; }
+  public void setDeliveryNumber(String deliveryNumber){ this.deliveryNumber = deliveryNumber; }
+  public String getInvoiceNumber(){ return invoiceNumber; }
+  public void setInvoiceNumber(String invoiceNumber){ this.invoiceNumber = invoiceNumber; }
+
+  /** Heures lisibles pour la carte (08:00–17:00). */
+  public String prettyTimeRange(){
+    LocalTime s = dateHeureDebut != null ? dateHeureDebut.toLocalTime() : LocalTime.of(8,0);
+    LocalTime e = dateHeureFin != null ? dateHeureFin.toLocalTime() : LocalTime.of(17,0);
+    return String.format("%02d:%02d–%02d:%02d", s.getHour(), s.getMinute(), e.getHour(), e.getMinute());
+  }
+  public String driverInitials(){
+    if (driverName==null || driverName.isBlank()) return "";
+    String[] p = driverName.trim().split("\\s+");
+    String a = p[0].substring(0,1).toUpperCase();
+    String b = p.length>1? p[p.length-1].substring(0,1).toUpperCase() : "";
+    return a+b;
+  }
 }
