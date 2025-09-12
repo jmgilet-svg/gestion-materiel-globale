@@ -158,3 +158,24 @@ Statuts (badges) : Brouillon, Envoyé, Accepté, Refusé, Expiré, Confirmé, An
 - `GM_API_TOKEN` (Bearer)
 
 > Note: Maven build currently requires network access to resolve Spring Boot parent POM.
+
+## Audit des classes non utilisées
+```bash
+mvn -q -DskipTests package
+bash tools/deadcode/find-dead-classes.sh
+```
+Le rapport apparaît sous `tools/deadcode/report/` :
+- `dead-classes-client.txt`
+- `dead-classes-backend.txt`
+
+### Windows
+```bat
+mvn -q -DskipTests package
+tools\deadcode\find-dead-classes.bat
+```
+Les rapports sont dans `tools\deadcode\report\`.
+
+### Exclure des classes légitimes
+Ajoutez leur FQN (nom complet) dans `tools/deadcode/excludes.txt`. Les points d’entrée courants (UI, contrôleurs REST) sont déjà exclus.
+
+> L’audit ne supprime rien. Une PR/commit de nettoyage manuel est recommandée après revue.
