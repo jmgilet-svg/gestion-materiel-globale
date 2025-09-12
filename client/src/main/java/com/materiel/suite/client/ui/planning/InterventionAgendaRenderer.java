@@ -93,7 +93,7 @@ final class InterventionAgendaRenderer {
     ));
 
     // Cadenas si verrouillé
-    if (it.isLocked()){
+    if (it.isLocked()) {
       g2.setColor(new Color(0x374151));
       paintLock(g2, r.x+8, r.y+8);
     }
