@@ -1,0 +1,3 @@
+# Classes à ignorer (pattern FQN)
+com.materiel.suite.backend.Application
+com.materiel.suite.client.ui.MainFrame
