@@ -17,6 +17,24 @@ Monorepo Maven (Java 17) avec deux modules :
 - **backend/** : **API Spring Boot exécutable** (Ressources, Interventions, Conflits planning, seed mémoire + CORS)
 - **client/** : application Swing (Mode Mock par défaut), fenêtre de choix Mock/API, UI ERP + **Planning DnD**
 
+### ❗️Dépendance `com.materiel:gestion-materiel:1.0.0-SNAPSHOT` introuvable
+Si vous voyez :
+```
+Could not resolve dependencies for project com.materiel.suite:backend:jar:1.0.0-SNAPSHOT
+dependency: com.materiel:gestion-materiel:jar:1.0.0-SNAPSHOT (compile)
+```
+Cela signifie que le module **backend** déclare une dépendance vers **lui‑même** ou un ancien artefact externe.  
+**Correctif appliqué** : suppression de cette dépendance et renommage de l’artefact backend en `gestion-materiel` pour s’aligner sur les usages historiques.
+
+Rebuild propre :
+```bash
+mvn -q -DskipTests clean install
+```
+
+> Si vous gardez un backend séparé ailleurs, installez‑le d’abord : `cd ../gestion-materiel && mvn -q install`,
+> ou référencez‑le comme **module** du parent au lieu d’une dépendance.
+
+
 ## 🚀 Sprint 1 — Backend/Frontend
 **Objectif** : rendre le planning exploitable en mode **API** avec détection de conflits côté serveur et **panneau Conflits** côté client.
 
