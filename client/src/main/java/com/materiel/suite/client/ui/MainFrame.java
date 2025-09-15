@@ -1,6 +1,8 @@
 package com.materiel.suite.client.ui;
 
 import com.materiel.suite.client.config.AppConfig;
+import com.materiel.suite.client.net.ServiceFactory;
+import com.materiel.suite.client.service.SyncService;
 import com.materiel.suite.client.ui.delivery.DeliveryNotesPanel;
 import com.materiel.suite.client.ui.invoices.InvoicesPanel;
 import com.materiel.suite.client.ui.orders.OrdersPanel;
@@ -16,6 +18,8 @@ import java.awt.*;
 public class MainFrame extends JFrame {
   private final CardLayout cards = new CardLayout();
   private final JPanel center = new JPanel(cards);
+  private final JLabel status = new JLabel("Prêt.");
+  private javax.swing.Timer syncTimer;
 
   public MainFrame(AppConfig cfg) {
     super("Gestion Matériel — Suite");
@@ -27,6 +31,7 @@ public class MainFrame extends JFrame {
     add(buildHeader(cfg), BorderLayout.NORTH);
     add(buildSidebar(), BorderLayout.WEST);
     add(center, BorderLayout.CENTER);
+    add(status, BorderLayout.SOUTH);
     setJMenuBar(buildMenuBar());
 
     center.add(new PlanningPanel(), "planning");
@@ -38,6 +43,17 @@ public class MainFrame extends JFrame {
     center.add(new JLabel("Ressources (à implémenter)"), "resources");
 
     cards.show(center, "quotes");
+
+    if (ServiceFactory.http()!=null){
+      SyncService sync = new SyncService(ServiceFactory.http());
+      syncTimer = new javax.swing.Timer(4000, e -> {
+        var events = sync.pull();
+        if (!events.isEmpty()){
+          status.setText("Sync: "+events.size()+" événement(s)");
+        }
+      });
+      syncTimer.start();
+    }
   }
 
   private JMenuBar buildMenuBar(){
@@ -97,3 +113,4 @@ public class MainFrame extends JFrame {
     return b;
   }
 }
+

@@ -2,17 +2,18 @@ package com.materiel.suite.client.net;
 
 import com.materiel.suite.client.config.AppConfig;
 import com.materiel.suite.client.service.*;
-import com.materiel.suite.client.service.mock.*;
 import com.materiel.suite.client.service.api.*;
-import com.materiel.suite.client.net.RestClient;
+import com.materiel.suite.client.service.mock.*;
 
 public class ServiceFactory {
   private static AppConfig cfg;
+  private static RestClient restClient;
   private static QuoteService quoteService;
   private static OrderService orderService;
   private static DeliveryNoteService deliveryNoteService;
   private static InvoiceService invoiceService;
   private static PlanningService planningService;
+  private static DocumentWorkflowService workflowService;
 
   public static void init(AppConfig c) {
     cfg = c;
@@ -30,6 +31,7 @@ public class ServiceFactory {
     deliveryNoteService = new MockDeliveryNoteService();
     invoiceService = new MockInvoiceService();
     planningService = new MockPlanningService();
+    workflowService = new MockWorkflowService();
   }
 
   private static void initBackend() {
@@ -37,11 +39,13 @@ public class ServiceFactory {
     String base = System.getenv().getOrDefault("GM_API_BASE", "http://localhost:8080");
     String token = System.getenv().getOrDefault("GM_API_TOKEN", "");
     RestClient rc = new RestClient(base, token);
+    restClient = rc;
     quoteService = new ApiQuoteService(rc, new MockQuoteService());
     orderService = new ApiOrderService(rc, new MockOrderService());
     deliveryNoteService = new ApiDeliveryNoteService(rc, new MockDeliveryNoteService());
     invoiceService = new ApiInvoiceService(rc, new MockInvoiceService());
     planningService = new ApiPlanningService(rc, new MockPlanningService());
+    workflowService = new ApiWorkflowService(rc);
   }
 
   public static QuoteService quotes(){ return quoteService; }
@@ -49,4 +53,7 @@ public class ServiceFactory {
   public static DeliveryNoteService deliveryNotes(){ return deliveryNoteService; }
   public static InvoiceService invoices(){ return invoiceService; }
   public static PlanningService planning(){ return planningService; }
+  public static DocumentWorkflowService workflow(){ return workflowService; }
+  public static RestClient http(){ return restClient; }
 }
+
