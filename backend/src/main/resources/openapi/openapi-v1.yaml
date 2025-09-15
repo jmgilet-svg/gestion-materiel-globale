@@ -1,0 +1,200 @@
+openapi: 3.0.3
+info:
+  title: Gestion Matériel API
+  version: "1.0"
+  description: >
+    API v1 — Devis/Commandes/BL/Factures (fondations), Planning, Sync.
+    ETags (If-Match) pour updates, Idempotency-Key pour POST, Change Feed pour offline.
+servers:
+  - url: /api/v1
+paths:
+  /openapi.yaml:
+    get:
+      summary: Serve this OpenAPI document
+      responses:
+        "200":
+          description: OK
+  /quotes:
+    get:
+      summary: List quotes
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { $ref: '#/components/schemas/DocumentStatus' }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Quote' } } } } }
+    post:
+      summary: Create quote (Idempotency-Key supported)
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Quote' }
+      responses:
+        "201": { description: Created, headers: { ETag: { schema: { type: string } } }, content: { application/json: { schema: { $ref: '#/components/schemas/Quote' } } } }
+  /quotes/{id}:
+    get:
+      summary: Get quote
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: OK, headers: { ETag: { schema: { type: string } } }, content: { application/json: { schema: { $ref: '#/components/schemas/Quote' } } } }
+        "404": { description: Not Found }
+    put:
+      summary: Update quote (If-Match required)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: If-Match
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Quote' }
+      responses:
+        "200": { description: OK, headers: { ETag: { schema: { type: string } } }, content: { application/json: { schema: { $ref: '#/components/schemas/Quote' } } } }
+        "404": { description: Not Found }
+        "412": { description: Precondition Failed }
+        "428": { description: Precondition Required }
+    delete:
+      summary: Delete quote (If-Match required)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: If-Match
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: No Content }
+        "404": { description: Not Found }
+        "412": { description: Precondition Failed }
+        "428": { description: Precondition Required }
+  /quotes/{id}:send:
+    post:
+      summary: Transition DRAFT->SENT
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: If-Match
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+        "409": { description: Invalid transition }
+  /quotes/{id}:accept:
+    post:
+      summary: Transition SENT->ACCEPTED
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        "200": { description: OK }
+        "409": { description: Invalid transition }
+  /quotes/{id}:refuse:
+    post:
+      summary: Transition SENT->REFUSED
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        "200": { description: OK }
+        "409": { description: Invalid transition }
+  /quotes/{id}:lock:
+    post:
+      summary: LOCKED
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        "200": { description: OK }
+  /sync/changes:
+    get:
+      summary: Change feed since a cursor (epoch ms)
+      parameters:
+        - in: query
+          name: since
+          schema: { type: integer, format: int64 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cursor: { type: integer, format: int64 }
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        cursor: { type: integer, format: int64 }
+                        type: { type: string }
+                        id: { type: string }
+                        at: { type: integer, format: int64 }
+                        payload: { type: object }
+
+components:
+  parameters:
+    IdParam:
+      in: path
+      name: id
+      required: true
+      schema: { type: string, format: uuid }
+    IfMatch:
+      in: header
+      name: If-Match
+      required: true
+      schema: { type: string }
+  schemas:
+    DocumentStatus:
+      type: string
+      enum: [DRAFT, SENT, ACCEPTED, REFUSED, LOCKED, ARCHIVED]
+    DocLine:
+      type: object
+      properties:
+        designation: { type: string }
+        qty: { type: number }
+        unit: { type: string }
+        unitPrice: { type: number }
+        discountPct: { type: number }
+        vatPct: { type: number }
+        lineHt: { type: number }
+        lineVat: { type: number }
+        lineTtc: { type: number }
+    Quote:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: string }
+        customerName: { type: string }
+        status: { $ref: '#/components/schemas/DocumentStatus' }
+        lines:
+          type: array
+          items: { $ref: '#/components/schemas/DocLine' }
+        totalHt: { type: number }
+        totalVat: { type: number }
+        totalTtc: { type: number }
+        version: { type: integer, format: int64 }
+        updatedAt: { type: string, format: date-time }
