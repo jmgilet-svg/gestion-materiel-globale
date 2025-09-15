@@ -39,6 +39,9 @@ public class ApiPlanningService implements PlanningService {
         Resource r = new Resource();
         r.setId(UUID.fromString(SimpleJson.str(m.get("id"))));
         r.setName(SimpleJson.str(m.getOrDefault("name","")));
+        r.setType(SimpleJson.str(m.get("type")));
+        r.setColor(SimpleJson.str(m.get("color")));
+        r.setNotes(SimpleJson.str(m.get("notes")));
         out.add(r);
       }
       return out;
@@ -50,11 +53,17 @@ public class ApiPlanningService implements PlanningService {
       Map<String,Object> m = new LinkedHashMap<>();
       if (r.getId()!=null) m.put("id", r.getId().toString());
       m.put("name", r.getName());
+      m.put("type", r.getType());
+      m.put("color", r.getColor());
+      m.put("notes", r.getNotes());
       String json = toJson(m);
       String body = (r.getId()==null? rc.post("/api/v1/resources", json) : rc.put("/api/v1/resources/"+r.getId(), json));
       var map = SimpleJson.asObj(SimpleJson.parse(body));
       r.setId(UUID.fromString(SimpleJson.str(map.get("id"))));
       r.setName(SimpleJson.str(map.getOrDefault("name","")));
+      r.setType(SimpleJson.str(map.get("type")));
+      r.setColor(SimpleJson.str(map.get("color")));
+      r.setNotes(SimpleJson.str(map.get("notes")));
       return r;
     } catch(Exception e){ return fb.saveResource(r); }
   }

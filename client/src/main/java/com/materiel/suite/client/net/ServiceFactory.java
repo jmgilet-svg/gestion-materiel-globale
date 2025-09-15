@@ -14,6 +14,7 @@ public class ServiceFactory {
   private static InvoiceService invoiceService;
   private static PlanningService planningService;
   private static DocumentWorkflowService workflowService;
+  private static ClientService clientService;
 
   public static void init(AppConfig c) {
     cfg = c;
@@ -32,6 +33,7 @@ public class ServiceFactory {
     invoiceService = new MockInvoiceService();
     planningService = new MockPlanningService();
     workflowService = new MockWorkflowService();
+    clientService = new MockClientService();
   }
 
   private static void initBackend() {
@@ -46,6 +48,7 @@ public class ServiceFactory {
     invoiceService = new ApiInvoiceService(rc, new MockInvoiceService());
     planningService = new ApiPlanningService(rc, new MockPlanningService());
     workflowService = new ApiWorkflowService(rc);
+    clientService = new ApiClientService(rc, new MockClientService());
   }
 
   public static QuoteService quotes(){ return quoteService; }
@@ -54,6 +57,7 @@ public class ServiceFactory {
   public static InvoiceService invoices(){ return invoiceService; }
   public static PlanningService planning(){ return planningService; }
   public static DocumentWorkflowService workflow(){ return workflowService; }
+  public static ClientService clients(){ return clientService; }
   public static RestClient http(){ return restClient; }
 }
 
