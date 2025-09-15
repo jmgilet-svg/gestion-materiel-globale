@@ -6,6 +6,7 @@ import com.materiel.suite.backend.v1.service.ChangeFeedService;
 import com.materiel.suite.backend.v1.service.TotalsCalculator;
 import com.materiel.suite.backend.v1.service.DocumentStateMachine;
 import com.materiel.suite.backend.v1.service.IdempotencyService;
+import com.materiel.suite.backend.v1.service.NumberingService;
 import com.materiel.suite.backend.v1.util.Etags;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -23,12 +24,20 @@ public class InvoiceController {
   private final ChangeFeedService changes;
   private final DocumentStateMachine sm = new DocumentStateMachine();
   private final IdempotencyService idem;
-  public InvoiceController(InvoiceRepository repo, TotalsCalculator totals, ChangeFeedService changes, IdempotencyService idem){
-    this.repo = repo; this.totals = totals; this.changes = changes; this.idem = idem;
+  private final NumberingService numbering;
+  public InvoiceController(InvoiceRepository repo, TotalsCalculator totals, ChangeFeedService changes, IdempotencyService idem, NumberingService numbering){
+    this.repo = repo; this.totals = totals; this.changes = changes; this.idem = idem; this.numbering = numbering;
   }
 
   @GetMapping public ResponseEntity<List<InvoiceEntity>> list(){
     return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL,"no-store").body(repo.findAll());
+  }
+
+  @GetMapping(params={"page","size"})
+  public ResponseEntity<List<InvoiceEntity>> listPaged(@RequestParam int page, @RequestParam int size){
+    var p = org.springframework.data.domain.PageRequest.of(Math.max(0,page), Math.min(200, Math.max(1,size)));
+    var res = repo.findAll(p);
+    return ResponseEntity.ok().header("X-Total-Count", String.valueOf(res.getTotalElements())).body(res.getContent());
   }
 
   @GetMapping("/{id}")
@@ -46,6 +55,7 @@ public class InvoiceController {
     }
     if (i.getId()==null) i.setId(UUID.randomUUID());
     sanitize(i); totals.recomputeTotals(i); i.setVersion(1);
+    if (i.getNumber()==null || i.getNumber().isBlank()) i.setNumber(numbering.next("INVOICE"));
     var saved = repo.save(i);
     changes.emit("INVOICE_CREATED", saved.getId().toString(), Map.of("number", saved.getNumber()));
     if (StringUtils.hasText(idk)) idem.remember("POST:/api/v1/invoices", idk, saved);

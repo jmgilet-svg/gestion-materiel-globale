@@ -5,6 +5,39 @@ info:
 servers:
   - url: /api/v1
 paths:
+  /webhooks:
+    post:
+      summary: Register webhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url: { type: string, format: uri }
+              required: [url]
+      responses:
+        "204": { description: No Content }
+    delete:
+      summary: Unregister webhook
+      parameters:
+        - in: query
+          name: url
+          required: true
+          schema: { type: string, format: uri }
+      responses:
+        "204": { description: No Content }
+    get:
+      summary: List webhooks
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: string }
   /quotes:
     get:
       summary: List quotes
@@ -79,9 +112,18 @@ paths:
   /orders:
     get:
       summary: List orders
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: size
+          schema: { type: integer }
       responses:
         "200":
           description: OK
+          headers:
+            X-Total-Count: { schema: { type: integer } }
           content:
             application/json:
               schema:
@@ -148,9 +190,18 @@ paths:
   /delivery-notes:
     get:
       summary: List delivery notes
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: size
+          schema: { type: integer }
       responses:
         "200":
           description: OK
+          headers:
+            X-Total-Count: { schema: { type: integer } }
           content:
             application/json:
               schema:
@@ -179,9 +230,18 @@ paths:
   /invoices:
     get:
       summary: List invoices
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: size
+          schema: { type: integer }
       responses:
         "200":
           description: OK
+          headers:
+            X-Total-Count: { schema: { type: integer } }
           content:
             application/json:
               schema:

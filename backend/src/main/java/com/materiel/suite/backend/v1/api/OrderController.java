@@ -6,6 +6,7 @@ import com.materiel.suite.backend.v1.service.ChangeFeedService;
 import com.materiel.suite.backend.v1.service.IdempotencyService;
 import com.materiel.suite.backend.v1.service.TotalsCalculator;
 import com.materiel.suite.backend.v1.service.DocumentStateMachine;
+import com.materiel.suite.backend.v1.service.NumberingService;
 import com.materiel.suite.backend.v1.util.Etags;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -23,13 +24,21 @@ public class OrderController {
   private final IdempotencyService idem;
   private final ChangeFeedService changes;
   private final DocumentStateMachine sm = new DocumentStateMachine();
+  private final NumberingService numbering;
 
-  public OrderController(OrderRepository repo, TotalsCalculator totals, IdempotencyService idem, ChangeFeedService changes){
-    this.repo = repo; this.totals = totals; this.idem = idem; this.changes = changes;
+  public OrderController(OrderRepository repo, TotalsCalculator totals, IdempotencyService idem, ChangeFeedService changes, NumberingService numbering){
+    this.repo = repo; this.totals = totals; this.idem = idem; this.changes = changes; this.numbering = numbering;
   }
 
   @GetMapping
   public ResponseEntity<List<OrderEntity>> list(){ return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL,"no-store").body(repo.findAll()); }
+
+  @GetMapping(params={"page","size"})
+  public ResponseEntity<List<OrderEntity>> listPaged(@RequestParam int page, @RequestParam int size){
+    var p = org.springframework.data.domain.PageRequest.of(Math.max(0,page), Math.min(200, Math.max(1,size)));
+    var res = repo.findAll(p);
+    return ResponseEntity.ok().header("X-Total-Count", String.valueOf(res.getTotalElements())).body(res.getContent());
+  }
 
   @GetMapping("/{id}")
   public ResponseEntity<OrderEntity> get(@PathVariable UUID id){
@@ -48,6 +57,7 @@ public class OrderController {
     if (o.getId()==null) o.setId(UUID.randomUUID());
     sanitize(o);
     totals.recomputeTotals(o);
+    if (o.getNumber()==null || o.getNumber().isBlank()) o.setNumber(numbering.next("ORDER"));
     o.setVersion(o.getVersion()+1);
     var saved = repo.save(o);
     changes.emit("ORDER_CREATED", saved.getId().toString(), Map.of("number", saved.getNumber()));
