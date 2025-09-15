@@ -19,6 +19,8 @@ public class InterventionEntity {
   private String color;
   private LocalDateTime startDateTime;
   private LocalDateTime endDateTime;
+  @Enumerated(EnumType.STRING)
+  private InterventionStatus status = InterventionStatus.PLANNED;
 
   @Transient
   public LocalDate getDateDebut(){
@@ -41,4 +43,6 @@ public class InterventionEntity {
   public void setStartDateTime(LocalDateTime s){ this.startDateTime=s; }
   public LocalDateTime getEndDateTime(){ return endDateTime; }
   public void setEndDateTime(LocalDateTime e){ this.endDateTime=e; }
+  public InterventionStatus getStatus(){ return status; }
+  public void setStatus(InterventionStatus s){ this.status=s; }
 }
