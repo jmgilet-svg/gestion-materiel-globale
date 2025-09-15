@@ -6,9 +6,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 
 public class RestClient {
   private final String baseUrl;
@@ -70,10 +70,10 @@ public class RestClient {
     else if ("DELETE".equals(method)) b = b.DELETE();
     bearer.ifPresent(t -> b.header("Authorization","Bearer "+t));
     b.header("Accept","application/json");
-    if (headers!=null){
-      for (var e : headers.entrySet()){
-        if (e.getKey()!=null && e.getValue()!=null) b.header(e.getKey(), e.getValue());
-      }
+    if (headers != null) {
+      headers.forEach((k, v) -> {
+        if (Objects.nonNull(v)) b.header(k, v);
+      });
     }
     var res = http.send(b.build(), HttpResponse.BodyHandlers.ofString());
     return ensure200(res);
