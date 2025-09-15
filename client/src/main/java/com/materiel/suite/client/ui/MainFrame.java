@@ -8,6 +8,7 @@ import com.materiel.suite.client.ui.invoices.InvoicesPanel;
 import com.materiel.suite.client.ui.orders.OrdersPanel;
 import com.materiel.suite.client.ui.quotes.QuotesPanel;
 import com.materiel.suite.client.ui.planning.PlanningPanel;
+import com.materiel.suite.client.ui.planning.agenda.AgendaPanel;
 import com.materiel.suite.client.ui.theme.ThemeManager;
 import com.materiel.suite.client.ui.commands.CommandBus;
 
@@ -35,6 +36,7 @@ public class MainFrame extends JFrame {
     setJMenuBar(buildMenuBar());
 
     center.add(new PlanningPanel(), "planning");
+    center.add(new AgendaPanel(), "agenda");
     center.add(new QuotesPanel(), "quotes");
     center.add(new OrdersPanel(), "orders");
     center.add(new DeliveryNotesPanel(), "delivery");
@@ -90,6 +92,8 @@ public class MainFrame extends JFrame {
     side.setBorder(new EmptyBorder(8,8,8,8));
     side.setPreferredSize(new Dimension(220, 0));
     side.add(navButton("Planning", "planning"));
+    side.add(Box.createVerticalStrut(6));
+    side.add(navButton("Agenda", "agenda"));
     side.add(Box.createVerticalStrut(6));
     side.add(navButton("Devis", "quotes"));
     side.add(Box.createVerticalStrut(6));

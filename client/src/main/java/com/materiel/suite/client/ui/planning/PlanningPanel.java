@@ -41,6 +41,7 @@ import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.PlanningService;
 import com.materiel.suite.client.ui.commands.CommandBus;
+import com.materiel.suite.client.ui.MainFrame;
 
 public class PlanningPanel extends JPanel {
   private final PlanningBoard board = new PlanningBoard();
@@ -118,6 +119,7 @@ public class PlanningPanel extends JPanel {
     JComboBox<String> density = new JComboBox<>(new String[]{"COMPACT","NORMAL","SPACIOUS"});
     JToggleButton mode = new JToggleButton("Agenda");
     conflictsBtn = new JButton("Conflits (0)");
+    JButton toAgenda = new JButton("↔ Agenda");
     JButton addI = new JButton("+ Intervention");
 
     mode.addActionListener(e -> switchMode(mode.isSelected()));
@@ -145,14 +147,21 @@ public class PlanningPanel extends JPanel {
       revalidate(); repaint();
     });
     addI.addActionListener(e -> addInterventionDialog());
+    toAgenda.addActionListener(e -> navigate("agenda"));
 
     bar.add(prev); bar.add(next); bar.add(today); bar.add(mode);
     bar.add(Box.createHorizontalStrut(16)); bar.add(zoomL); bar.add(zoom);
     bar.add(Box.createHorizontalStrut(12)); bar.add(granL); bar.add(gran);
     bar.add(Box.createHorizontalStrut(12)); bar.add(densL); bar.add(density);
     bar.add(Box.createHorizontalStrut(8)); bar.add(conflictsBtn);
+    bar.add(Box.createHorizontalStrut(12)); bar.add(toAgenda);
     bar.add(Box.createHorizontalStrut(16)); bar.add(addI);
     return bar;
+  }
+
+  private void navigate(String key){
+    var w = SwingUtilities.getWindowAncestor(this);
+    if (w instanceof MainFrame mf) mf.openCard(key);
   }
 
   private void switchMode(boolean agendaMode){
