@@ -18,7 +18,7 @@ public class SyncController {
 
   @GetMapping("/changes")
   public ResponseEntity<Map<String,Object>> changes(@RequestParam(name="since", required = false) Long since){
-    var feed = changes.fetchSince(since==null? 0L : since);
+    var feed = changes.getSince(since==null? 0L : since);
     return ResponseEntity.ok()
         .header(HttpHeaders.CACHE_CONTROL, "no-store")
         .body(feed);
