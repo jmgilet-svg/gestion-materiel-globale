@@ -17,6 +17,10 @@ Monorepo Maven (Java 17) avec deux modules :
 - **backend/** : **API Spring Boot exécutable** (Ressources, Interventions, Conflits planning, seed mémoire + CORS)
 - **client/** : application Swing (Mode Mock par défaut), fenêtre de choix Mock/API, UI ERP + **Planning DnD**
 
+## Sprint C — UX Planning
+- **Tuiles adaptatives** (rendu responsive selon largeur/hauteur), **menu contextuel** (ouvrir/dupliquer/verrouiller placeholder).
+- **Sélecteur de densité** (Compact / Normal / Spacieux), DnD plus stable (seuil, curseurs), entête de ligne **synchronisée** avec la grille.
+
 ### ❗️Dépendance `com.materiel:gestion-materiel:1.0.0-SNAPSHOT` introuvable
 Si vous voyez :
 ```

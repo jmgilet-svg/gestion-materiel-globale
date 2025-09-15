@@ -12,7 +12,7 @@ final class InterventionTileRenderer {
   private static final int CHIP_H = 24;
   private static final int CHIP_GAP = 8;
   private boolean compact = false;
-  private PlanningBoard.Density density = PlanningBoard.Density.NORMAL;
+  private UiDensity density = UiDensity.NORMAL;
   private double scaleY = 1.0;
 
   // States
@@ -32,11 +32,11 @@ final class InterventionTileRenderer {
 
   int heightBase(){ return (int)Math.round(PlanningUx.TILE_CARD_H * scaleY); }
   void setCompact(boolean c){ compact = c; }
-  void setDensity(PlanningBoard.Density d){
+  void setDensity(UiDensity d){
     density = d;
     scaleY = switch(d){
       case COMPACT -> 0.88;
-      case ROOMY -> 1.15;
+      case SPACIOUS -> 1.15;
       default -> 1.0;
     };
   }

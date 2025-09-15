@@ -115,21 +115,16 @@ public class PlanningPanel extends JPanel {
     JComboBox<String> gran = new JComboBox<>(new String[]{"5 min","10 min","15 min","30 min","60 min"});
     gran.setSelectedItem(board.getSlotMinutes()+" min");
     JLabel densL = new JLabel("Densité:");
-    JComboBox<String> density = new JComboBox<>(new String[]{"Compact","Normal","Spacieux"});
+    JComboBox<String> density = new JComboBox<>(new String[]{"COMPACT","NORMAL","SPACIOUS"});
     JToggleButton mode = new JToggleButton("Agenda");
     conflictsBtn = new JButton("Conflits (0)");
     JButton addI = new JButton("+ Intervention");
 
     mode.addActionListener(e -> switchMode(mode.isSelected()));
     conflictsBtn.addActionListener(e -> openConflictsDialog());
-    density.setSelectedIndex(1);
+    density.setSelectedItem(board.getDensity().name());
     density.addActionListener(e -> {
-      String sel = String.valueOf(density.getSelectedItem());
-      switch (sel){
-        case "Compact" -> board.setDensity(PlanningBoard.Density.COMPACT);
-        case "Spacieux" -> board.setDensity(PlanningBoard.Density.ROOMY);
-        default -> board.setDensity(PlanningBoard.Density.NORMAL);
-      }
+      board.setDensity(UiDensity.fromString(String.valueOf(density.getSelectedItem())));
       revalidate(); repaint();
     });
 
