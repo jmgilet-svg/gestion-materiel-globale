@@ -4,9 +4,11 @@ import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.model.Conflict;
 import com.materiel.suite.client.service.PlanningService;
+import com.materiel.suite.client.service.PlanningValidation;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -115,5 +117,31 @@ public class MockPlanningService implements PlanningService {
     interventions.put(tail.getId(), tail);
     i.setDateHeureFin(splitAt.minusMinutes(1));
     return true;
+  }
+
+  @Override public PlanningValidation validate(Intervention i){
+    PlanningValidation v = new PlanningValidation();
+    LocalDateTime s = i.getDateHeureDebut();
+    LocalDateTime e = i.getDateHeureFin();
+    if (s==null || e==null){ v.ok = true; return v; }
+    for (var other : interventions.values()){
+      if (i.getId()!=null && i.getId().equals(other.getId())) continue;
+      if (!Objects.equals(i.getResourceId(), other.getResourceId())) continue;
+      LocalDateTime os = other.getDateHeureDebut();
+      LocalDateTime oe = other.getDateHeureFin();
+      boolean overlap = !e.isBefore(os) && !oe.isBefore(s);
+      if (overlap){
+        v.ok = false;
+        PlanningValidation.Suggestion sug = new PlanningValidation.Suggestion();
+        sug.resourceId = i.getResourceId();
+        Duration dur = Duration.between(s,e);
+        sug.startDateTime = oe;
+        sug.endDateTime = oe.plus(dur);
+        sug.label = "Décaler après le créneau suivant";
+        v.suggestions.add(sug);
+      }
+    }
+    if (v.suggestions.isEmpty()) v.ok = true;
+    return v;
   }
 }

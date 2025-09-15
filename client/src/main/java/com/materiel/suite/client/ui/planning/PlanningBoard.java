@@ -3,6 +3,7 @@ package com.materiel.suite.client.ui.planning;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.net.ServiceFactory;
+import com.materiel.suite.client.service.PlanningValidation;
 
 import javax.swing.*;
 import java.awt.*;
@@ -110,17 +111,45 @@ public class PlanningBoard extends JComponent {
       }
     });
     JMenuItem dup  = new JMenuItem("Dupliquer");
-    JMenuItem lock = new JMenuItem("Verrouiller");
-    dup.addActionListener(a -> JOptionPane.showMessageDialog(this,"Duplication (à brancher)"));
-    lock.addActionListener(a -> JOptionPane.showMessageDialog(this,"Verrouillage (à brancher)"));
+    JMenuItem dupW = new JMenuItem("Dupliquer +1 semaine");
+    JMenuItem lock = new JMenuItem("Verrouiller / Déverrouiller");
+    dup.addActionListener(a -> duplicateSelected(1));
+    dupW.addActionListener(a -> duplicateSelected(7));
+    lock.addActionListener(a -> toggleLockSelected());
     menu.add(open);
     menu.addSeparator();
     menu.add(miEdit);
     menu.add(miDelete);
     menu.addSeparator();
     menu.add(dup);
+    menu.add(dupW);
+    menu.addSeparator();
     menu.add(lock);
     return menu;
+  }
+
+  private void duplicateSelected(int days){
+    if (selected==null) return;
+    Intervention copy = new Intervention();
+    copy.setResourceId(selected.getResourceId());
+    copy.setLabel(selected.getLabel() + " (copie)");
+    copy.setColor(selected.getColor());
+    if (selected.getDateHeureDebut()!=null) copy.setDateHeureDebut(selected.getDateHeureDebut().plusDays(days));
+    if (selected.getDateHeureFin()!=null) copy.setDateHeureFin(selected.getDateHeureFin().plusDays(days));
+    if (selected.getDateDebut()!=null) copy.setDateDebut(selected.getDateDebut().plusDays(days));
+    if (selected.getDateFin()!=null) copy.setDateFin(selected.getDateFin().plusDays(days));
+    copy.setStatus(selected.getStatus());
+    copy.setFavorite(selected.isFavorite());
+    copy.setLocked(selected.isLocked());
+    ServiceFactory.planning().saveIntervention(copy);
+    reload();
+  }
+
+  private void toggleLockSelected(){
+    if (selected==null) return;
+    selected.setLocked(!selected.isLocked());
+    ServiceFactory.planning().saveIntervention(selected);
+    reload();
   }
 
   // API publique
@@ -353,6 +382,10 @@ public class PlanningBoard extends JComponent {
         for (Intervention it : byResource.getOrDefault(r.getId(), List.of())){
           Rectangle rect = rectOf(it, y);
           if (rect.contains(p)){
+            if (it.isLocked() || "DONE".equalsIgnoreCase(it.getStatus())){
+              Toolkit.getDefaultToolkit().beep();
+              return;
+            }
             dragItem = it;
             dragRect = new Rectangle(rect);
             dragStart = p;
@@ -438,6 +471,24 @@ public class PlanningBoard extends JComponent {
     dragItem.setDateHeureFin(edt);
     dragItem.setDateDebut(sdt.toLocalDate());
     dragItem.setDateFin(edt.minusMinutes(1).toLocalDate());
+    PlanningValidation v = ServiceFactory.planning().validate(dragItem);
+    if (!v.ok && !v.suggestions.isEmpty()){
+      Object[] opts = v.suggestions.stream().map(s -> s.label!=null? s.label : "Suggestion").toArray();
+      int pick = JOptionPane.showOptionDialog(this, "Conflit détecté. Appliquer une suggestion ?", "Conflit",
+          JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null, opts, opts[0]);
+      if (pick>=0){
+        var s = v.suggestions.get(pick);
+        if (s.resourceId!=null) dragItem.setResourceId(s.resourceId);
+        if (s.startDateTime!=null && s.endDateTime!=null){
+          dragItem.setDateHeureDebut(s.startDateTime);
+          dragItem.setDateHeureFin(s.endDateTime);
+          dragItem.setDateDebut(s.startDateTime.toLocalDate());
+          dragItem.setDateFin(s.endDateTime.minusMinutes(1).toLocalDate());
+        }
+      } else {
+        dragItem = null; dragRect=null; resizingLeft=resizingRight=false; dragMode=DM_NONE; reload(); return;
+      }
+    }
     ServiceFactory.planning().saveIntervention(dragItem);
     dragItem = null; dragRect=null; resizingLeft=resizingRight=false; dragMode=DM_NONE;
     reload();
