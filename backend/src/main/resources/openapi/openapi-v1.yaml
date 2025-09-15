@@ -5,6 +5,43 @@ info:
 servers:
   - url: /api/v1
 paths:
+  /resources:
+    get: { summary: List resources, responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Resource" } } } } } } }
+    post:
+      summary: Create resource
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Resource" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Resource" } } } } }
+  /resources/{id}:
+    put:
+      summary: Update resource
+      parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Resource" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Resource" } } } } }
+    delete:
+      summary: Delete resource
+      parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "204": { description: No Content } }
+  /interventions:
+    get:
+      summary: List interventions in range
+      parameters:
+        - { in: query, name: from, required: true, schema: { type: string, format: date } }
+        - { in: query, name: to, required: true, schema: { type: string, format: date } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Intervention" } } } } } }
+    post:
+      summary: Create intervention
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Intervention" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Intervention" } } } } }
+  /interventions/{id}:
+    put:
+      summary: Update intervention
+      parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Intervention" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Intervention" } } } } }
+    delete:
+      summary: Delete intervention
+      parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "204": { description: No Content } }
   /webhooks:
     post:
       summary: Register webhook
@@ -269,6 +306,27 @@ paths:
 
 components:
   schemas:
+    Resource:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+    Intervention:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        resourceId: { type: string, format: uuid }
+        resource:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+        label: { type: string }
+        color: { type: string }
+        startDateTime: { type: string, format: date-time }
+        endDateTime: { type: string, format: date-time }
+        dateDebut: { type: string, format: date }
+        dateFin: { type: string, format: date }
     DocumentLine:
       type: object
       properties:
