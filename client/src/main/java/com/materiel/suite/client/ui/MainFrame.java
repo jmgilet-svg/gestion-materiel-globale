@@ -9,6 +9,8 @@ import com.materiel.suite.client.ui.orders.OrdersPanel;
 import com.materiel.suite.client.ui.quotes.QuotesPanel;
 import com.materiel.suite.client.ui.planning.PlanningPanel;
 import com.materiel.suite.client.ui.planning.agenda.AgendaPanel;
+import com.materiel.suite.client.ui.resources.ResourcesPanel;
+import com.materiel.suite.client.ui.crm.ClientsPanel;
 import com.materiel.suite.client.ui.theme.ThemeManager;
 import com.materiel.suite.client.ui.commands.CommandBus;
 
@@ -41,8 +43,8 @@ public class MainFrame extends JFrame {
     center.add(new OrdersPanel(), "orders");
     center.add(new DeliveryNotesPanel(), "delivery");
     center.add(new InvoicesPanel(), "invoices");
-    center.add(new JLabel("Clients (à implémenter)"), "customers");
-    center.add(new JLabel("Ressources (à implémenter)"), "resources");
+    center.add(new ResourcesPanel(), "resources");
+    center.add(new ClientsPanel(), "clients");
 
     cards.show(center, "quotes");
 
@@ -103,7 +105,7 @@ public class MainFrame extends JFrame {
     side.add(Box.createVerticalStrut(6));
     side.add(navButton("Factures", "invoices"));
     side.add(Box.createVerticalStrut(6));
-    side.add(navButton("Clients", "customers"));
+    side.add(navButton("Clients", "clients"));
     side.add(Box.createVerticalStrut(6));
     side.add(navButton("Ressources", "resources"));
     side.add(Box.createVerticalGlue());
