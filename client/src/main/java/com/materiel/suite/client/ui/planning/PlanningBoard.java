@@ -103,14 +103,6 @@ public class PlanningBoard extends JComponent {
     return menu;
   }
 
-  @Override public String getToolTipText(MouseEvent e){
-    Intervention hit = hitTile(e.getPoint());
-    if (hit==null) return null;
-    return String.format("<html><b>%s</b><br>%s → %s</html>",
-        safeLabel(hit),
-        hit.getDateDebut(), hit.getDateFin());
-  }
-
   // API publique
   /** Expose les ressources visibles pour synchroniser le RowHeader. */
   public java.util.List<Resource> getResourcesList(){ return resources; }
@@ -429,12 +421,16 @@ public class PlanningBoard extends JComponent {
   private void onMove(MouseEvent e){
     int y=0;
     hovered = null;
+    boolean anyHover = false;
     for (Resource r : resources){
       int rowH = rowHeights.getOrDefault(r.getId(), tile.heightBase()+rowGap);
       for (Intervention it : byResource.getOrDefault(r.getId(), List.of())){
         Rectangle rect = rectOf(it, y);
         if (rect.contains(e.getPoint())){
           hovered = it;
+          setToolTipText("<html><b>"+safe(it.getClientName())+"</b><br/>Chantier : "
+              +safe(it.getSiteLabel())+"<br/>"+safe(it.prettyTimeRange())+"</html>");
+          anyHover = true;
           if (Math.abs(e.getX()-rect.x) < PlanningUx.HANDLE || Math.abs(e.getX()-(rect.x+rect.width))<PlanningUx.HANDLE){
             setCursor(Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR));
           } else {
@@ -446,9 +442,12 @@ public class PlanningBoard extends JComponent {
       }
       y+=rowH;
     }
+    if (!anyHover) setToolTipText(null);
     setCursor(Cursor.getDefaultCursor());
     repaint();
   }
+
+  private static String safe(String s){ return (s==null? "—" : s); }
 
   private void onClick(MouseEvent e){
     if (e.getButton()==MouseEvent.BUTTON1 && e.getClickCount()==1){
