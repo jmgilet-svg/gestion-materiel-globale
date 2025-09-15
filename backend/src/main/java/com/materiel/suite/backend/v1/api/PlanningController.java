@@ -1,11 +1,13 @@
 package com.materiel.suite.backend.v1.api;
 
 import com.materiel.suite.backend.v1.domain.InterventionEntity;
+import com.materiel.suite.backend.v1.domain.ClientEntity;
 import com.materiel.suite.backend.v1.domain.ResourceEntity;
 import com.materiel.suite.backend.v1.domain.InterventionStatus;
 import com.materiel.suite.backend.v1.repo.InterventionRepository;
 import com.materiel.suite.backend.v1.repo.ResourceRepository;
 import com.materiel.suite.backend.v1.service.ChangeFeedService;
+import com.materiel.suite.backend.v1.repo.ClientRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
@@ -22,8 +24,9 @@ public class PlanningController {
   private final ResourceRepository resources;
   private final InterventionRepository interventions;
   private final ChangeFeedService changes;
-  public PlanningController(ResourceRepository r, InterventionRepository i, ChangeFeedService ch){
-    this.resources=r; this.interventions=i; this.changes=ch;
+  private final ClientRepository clients;
+  public PlanningController(ResourceRepository r, InterventionRepository i, ChangeFeedService ch, ClientRepository c){
+    this.resources=r; this.interventions=i; this.changes=ch; this.clients=c;
   }
 
   /* ===== Resources ===== */
@@ -130,6 +133,7 @@ public class PlanningController {
     m.put("resource", Map.of("id", i.getResource().getId().toString(), "name", i.getResource().getName()));
     m.put("label", i.getLabel());
     m.put("color", i.getColor());
+    if (i.getClient()!=null) m.put("clientId", i.getClient().getId().toString());
     if (i.getStartDateTime()!=null) m.put("startDateTime", i.getStartDateTime().toString());
     if (i.getEndDateTime()!=null) m.put("endDateTime", i.getEndDateTime().toString());
     m.put("dateDebut", i.getDateDebut()!=null? i.getDateDebut().toString() : null);
@@ -148,6 +152,12 @@ public class PlanningController {
     }
     ResourceEntity r = resources.findById(UUID.fromString(rid)).orElseThrow();
     i.setResource(r);
+    // client optionnel
+    String cid = String.valueOf(m.get("clientId"));
+    if (StringUtils.hasText(cid)){
+      ClientEntity ce = clients.findById(UUID.fromString(cid)).orElse(null);
+      i.setClient(ce);
+    }
     i.setLabel(String.valueOf(m.getOrDefault("label","")));
     Object color = m.get("color"); if (color!=null) i.setColor(String.valueOf(color));
     Object sdt = m.get("startDateTime"); if (sdt!=null) i.setStartDateTime(LocalDateTime.parse(String.valueOf(sdt)));

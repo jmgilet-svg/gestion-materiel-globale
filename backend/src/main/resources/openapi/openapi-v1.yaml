@@ -5,6 +5,19 @@ info:
 servers:
   - url: /api/v1
 paths:
+  /clients:
+    get: { summary: List clients, responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Client" } } } } } } }
+    post: { summary: Create client, requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Client" } } } }, responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Client" } } } } } }
+  /clients/{id}:
+    get: { summary: Get client, parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ], responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Client" } } } } } }
+    put: { summary: Update client, parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ], requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Client" } } } }, responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Client" } } } } } }
+    delete: { summary: Delete client, parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ], responses: { "204": { description: No Content } } }
+  /clients/{id}/contacts:
+    get: { summary: List contacts for client, parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ], responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Contact" } } } } } } }
+    post: { summary: Create contact, parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ], requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Contact" } } } }, responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Contact" } } } } } }
+  /clients/{id}/contacts/{contactId}:
+    put: { summary: Update contact, parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } }, { in: path, name: contactId, required: true, schema: { type: string, format: uuid } } ], requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Contact" } } } }, responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Contact" } } } } } }
+    delete: { summary: Delete contact, parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } }, { in: path, name: contactId, required: true, schema: { type: string, format: uuid } } ], responses: { "204": { description: No Content } } }
   /resources:
     get: { summary: List resources, responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Resource" } } } } } } }
     post:
@@ -344,6 +357,32 @@ components:
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
+        type: { type: string }
+        color: { type: string }
+        notes: { type: string }
+    Client:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        code: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        vatNumber: { type: string }
+        billingAddress: { type: string }
+        shippingAddress: { type: string }
+        notes: { type: string }
+    Contact:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        clientId: { type: string, format: uuid }
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        role: { type: string }
+        archived: { type: boolean }
     Intervention:
       type: object
       properties:
@@ -361,6 +400,7 @@ components:
         dateDebut: { type: string, format: date }
         dateFin: { type: string, format: date }
         status: { type: string, enum: [PLANNED, LOCKED, DONE, CANCELED] }
+        clientId: { type: string, format: uuid }
     DocumentLine:
       type: object
       properties:
