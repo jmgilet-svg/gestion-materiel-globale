@@ -23,16 +23,24 @@ public class OrdersPanel extends JPanel {
     JButton bEdit = new JButton("Modifier");
     JButton bDel = new JButton("Supprimer");
     JButton bToDN = new JButton("Générer BL…");
-    toolbar.add(bNew); toolbar.add(bEdit); toolbar.add(bDel); toolbar.add(Box.createHorizontalStrut(12)); toolbar.add(bToDN);
+    JButton bConfirm = new JButton("Confirmer");
+    JButton bLock = new JButton("Verrouiller");
+    JButton bCancel = new JButton("Annuler");
+    toolbar.add(bNew); toolbar.add(bEdit); toolbar.add(bDel); toolbar.add(Box.createHorizontalStrut(12));
+    toolbar.add(bToDN);
+    toolbar.add(Box.createHorizontalStrut(12));
+    toolbar.add(bConfirm); toolbar.add(bLock); toolbar.add(bCancel);
     add(toolbar, BorderLayout.NORTH);
 
-    model = new DefaultTableModel(new Object[]{"Numéro","Date","Client","Statut","HT","TVA","TTC","ID"}, 0){
+    model = new DefaultTableModel(new Object[]{"Numéro","Date","Client","Statut","HT","TVA","TTC","ID","Version"}, 0){
       @Override public boolean isCellEditable(int r,int c){ return false; }
     };
     table = new JTable(model);
     table.getColumnModel().getColumn(3).setCellRenderer(new StatusBadgeRenderer());
     table.getColumnModel().getColumn(7).setMinWidth(0);
     table.getColumnModel().getColumn(7).setMaxWidth(0);
+    table.getColumnModel().getColumn(8).setMinWidth(0);
+    table.getColumnModel().getColumn(8).setMaxWidth(0);
     add(new JScrollPane(table), BorderLayout.CENTER);
 
     bNew.addActionListener(e -> edit(null));
@@ -45,11 +53,24 @@ public class OrdersPanel extends JPanel {
         if (dn!=null) JOptionPane.showMessageDialog(this, "BL créé : "+dn.getNumber());
       }
     });
+    bConfirm.addActionListener(e -> {
+      UUID id = selectedId(); if (id!=null) call(() -> ServiceFactory.workflow().orderConfirm(id, selectedVersion()));
+    });
+    bLock.addActionListener(e -> {
+      UUID id = selectedId(); if (id!=null) call(() -> ServiceFactory.workflow().orderLock(id, selectedVersion()));
+    });
+    bCancel.addActionListener(e -> {
+      UUID id = selectedId(); if (id!=null) call(() -> ServiceFactory.workflow().orderCancel(id, selectedVersion()));
+    });
     reload();
   }
   private UUID selectedId(){
     int r = table.getSelectedRow(); if (r<0) return null;
     return java.util.UUID.fromString(model.getValueAt(r,7).toString());
+  }
+  private long selectedVersion(){
+    int r = table.getSelectedRow(); if (r<0) return 0L;
+    return Long.parseLong(model.getValueAt(r,8).toString());
   }
   public void reload(){
     model.setRowCount(0);
@@ -62,7 +83,8 @@ public class OrdersPanel extends JPanel {
           o.getTotals().getTotalHT(),
           o.getTotals().getTotalTVA(),
           o.getTotals().getTotalTTC(),
-          o.getId().toString()
+          o.getId().toString(),
+          o.getVersion()
       });
     }
   }
@@ -70,4 +92,10 @@ public class OrdersPanel extends JPanel {
     OrderEditor dlg = new OrderEditor(SwingUtilities.getWindowAncestor(this), id);
     dlg.setVisible(true); reload();
   }
+  private void call(Throwing r){
+    try { r.run(); reload(); }
+    catch(Exception ex){ JOptionPane.showMessageDialog(this, "Erreur: "+ex.getMessage()); }
+  }
+  private interface Throwing { void run() throws Exception; }
 }
+
