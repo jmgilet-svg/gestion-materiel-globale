@@ -19,6 +19,8 @@ final class PlanningUx {
   static final Color TILE_HOVER = new Color(0,0,0,20);
   static final Color TILE_SELECT = new Color(0,0,0,24);
   static final Color HATCH = new Color(0,0,0,36);
+  static final Color TILE_BG = Color.WHITE;
+  static final Color TILE_BORDER = new Color(0xDADEE3);
 
   // Métriques
   static final int COL_MIN = 80;
@@ -91,5 +93,13 @@ final class PlanningUx {
     int tx = r.x + (r.width - fm.stringWidth(text))/2;
     int ty = r.y + (r.height + fm.getAscent())/2 - 2;
     g2.drawString(text, tx, ty);
+  }
+
+  static void roundRect(Graphics2D g2, Rectangle r){
+    g2.fillRoundRect(r.x, r.y, r.width, r.height, RADIUS, RADIUS);
+  }
+
+  static void strokeRound(Graphics2D g2, Rectangle r){
+    g2.drawRoundRect(r.x, r.y, r.width, r.height, RADIUS, RADIUS);
   }
 }
