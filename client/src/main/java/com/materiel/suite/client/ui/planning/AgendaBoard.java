@@ -150,8 +150,9 @@ public class AgendaBoard extends JComponent {
       int rowH = rowHeights.get(r.getId());
       g2.setColor(PlanningUx.ROW_DIV); // FIX: row divider
       g2.drawLine(0,y+rowH-1,getWidth(),y+rowH-1);
-
-      for (Intervention it : byResource.getOrDefault(r.getId(), List.of())){
+      var list = byResource.getOrDefault(r.getId(), List.of());
+      highlightConflicts(g2, list, y);
+      for (Intervention it : list){
         Rectangle rect = rectOf(it, y);
         paintTile(g2, it, rect);
       }
@@ -184,6 +185,31 @@ public class AgendaBoard extends JComponent {
       int baseline = r.y + Math.min(r.height-6, Math.max(14, g2.getFontMetrics().getAscent()+2));
       g2.drawString(label, r.x+10, baseline);
       g2.setClip(null);
+    }
+  }
+
+  /** Draw dashed red borders around overlapping interventions of a resource row. */
+  private void highlightConflicts(Graphics2D g2, List<Intervention> list, int rowTop){
+    for (int i=0;i<list.size();i++){
+      Intervention a = list.get(i);
+      LocalDateTime as = a.getDateHeureDebut();
+      LocalDateTime ae = a.getDateHeureFin();
+      for (int j=i+1;j<list.size();j++){
+        Intervention b = list.get(j);
+        LocalDateTime bs = b.getDateHeureDebut();
+        LocalDateTime be = b.getDateHeureFin();
+        boolean overlap = !ae.isBefore(bs) && !be.isBefore(as);
+        if (overlap){
+          Rectangle ra = rectOf(a, rowTop);
+          Rectangle rb = rectOf(b, rowTop);
+          Stroke old = g2.getStroke();
+          g2.setStroke(new BasicStroke(2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 1f, new float[]{4f,4f}, 0f));
+          g2.setColor(new Color(0xCC3333));
+          g2.draw(ra);
+          g2.draw(rb);
+          g2.setStroke(old);
+        }
+      }
     }
   }
 
