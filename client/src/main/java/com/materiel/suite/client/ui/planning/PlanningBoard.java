@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.*;
 import java.util.stream.Collectors;
+import com.materiel.suite.client.ui.MainFrame;
 
 public class PlanningBoard extends JComponent {
   // Modèle de données & état
@@ -76,6 +77,17 @@ public class PlanningBoard extends JComponent {
 
   private JPopupMenu buildContextMenu(){
     JPopupMenu menu = new JPopupMenu();
+    JMenu open = new JMenu("Ouvrir…");
+    JMenuItem openQ = new JMenuItem("Devis");
+    JMenuItem openO = new JMenuItem("Commande");
+    JMenuItem openD = new JMenuItem("Bon de livraison");
+    JMenuItem openI = new JMenuItem("Facture");
+    openQ.addActionListener(a -> navigate("quotes"));
+    openO.addActionListener(a -> navigate("orders"));
+    openD.addActionListener(a -> navigate("delivery"));
+    openI.addActionListener(a -> navigate("invoices"));
+    open.add(openQ); open.add(openO); open.add(openD); open.add(openI);
+
     JMenuItem miEdit = new JMenuItem("Renommer…");
     miEdit.addActionListener(e -> {
       if (selected==null) return;
@@ -97,8 +109,17 @@ public class PlanningBoard extends JComponent {
         reload();
       }
     });
+    JMenuItem dup  = new JMenuItem("Dupliquer");
+    JMenuItem lock = new JMenuItem("Verrouiller");
+    dup.addActionListener(a -> JOptionPane.showMessageDialog(this,"Duplication (à brancher)"));
+    lock.addActionListener(a -> JOptionPane.showMessageDialog(this,"Verrouillage (à brancher)"));
+    menu.add(open);
+    menu.addSeparator();
     menu.add(miEdit);
     menu.add(miDelete);
+    menu.addSeparator();
+    menu.add(dup);
+    menu.add(lock);
     return menu;
   }
 
@@ -313,6 +334,11 @@ public class PlanningBoard extends JComponent {
       y+=rowH;
     }
     return null;
+  }
+
+  private void navigate(String key){
+    var w = SwingUtilities.getWindowAncestor(this);
+    if (w instanceof MainFrame mf) mf.openCard(key);
   }
 
   // DnD handlers

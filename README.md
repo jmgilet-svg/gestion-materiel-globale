@@ -21,6 +21,12 @@ Monorepo Maven (Java 17) avec deux modules :
 - **Tuiles adaptatives** (rendu responsive selon largeur/hauteur), **menu contextuel** (ouvrir/dupliquer/verrouiller placeholder).
 - **Sélecteur de densité** (Compact / Normal / Spacieux), DnD plus stable (seuil, curseurs), entête de ligne **synchronisée** avec la grille.
 
+## Sprint C.1 — Vue Agenda 15 min
+- Nouvelle vue **Agenda** (colonnes = ressources, durée **verticale**, pas **15 min**), création rapide par clic, DnD vertical + changement de ressource par glisser horizontal.
+- Règle horaire configurable (début/fin de journée).
+- Menu contextuel **branché** vers les écrans Devis / Commandes / BL / Factures (navigation via `MainFrame.openCard`).
+- Modèle `Intervention`: champs optionnels `startDateTime/endDateTime` pour la granularité 15 min (fallback automatique si non renseignés).
+
 ### ❗️Dépendance `com.materiel:gestion-materiel:1.0.0-SNAPSHOT` introuvable
 Si vous voyez :
 ```
