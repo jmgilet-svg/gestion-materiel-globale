@@ -44,8 +44,7 @@ public class PlanningBoard extends JComponent {
   private int rowGap = PlanningUx.ROW_GAP;
   private boolean compact = false; // compat
 
-  public enum Density { COMPACT, NORMAL, ROOMY }
-  private Density density = Density.NORMAL;
+  private UiDensity density = UiDensity.NORMAL;
 
   // DnD state
   private Intervention dragItem;
@@ -112,10 +111,10 @@ public class PlanningBoard extends JComponent {
   public int getSlotMinutes(){ return slotMinutes; }
   public boolean isCompact(){ return compact; }
   public void setCompact(boolean c){ this.compact = c; this.tile.setCompact(c); reload(); }
-  public Density getDensity(){ return density; }
-  public void setDensity(Density d){
+  public UiDensity getDensity(){ return density; }
+  public void setDensity(UiDensity d){
     this.density = d;
-    this.compact = (d == Density.COMPACT);
+    this.compact = (d == UiDensity.COMPACT);
     this.tile.setCompact(this.compact);
     this.tile.setDensity(d);
     reload();
