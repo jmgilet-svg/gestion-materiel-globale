@@ -360,6 +360,9 @@ components:
         type: { type: string }
         color: { type: string }
         notes: { type: string }
+        capacity: { type: integer, minimum: 1 }
+        tags: { type: string, description: "Liste CSV simple" }
+        weeklyUnavailability: { type: string, description: "Ex: MON 08:00-12:00; TUE 13:00-17:00" }
     Client:
       type: object
       properties:
