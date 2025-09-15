@@ -32,6 +32,32 @@ paths:
       summary: Create intervention
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Intervention" } } } }
       responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Intervention" } } } } }
+  /interventions/validate:
+    post:
+      summary: Validate intervention and return suggestions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Intervention" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  suggestions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        resourceId: { type: string, format: uuid }
+                        startDateTime: { type: string, format: date-time }
+                        endDateTime: { type: string, format: date-time }
+                        label: { type: string }
   /interventions/{id}:
     put:
       summary: Update intervention
@@ -42,6 +68,13 @@ paths:
       summary: Delete intervention
       parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ]
       responses: { "204": { description: No Content } }
+  /interventions/{id}/duplicate:
+    post:
+      summary: Duplicate intervention by N days
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+        - { in: query, name: days, required: false, schema: { type: integer, default: 7 } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Intervention" } } } } }
   /webhooks:
     post:
       summary: Register webhook
@@ -327,6 +360,7 @@ components:
         endDateTime: { type: string, format: date-time }
         dateDebut: { type: string, format: date }
         dateFin: { type: string, format: date }
+        status: { type: string, enum: [PLANNED, LOCKED, DONE, CANCELED] }
     DocumentLine:
       type: object
       properties:

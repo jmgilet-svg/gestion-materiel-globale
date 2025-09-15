@@ -2,6 +2,7 @@ package com.materiel.suite.backend.v1.api;
 
 import com.materiel.suite.backend.v1.domain.InterventionEntity;
 import com.materiel.suite.backend.v1.domain.ResourceEntity;
+import com.materiel.suite.backend.v1.domain.InterventionStatus;
 import com.materiel.suite.backend.v1.repo.InterventionRepository;
 import com.materiel.suite.backend.v1.repo.ResourceRepository;
 import com.materiel.suite.backend.v1.service.ChangeFeedService;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -72,6 +74,54 @@ public class PlanningController {
     return ResponseEntity.noContent().build();
   }
 
+  /* ===== Validation & duplication ===== */
+  @PostMapping("/interventions/validate")
+  public Map<String,Object> validate(@RequestBody Map<String,Object> body){
+    InterventionEntity i = fromDto(body);
+    // locked/done => refuse déplacement
+    if (i.getStatus()==InterventionStatus.LOCKED || i.getStatus()==InterventionStatus.DONE){
+      return Map.of("ok", false, "suggestions", List.of());
+    }
+    var overlaps = interventions.overlapByResource(i.getResource(), i.getStartDateTime(), i.getEndDateTime())
+        .stream().filter(o -> !o.getId().equals(i.getId())).toList();
+    if (overlaps.isEmpty()) return Map.of("ok", true, "suggestions", List.of());
+    // suggestions : 1) placer après le dernier overlap
+    LocalDateTime latest = overlaps.stream().map(InterventionEntity::getEndDateTime).max(LocalDateTime::compareTo).orElse(i.getEndDateTime());
+    Duration dur = Duration.between(i.getStartDateTime(), i.getEndDateTime());
+    Map<String,Object> s1 = Map.of(
+        "label", "Décaler après le créneau suivant",
+        "resourceId", i.getResource().getId().toString(),
+        "startDateTime", latest.toString(),
+        "endDateTime", latest.plus(dur).toString()
+    );
+    // 2) première autre ressource libre
+    List<Map<String,Object>> sug = new ArrayList<>();
+    sug.add(s1);
+    for (ResourceEntity r : resources.findAll()){
+      if (r.getId().equals(i.getResource().getId())) continue;
+      var ol = interventions.overlapByResource(r, i.getStartDateTime(), i.getEndDateTime());
+      if (ol.isEmpty()){ sug.add(Map.of("label","Basculer sur "+r.getName(), "resourceId", r.getId().toString(),
+          "startDateTime", i.getStartDateTime().toString(), "endDateTime", i.getEndDateTime().toString())); break; }
+    }
+    return Map.of("ok", false, "suggestions", sug);
+  }
+
+  @PostMapping("/interventions/{id}/duplicate")
+  public Map<String,Object> duplicate(@PathVariable UUID id, @RequestParam(defaultValue = "7") int days){
+    InterventionEntity src = interventions.findById(id).orElseThrow();
+    InterventionEntity c = new InterventionEntity();
+    c.setId(UUID.randomUUID());
+    c.setResource(src.getResource());
+    c.setLabel(src.getLabel()+" (copie)");
+    c.setColor(src.getColor());
+    c.setStartDateTime(src.getStartDateTime().plusDays(days));
+    c.setEndDateTime(src.getEndDateTime().plusDays(days));
+    c.setStatus(src.getStatus());
+    c = interventions.save(c);
+    changes.emit("INTERVENTION_CREATED", c.getId().toString(), Map.of("resourceId", c.getResource().getId().toString()));
+    return toDto(c);
+  }
+
   /* ===== Mapping ===== */
   private Map<String,Object> toDto(InterventionEntity i){
     Map<String,Object> m = new LinkedHashMap<>();
@@ -84,6 +134,7 @@ public class PlanningController {
     if (i.getEndDateTime()!=null) m.put("endDateTime", i.getEndDateTime().toString());
     m.put("dateDebut", i.getDateDebut()!=null? i.getDateDebut().toString() : null);
     m.put("dateFin", i.getDateFin()!=null? i.getDateFin().toString() : null);
+    m.put("status", i.getStatus().name());
     return m;
   }
   private InterventionEntity fromDto(Map<String,Object> m){
@@ -104,6 +155,8 @@ public class PlanningController {
     // Fallback si pas d'heure
     if (i.getStartDateTime()==null) i.setStartDateTime(LocalDate.now().atTime(8,0));
     if (i.getEndDateTime()==null) i.setEndDateTime(i.getStartDateTime().plusHours(1));
+    Object st = m.get("status");
+    if (st!=null) i.setStatus(InterventionStatus.valueOf(String.valueOf(st)));
     return i;
   }
 }
