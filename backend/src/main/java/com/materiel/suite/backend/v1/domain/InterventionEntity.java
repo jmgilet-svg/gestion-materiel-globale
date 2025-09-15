@@ -14,6 +14,8 @@ public class InterventionEntity {
   @ManyToOne(optional=false)
   @JoinColumn(name="resource_id")
   private ResourceEntity resource;
+  @ManyToOne(optional = true) @JoinColumn(name="client_id")
+  private ClientEntity client;
   @Column(nullable=false)
   private String label;
   private String color;
@@ -35,6 +37,8 @@ public class InterventionEntity {
   public void setId(UUID id){ this.id=id; }
   public ResourceEntity getResource(){ return resource; }
   public void setResource(ResourceEntity resource){ this.resource=resource; }
+  public ClientEntity getClient(){ return client; }
+  public void setClient(ClientEntity c){ this.client=c; }
   public String getLabel(){ return label; }
   public void setLabel(String label){ this.label=label; }
   public String getColor(){ return color; }
