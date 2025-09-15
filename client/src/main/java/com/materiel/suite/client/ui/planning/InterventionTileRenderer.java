@@ -15,6 +15,10 @@ final class InterventionTileRenderer {
   private PlanningBoard.Density density = PlanningBoard.Density.NORMAL;
   private double scaleY = 1.0;
 
+  // States
+  private static final Color SEL_BORDER = new Color(0x1F4FD8);
+  private static final Color HOVER_BORDER = new Color(0x94A3B8);
+
   // Tiers de rendu selon l'espace disponible
   enum Tier { XS, SM, MD, LG }
   private Tier tierFor(Rectangle r){
@@ -135,7 +139,22 @@ final class InterventionTileRenderer {
     return lines.toArray(new String[0]);
   }
 
+  // --- Compatibilité avec anciens appels ---
+  // Ancien ordre : (g2, rect, it, selected, hovered)
+  void paint(Graphics2D g2, Rectangle r, Intervention it, boolean selected, boolean hovered){
+    paint(g2, it, r, selected, hovered);
+  }
+  // Ancien ordre sans flags
+  void paint(Graphics2D g2, Rectangle r, Intervention it){
+    paint(g2, it, r, false, false);
+  }
+  // Nouveau ordre "canonique" sans flags
   void paint(Graphics2D g2, Intervention it, Rectangle r){
+    paint(g2, it, r, false, false);
+  }
+
+  // Rendu principal avec états
+  void paint(Graphics2D g2, Intervention it, Rectangle r, boolean selected, boolean hovered){
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
     Tier tier = tierFor(r);
@@ -143,8 +162,17 @@ final class InterventionTileRenderer {
     // Carte
     g2.setColor(PlanningUx.TILE_BG);
     PlanningUx.roundRect(g2, r);
-    g2.setColor(PlanningUx.TILE_BORDER);
-    PlanningUx.strokeRound(g2, r);
+    // bord dynamique
+    Color border = selected ? SEL_BORDER : (hovered ? HOVER_BORDER : PlanningUx.TILE_BORDER);
+    g2.setColor(border);
+    if (selected){
+      var old = g2.getStroke();
+      g2.setStroke(new BasicStroke(2f));
+      PlanningUx.strokeRound(g2, r);
+      g2.setStroke(old);
+    } else {
+      PlanningUx.strokeRound(g2, r);
+    }
 
     int x = r.x + PAD;
     int y = r.y + PAD + 12;
@@ -156,6 +184,20 @@ final class InterventionTileRenderer {
     g2.drawString(time, x, y+2);
     int timeW = g2.getFontMetrics().stringWidth(time);
     g2.setFont(f0);
+
+    // Cadenas si verrouillé (si champ présent)
+    boolean locked = false;
+    try {
+      var m = it.getClass().getMethod("isLocked");
+      locked = Boolean.TRUE.equals(m.invoke(it));
+    } catch(Exception ignore){}
+    if (locked){
+      int lx = r.x + r.width - 20;
+      int ly = r.y + 8;
+      g2.setColor(new Color(0x374151));
+      g2.drawRect(lx, ly, 10, 8);
+      g2.drawLine(lx+2, ly, lx+8, ly);
+    }
 
     // Pills status / agence si place
     int cursorX = x + (tier==Tier.XS? 8 : timeW + 12);
