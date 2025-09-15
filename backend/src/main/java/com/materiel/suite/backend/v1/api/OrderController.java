@@ -5,6 +5,7 @@ import com.materiel.suite.backend.v1.repo.OrderRepository;
 import com.materiel.suite.backend.v1.service.ChangeFeedService;
 import com.materiel.suite.backend.v1.service.IdempotencyService;
 import com.materiel.suite.backend.v1.service.TotalsCalculator;
+import com.materiel.suite.backend.v1.service.DocumentStateMachine;
 import com.materiel.suite.backend.v1.util.Etags;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -21,6 +22,7 @@ public class OrderController {
   private final TotalsCalculator totals;
   private final IdempotencyService idem;
   private final ChangeFeedService changes;
+  private final DocumentStateMachine sm = new DocumentStateMachine();
 
   public OrderController(OrderRepository repo, TotalsCalculator totals, IdempotencyService idem, ChangeFeedService changes){
     this.repo = repo; this.totals = totals; this.idem = idem; this.changes = changes;
@@ -64,6 +66,36 @@ public class OrderController {
     var saved = repo.save(cur);
     changes.emit("ORDER_UPDATED", saved.getId().toString(), Map.of("version", saved.getVersion()));
     return ResponseEntity.ok().eTag(Etags.weakOfVersion(saved.getVersion())).header(HttpHeaders.CACHE_CONTROL,"no-store").body(saved);
+  }
+
+  /* ===== Transitions ===== */
+  @PostMapping("/{id}:confirm")
+  public ResponseEntity<OrderEntity> confirm(@PathVariable UUID id, @RequestHeader("If-Match") String ifMatch){
+    return transition(id, ifMatch, DocumentStateMachine.Action.CONFIRM, "ORDER_CONFIRMED");
+  }
+  @PostMapping("/{id}:cancel")
+  public ResponseEntity<OrderEntity> cancel(@PathVariable UUID id, @RequestHeader("If-Match") String ifMatch){
+    return transition(id, ifMatch, DocumentStateMachine.Action.CANCEL, "ORDER_CANCELED");
+  }
+  @PostMapping("/{id}:lock")
+  public ResponseEntity<OrderEntity> lock(@PathVariable UUID id, @RequestHeader("If-Match") String ifMatch){
+    return transition(id, ifMatch, DocumentStateMachine.Action.LOCK, "ORDER_LOCKED");
+  }
+
+  private ResponseEntity<OrderEntity> transition(UUID id, String ifMatch, DocumentStateMachine.Action action, String eventType){
+    var cur = repo.findById(id).orElse(null);
+    if (cur==null) return ResponseEntity.notFound().build();
+    if (!Etags.matches(ifMatch, Etags.weakOfVersion(cur.getVersion()))) return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED).build();
+    try {
+      var next = sm.next(cur.getStatus(), action);
+      cur.setStatus(next);
+      cur.setVersion(cur.getVersion()+1);
+      var saved = repo.save(cur);
+      changes.emit(eventType, saved.getId().toString(), Map.of("status", next.name()));
+      return ResponseEntity.ok().eTag(Etags.weakOfVersion(saved.getVersion())).header(HttpHeaders.CACHE_CONTROL,"no-store").body(saved);
+    } catch(IllegalStateException ex){
+      return ResponseEntity.status(HttpStatus.CONFLICT).build();
+    }
   }
 
   @DeleteMapping("/{id}")

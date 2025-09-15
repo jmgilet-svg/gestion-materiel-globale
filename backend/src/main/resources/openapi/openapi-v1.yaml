@@ -1,33 +1,23 @@
 openapi: 3.0.3
 info:
   title: Gestion Matériel API
-  version: "1.0"
-  description: >
-    API v1 — Devis/Commandes/BL/Factures (fondations), Planning, Sync.
-    ETags (If-Match) pour updates, Idempotency-Key pour POST, Change Feed pour offline.
+  version: "1.0.0"
 servers:
   - url: /api/v1
 paths:
-  /openapi.yaml:
-    get:
-      summary: Serve this OpenAPI document
-      responses:
-        "200":
-          description: OK
   /quotes:
     get:
       summary: List quotes
-      parameters:
-        - in: query
-          name: q
-          schema: { type: string }
-        - in: query
-          name: status
-          schema: { $ref: '#/components/schemas/DocumentStatus' }
       responses:
-        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Quote' } } } } }
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Quote" }
     post:
-      summary: Create quote (Idempotency-Key supported)
+      summary: Create quote
       parameters:
         - in: header
           name: Idempotency-Key
@@ -36,27 +26,34 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/Quote' }
+            schema: { $ref: "#/components/schemas/Quote" }
       responses:
-        "201": { description: Created, headers: { ETag: { schema: { type: string } } }, content: { application/json: { schema: { $ref: '#/components/schemas/Quote' } } } }
+        "201":
+          description: Created
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quote" }
   /quotes/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
     get:
       summary: Get quote
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string, format: uuid }
       responses:
-        "200": { description: OK, headers: { ETag: { schema: { type: string } } }, content: { application/json: { schema: { $ref: '#/components/schemas/Quote' } } } }
-        "404": { description: Not Found }
+        "200":
+          description: OK
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quote" }
     put:
-      summary: Update quote (If-Match required)
+      summary: Update quote
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string, format: uuid }
         - in: header
           name: If-Match
           required: true
@@ -65,113 +62,154 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/Quote' }
+            schema: { $ref: "#/components/schemas/Quote" }
       responses:
-        "200": { description: OK, headers: { ETag: { schema: { type: string } } }, content: { application/json: { schema: { $ref: '#/components/schemas/Quote' } } } }
-        "404": { description: Not Found }
+        "200": { description: OK }
         "412": { description: Precondition Failed }
-        "428": { description: Precondition Required }
     delete:
-      summary: Delete quote (If-Match required)
+      summary: Delete quote
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string, format: uuid }
         - in: header
           name: If-Match
           required: true
           schema: { type: string }
       responses:
         "204": { description: No Content }
-        "404": { description: Not Found }
-        "412": { description: Precondition Failed }
-        "428": { description: Precondition Required }
-  /quotes/{id}:send:
-    post:
-      summary: Transition DRAFT->SENT
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string, format: uuid }
-        - in: header
-          name: If-Match
-          required: true
-          schema: { type: string }
-      responses:
-        "200": { description: OK }
-        "409": { description: Invalid transition }
-  /quotes/{id}:accept:
-    post:
-      summary: Transition SENT->ACCEPTED
-      parameters:
-        - $ref: '#/components/parameters/IdParam'
-        - $ref: '#/components/parameters/IfMatch'
-      responses:
-        "200": { description: OK }
-        "409": { description: Invalid transition }
-  /quotes/{id}:refuse:
-    post:
-      summary: Transition SENT->REFUSED
-      parameters:
-        - $ref: '#/components/parameters/IdParam'
-        - $ref: '#/components/parameters/IfMatch'
-      responses:
-        "200": { description: OK }
-        "409": { description: Invalid transition }
-  /quotes/{id}:lock:
-    post:
-      summary: LOCKED
-      parameters:
-        - $ref: '#/components/parameters/IdParam'
-        - $ref: '#/components/parameters/IfMatch'
-      responses:
-        "200": { description: OK }
-  /sync/changes:
+
+  /orders:
     get:
-      summary: Change feed since a cursor (epoch ms)
-      parameters:
-        - in: query
-          name: since
-          schema: { type: integer, format: int64 }
+      summary: List orders
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  cursor: { type: integer, format: int64 }
-                  events:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        cursor: { type: integer, format: int64 }
-                        type: { type: string }
-                        id: { type: string }
-                        at: { type: integer, format: int64 }
-                        payload: { type: object }
+                type: array
+                items: { $ref: "#/components/schemas/Order" }
+    post:
+      summary: Create order
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Order" }
+      responses:
+        "201": { description: Created }
+  /orders/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      summary: Get order
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+    put:
+      summary: Update order
+      parameters:
+        - in: header
+          name: If-Match
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Order" }
+      responses:
+        "200": { description: OK }
+        "412": { description: Precondition Failed }
+    delete:
+      summary: Delete order
+      parameters:
+        - in: header
+          name: If-Match
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: No Content }
+  /orders/{id}:confirm:
+    post: { summary: Confirm order, responses: { "200": { description: OK }, "409": { description: Conflict }, "412": { description: Precondition Failed } } }
+  /orders/{id}:lock:
+    post: { summary: Lock order, responses: { "200": { description: OK }, "409": { description: Conflict }, "412": { description: Precondition Failed } } }
+  /orders/{id}:cancel:
+    post: { summary: Cancel order, responses: { "200": { description: OK }, "409": { description: Conflict }, "412": { description: Precondition Failed } } }
+
+  /delivery-notes:
+    get:
+      summary: List delivery notes
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DeliveryNote" }
+    post:
+      summary: Create delivery note
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeliveryNote" }
+      responses:
+        "201": { description: Created }
+  /delivery-notes/{id}:deliver:
+    post: { summary: Mark as delivered, responses: { "200": { description: OK }, "409": { description: Conflict }, "412": { description: Precondition Failed } } }
+  /delivery-notes/{id}:lock:
+    post: { summary: Lock delivery note, responses: { "200": { description: OK }, "409": { description: Conflict }, "412": { description: Precondition Failed } } }
+  /delivery-notes/{id}:cancel:
+    post: { summary: Cancel delivery note, responses: { "200": { description: OK }, "409": { description: Conflict }, "412": { description: Precondition Failed } } }
+
+  /invoices:
+    get:
+      summary: List invoices
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Invoice" }
+    post:
+      summary: Create invoice
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Invoice" }
+      responses:
+        "201": { description: Created }
+  /invoices/{id}:issue:
+    post: { summary: Issue invoice, responses: { "200": { description: OK }, "409": { description: Conflict }, "412": { description: Precondition Failed } } }
+  /invoices/{id}:pay:
+    post: { summary: Mark paid, responses: { "200": { description: OK }, "409": { description: Conflict }, "412": { description: Precondition Failed } } }
+  /invoices/{id}:cancel:
+    post: { summary: Cancel invoice, responses: { "200": { description: OK }, "409": { description: Conflict }, "412": { description: Precondition Failed } } }
 
 components:
-  parameters:
-    IdParam:
-      in: path
-      name: id
-      required: true
-      schema: { type: string, format: uuid }
-    IfMatch:
-      in: header
-      name: If-Match
-      required: true
-      schema: { type: string }
   schemas:
-    DocumentStatus:
-      type: string
-      enum: [DRAFT, SENT, ACCEPTED, REFUSED, LOCKED, ARCHIVED]
-    DocLine:
+    DocumentLine:
       type: object
       properties:
         designation: { type: string }
@@ -180,21 +218,30 @@ components:
         unitPrice: { type: number }
         discountPct: { type: number }
         vatPct: { type: number }
-        lineHt: { type: number }
-        lineVat: { type: number }
-        lineTtc: { type: number }
-    Quote:
+    BaseDoc:
       type: object
       properties:
         id: { type: string, format: uuid }
         number: { type: string }
         customerName: { type: string }
-        status: { $ref: '#/components/schemas/DocumentStatus' }
-        lines:
-          type: array
-          items: { $ref: '#/components/schemas/DocLine' }
+        status: { type: string, enum: [DRAFT, SENT, ACCEPTED, REFUSED, CONFIRMED, DELIVERED, ISSUED, PAID, CANCELED, LOCKED] }
+        version: { type: integer }
         totalHt: { type: number }
         totalVat: { type: number }
         totalTtc: { type: number }
-        version: { type: integer, format: int64 }
-        updatedAt: { type: string, format: date-time }
+        lines:
+          type: array
+          items: { $ref: "#/components/schemas/DocumentLine" }
+    Quote:
+      allOf:
+        - $ref: "#/components/schemas/BaseDoc"
+    Order:
+      allOf:
+        - $ref: "#/components/schemas/BaseDoc"
+    DeliveryNote:
+      allOf:
+        - $ref: "#/components/schemas/BaseDoc"
+    Invoice:
+      allOf:
+        - $ref: "#/components/schemas/BaseDoc"
+

@@ -5,6 +5,11 @@ public enum DocumentStatus {
   SENT,
   ACCEPTED,
   REFUSED,
+  CONFIRMED,
+  DELIVERED,
+  ISSUED,
+  PAID,
+  CANCELED,
   LOCKED,
   ARCHIVED;
 
@@ -16,6 +21,7 @@ public enum DocumentStatus {
       case REFUSED -> target==ARCHIVED;
       case LOCKED -> target==ARCHIVED;
       case ARCHIVED -> false;
+      default -> false; // For other statuses, transitions handled elsewhere
     };
   }
 }

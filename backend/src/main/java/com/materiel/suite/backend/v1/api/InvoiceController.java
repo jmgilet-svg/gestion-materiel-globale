@@ -4,11 +4,14 @@ import com.materiel.suite.backend.v1.domain.*;
 import com.materiel.suite.backend.v1.repo.InvoiceRepository;
 import com.materiel.suite.backend.v1.service.ChangeFeedService;
 import com.materiel.suite.backend.v1.service.TotalsCalculator;
+import com.materiel.suite.backend.v1.service.DocumentStateMachine;
+import com.materiel.suite.backend.v1.service.IdempotencyService;
 import com.materiel.suite.backend.v1.util.Etags;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.util.StringUtils;
 
 import java.util.*;
 
@@ -18,8 +21,10 @@ public class InvoiceController {
   private final InvoiceRepository repo;
   private final TotalsCalculator totals;
   private final ChangeFeedService changes;
-  public InvoiceController(InvoiceRepository repo, TotalsCalculator totals, ChangeFeedService changes){
-    this.repo = repo; this.totals = totals; this.changes = changes;
+  private final DocumentStateMachine sm = new DocumentStateMachine();
+  private final IdempotencyService idem;
+  public InvoiceController(InvoiceRepository repo, TotalsCalculator totals, ChangeFeedService changes, IdempotencyService idem){
+    this.repo = repo; this.totals = totals; this.changes = changes; this.idem = idem;
   }
 
   @GetMapping public ResponseEntity<List<InvoiceEntity>> list(){
@@ -33,11 +38,17 @@ public class InvoiceController {
   }
 
   @PostMapping
-  public ResponseEntity<InvoiceEntity> create(@RequestBody InvoiceEntity i){
+  public ResponseEntity<InvoiceEntity> create(@RequestHeader(value="Idempotency-Key", required=false) String idk,
+                                              @RequestBody InvoiceEntity i){
+    if (StringUtils.hasText(idk)){
+      var ex = idem.findExisting("POST:/api/v1/invoices", idk, InvoiceEntity.class);
+      if (ex!=null) return ResponseEntity.ok().eTag(Etags.weakOfVersion(ex.getVersion())).header(HttpHeaders.CACHE_CONTROL,"no-store").body(ex);
+    }
     if (i.getId()==null) i.setId(UUID.randomUUID());
     sanitize(i); totals.recomputeTotals(i); i.setVersion(1);
     var saved = repo.save(i);
     changes.emit("INVOICE_CREATED", saved.getId().toString(), Map.of("number", saved.getNumber()));
+    if (StringUtils.hasText(idk)) idem.remember("POST:/api/v1/invoices", idk, saved);
     return ResponseEntity.status(HttpStatus.CREATED).eTag(Etags.weakOfVersion(saved.getVersion())).header(HttpHeaders.CACHE_CONTROL,"no-store").body(saved);
   }
 
@@ -52,6 +63,33 @@ public class InvoiceController {
     var saved = repo.save(cur);
     changes.emit("INVOICE_UPDATED", saved.getId().toString(), Map.of("version", saved.getVersion()));
     return ResponseEntity.ok().eTag(Etags.weakOfVersion(saved.getVersion())).header(HttpHeaders.CACHE_CONTROL,"no-store").body(saved);
+  }
+
+  /* ===== Transitions ===== */
+  @PostMapping("/{id}:issue")
+  public ResponseEntity<InvoiceEntity> issue(@PathVariable UUID id, @RequestHeader("If-Match") String ifMatch){
+    return transition(id, ifMatch, DocumentStateMachine.Action.ISSUE, "INVOICE_ISSUED");
+  }
+  @PostMapping("/{id}:pay")
+  public ResponseEntity<InvoiceEntity> pay(@PathVariable UUID id, @RequestHeader("If-Match") String ifMatch){
+    return transition(id, ifMatch, DocumentStateMachine.Action.PAY, "INVOICE_PAID");
+  }
+  @PostMapping("/{id}:cancel")
+  public ResponseEntity<InvoiceEntity> cancel(@PathVariable UUID id, @RequestHeader("If-Match") String ifMatch){
+    return transition(id, ifMatch, DocumentStateMachine.Action.CANCEL, "INVOICE_CANCELED");
+  }
+
+  private ResponseEntity<InvoiceEntity> transition(UUID id, String ifMatch, DocumentStateMachine.Action action, String evt){
+    var cur = repo.findById(id).orElse(null);
+    if (cur==null) return ResponseEntity.notFound().build();
+    if (!Etags.matches(ifMatch, Etags.weakOfVersion(cur.getVersion()))) return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED).build();
+    try {
+      var next = sm.next(cur.getStatus(), action);
+      cur.setStatus(next); cur.setVersion(cur.getVersion()+1);
+      var saved = repo.save(cur);
+      changes.emit(evt, saved.getId().toString(), Map.of("status", next.name()));
+      return ResponseEntity.ok().eTag(Etags.weakOfVersion(saved.getVersion())).header(HttpHeaders.CACHE_CONTROL,"no-store").body(saved);
+    } catch(IllegalStateException ex){ return ResponseEntity.status(HttpStatus.CONFLICT).build(); }
   }
 
   @DeleteMapping("/{id}")
