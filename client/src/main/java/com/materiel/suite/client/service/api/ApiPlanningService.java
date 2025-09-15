@@ -6,6 +6,7 @@ import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.net.RestClient;
 import com.materiel.suite.client.net.SimpleJson;
 import com.materiel.suite.client.service.PlanningService;
+import com.materiel.suite.client.service.PlanningValidation;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -90,6 +91,31 @@ public class ApiPlanningService implements PlanningService {
     fb.deleteIntervention(id);
   }
 
+  @Override public PlanningValidation validate(Intervention i){
+    try {
+      String body = rc.post("/api/v1/interventions/validate", toJson(toMap(i)));
+      var m = SimpleJson.asObj(SimpleJson.parse(body));
+      PlanningValidation v = new PlanningValidation();
+      v.ok = SimpleJson.bool(m.get("ok"));
+      var arr = SimpleJson.asArr(m.get("suggestions"));
+      for (Object o : arr){
+        var mm = SimpleJson.asObj(o);
+        PlanningValidation.Suggestion s = new PlanningValidation.Suggestion();
+        String rid = SimpleJson.str(mm.get("resourceId"));
+        if (rid!=null && !rid.isBlank()) s.resourceId = UUID.fromString(rid);
+        String sdt = SimpleJson.str(mm.get("startDateTime"));
+        String edt = SimpleJson.str(mm.get("endDateTime"));
+        if (sdt!=null && !sdt.isBlank()) s.startDateTime = LocalDateTime.parse(sdt);
+        if (edt!=null && !edt.isBlank()) s.endDateTime = LocalDateTime.parse(edt);
+        s.label = SimpleJson.str(mm.get("label"));
+        v.suggestions.add(s);
+      }
+      return v;
+    } catch(Exception e){
+      return PlanningService.super.validate(i);
+    }
+  }
+
   @Override public List<Conflict> listConflicts(LocalDate from, LocalDate to){
     try {
       String body = rc.get("/api/v1/planning/conflicts?from="+DF.format(from)+"&to="+DF.format(to));
@@ -151,6 +177,7 @@ public class ApiPlanningService implements PlanningService {
     if (it.getDateFin()!=null) m.put("dateFin", it.getDateFin().toString());
     if (it.getStartDateTime()!=null) m.put("startDateTime", it.getStartDateTime().format(DTF));
     if (it.getEndDateTime()!=null) m.put("endDateTime", it.getEndDateTime().format(DTF));
+    if (it.getStatus()!=null) m.put("status", it.getStatus());
     return m;
   }
 
@@ -176,6 +203,8 @@ public class ApiPlanningService implements PlanningService {
       if (sdt!=null && !sdt.isBlank()) it.setDateHeureDebut(LocalDateTime.parse(sdt));
       if (edt!=null && !edt.isBlank()) it.setDateHeureFin(LocalDateTime.parse(edt));
     } catch(Exception ignore){}
+    String st = SimpleJson.str(m.get("status"));
+    if (st!=null && !st.isBlank()) it.setStatus(st);
     return it;
   }
 

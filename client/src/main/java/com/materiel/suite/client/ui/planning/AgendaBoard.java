@@ -3,6 +3,7 @@ package com.materiel.suite.client.ui.planning;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.net.ServiceFactory;
+import com.materiel.suite.client.service.PlanningValidation;
 
 import javax.swing.*;
 import java.awt.*;
@@ -46,6 +47,7 @@ public class AgendaBoard extends JComponent {
   private LocalDateTime dragStartStart, dragStartEnd;
   private boolean dragging; // FIX: threshold control
   private boolean creating; // FIX: creation mode
+  private Intervention contextItem;
 
   public AgendaBoard(){
     setOpaque(true);
@@ -241,6 +243,10 @@ public class AgendaBoard extends JComponent {
         for (Intervention it : byResource.getOrDefault(r.getId(), List.of())){
           Rectangle rect = rectOf(it, y);
           if (rect.contains(p)){
+            if (it.isLocked() || "DONE".equalsIgnoreCase(it.getStatus())){
+              Toolkit.getDefaultToolkit().beep();
+              return;
+            }
             dragItem = it;
             dragRect = new Rectangle(rect);
             dragStart = p;
@@ -334,6 +340,22 @@ public class AgendaBoard extends JComponent {
       dragItem.setDateDebut(newStart.toLocalDate());
       dragItem.setDateFin(newEnd.toLocalDate());
       if (dragItem.getId()!=null && dragItem.getLabel()!=null) labelCache.put(dragItem.getId(), dragItem.getLabel()); // FIX: refresh cache
+      PlanningValidation v = ServiceFactory.planning().validate(dragItem);
+      if (!v.ok && !v.suggestions.isEmpty()){
+        Object[] opts = v.suggestions.stream().map(s -> s.label!=null? s.label : "Suggestion").toArray();
+        int pick = JOptionPane.showOptionDialog(this, "Conflit détecté. Appliquer une suggestion ?", "Conflit",
+            JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null, opts, opts[0]);
+        if (pick>=0){
+          var s = v.suggestions.get(pick);
+          if (s.resourceId!=null) dragItem.setResourceId(s.resourceId);
+          if (s.startDateTime!=null && s.endDateTime!=null){
+            dragItem.setDateHeureDebut(s.startDateTime);
+            dragItem.setDateHeureFin(s.endDateTime);
+            dragItem.setDateDebut(s.startDateTime.toLocalDate());
+            dragItem.setDateFin(s.endDateTime.toLocalDate());
+          }
+        } else { dragItem=null; dragRect=null; resizingTop=resizingBottom=false; dragging=false; creating=false; reload(); return; }
+      }
       ServiceFactory.planning().saveIntervention(dragItem); // FIX: save directly
       dragItem=null; dragRect=null; resizingTop=resizingBottom=false; dragging=false; creating=false; // FIX: reset
       reload();
@@ -370,7 +392,7 @@ public class AgendaBoard extends JComponent {
   private void onClick(MouseEvent e){
     if (SwingUtilities.isRightMouseButton(e)){
       Intervention it = findAt(e.getPoint());
-      if (it!=null) showTileMenu(e.getX(), e.getY());
+      if (it!=null) showTileMenu(e.getX(), e.getY(), it);
     }
   }
 
@@ -390,7 +412,8 @@ public class AgendaBoard extends JComponent {
     return null;
   }
 
-  private void showTileMenu(int x, int y){
+  private void showTileMenu(int x, int y, Intervention it){
+    contextItem = it;
     var menu = new JPopupMenu();
     JMenu open = new JMenu("Ouvrir…");
     JMenuItem openQ = new JMenuItem("Devis");
@@ -403,11 +426,38 @@ public class AgendaBoard extends JComponent {
     openI.addActionListener(a -> navigate("invoices"));
     open.add(openQ); open.add(openO); open.add(openD); open.add(openI);
     JMenuItem dup  = new JMenuItem("Dupliquer");
-    JMenuItem lock = new JMenuItem("Verrouiller");
-    dup.addActionListener(a -> JOptionPane.showMessageDialog(this,"Duplication (à brancher)"));
-    lock.addActionListener(a -> JOptionPane.showMessageDialog(this,"Verrouillage (à brancher)"));
-    menu.add(open); menu.addSeparator(); menu.add(dup); menu.add(lock);
+    JMenuItem dupW = new JMenuItem("Dupliquer +1 semaine");
+    JMenuItem lock = new JMenuItem("Verrouiller / Déverrouiller");
+    dup.addActionListener(a -> duplicateContext(1));
+    dupW.addActionListener(a -> duplicateContext(7));
+    lock.addActionListener(a -> toggleLockContext());
+    menu.add(open); menu.addSeparator(); menu.add(dup); menu.add(dupW); menu.addSeparator(); menu.add(lock);
     menu.show(this, x, y);
+    contextItem = null;
+  }
+
+  private void duplicateContext(int days){
+    if (contextItem==null) return;
+    Intervention copy = new Intervention();
+    copy.setResourceId(contextItem.getResourceId());
+    copy.setLabel(contextItem.getLabel()+" (copie)");
+    copy.setColor(contextItem.getColor());
+    if (contextItem.getDateHeureDebut()!=null) copy.setDateHeureDebut(contextItem.getDateHeureDebut().plusDays(days));
+    if (contextItem.getDateHeureFin()!=null) copy.setDateHeureFin(contextItem.getDateHeureFin().plusDays(days));
+    if (contextItem.getDateDebut()!=null) copy.setDateDebut(contextItem.getDateDebut().plusDays(days));
+    if (contextItem.getDateFin()!=null) copy.setDateFin(contextItem.getDateFin().plusDays(days));
+    copy.setStatus(contextItem.getStatus());
+    copy.setFavorite(contextItem.isFavorite());
+    copy.setLocked(contextItem.isLocked());
+    ServiceFactory.planning().saveIntervention(copy);
+    reload();
+  }
+
+  private void toggleLockContext(){
+    if (contextItem==null) return;
+    contextItem.setLocked(!contextItem.isLocked());
+    ServiceFactory.planning().saveIntervention(contextItem);
+    reload();
   }
 
   private void navigate(String key){

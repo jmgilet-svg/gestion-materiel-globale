@@ -3,6 +3,7 @@ package com.materiel.suite.client.service;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.model.Conflict;
+import com.materiel.suite.client.service.PlanningValidation;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -24,4 +25,12 @@ public interface PlanningService {
   boolean resolveShift(UUID id, int minutes);
   boolean resolveReassign(UUID id, UUID resourceId);
   boolean resolveSplit(UUID id, LocalDateTime splitAt);
+
+  /**
+   * Optional server-side validation before saving an intervention.
+   * Default implementation always returns {@link PlanningValidation#ok()}.
+   */
+  default PlanningValidation validate(Intervention it){
+    return PlanningValidation.ok();
+  }
 }
