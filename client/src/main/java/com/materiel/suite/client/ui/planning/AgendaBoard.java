@@ -14,6 +14,7 @@ import java.time.LocalTime;
 import java.util.*;
 import java.util.List;
 import java.util.stream.Collectors;
+import com.materiel.suite.client.ui.MainFrame;
 
 /**
  * Mode Agenda : heures à la verticale, jours en colonnes; DnD vertical pour l'heure, horizontal pour le jour.
@@ -53,6 +54,7 @@ public class AgendaBoard extends JComponent {
       @Override public void mousePressed(MouseEvent e){ onPress(e); }
       @Override public void mouseDragged(MouseEvent e){ onDrag(e); }
       @Override public void mouseReleased(MouseEvent e){ onRelease(e); }
+      @Override public void mouseClicked(MouseEvent e){ onClick(e); }
     };
     addMouseListener(ma);
     addMouseMotionListener(ma);
@@ -337,6 +339,54 @@ public class AgendaBoard extends JComponent {
     }
     dragItem=null; dragRect=null; resizingTop=resizingBottom=false; dragging=false; creating=false; // FIX: reset state
     repaint(); // FIX: clear ghost
+  }
+
+  private void onClick(MouseEvent e){
+    if (SwingUtilities.isRightMouseButton(e)){
+      Intervention it = findAt(e.getPoint());
+      if (it!=null) showTileMenu(e.getX(), e.getY());
+    }
+  }
+
+  private Intervention findAt(Point p){
+    int y=0;
+    for (Resource r : resources){
+      int rowH = rowHeights.get(r.getId());
+      if (p.y>=y && p.y<y+rowH){
+        for (Intervention it : byResource.getOrDefault(r.getId(), List.of())){
+          Rectangle rect = rectOf(it, y);
+          if (rect.contains(p)) return it;
+        }
+        break;
+      }
+      y += rowH;
+    }
+    return null;
+  }
+
+  private void showTileMenu(int x, int y){
+    var menu = new JPopupMenu();
+    JMenu open = new JMenu("Ouvrir…");
+    JMenuItem openQ = new JMenuItem("Devis");
+    JMenuItem openO = new JMenuItem("Commande");
+    JMenuItem openD = new JMenuItem("Bon de livraison");
+    JMenuItem openI = new JMenuItem("Facture");
+    openQ.addActionListener(a -> navigate("quotes"));
+    openO.addActionListener(a -> navigate("orders"));
+    openD.addActionListener(a -> navigate("delivery"));
+    openI.addActionListener(a -> navigate("invoices"));
+    open.add(openQ); open.add(openO); open.add(openD); open.add(openI);
+    JMenuItem dup  = new JMenuItem("Dupliquer");
+    JMenuItem lock = new JMenuItem("Verrouiller");
+    dup.addActionListener(a -> JOptionPane.showMessageDialog(this,"Duplication (à brancher)"));
+    lock.addActionListener(a -> JOptionPane.showMessageDialog(this,"Verrouillage (à brancher)"));
+    menu.add(open); menu.addSeparator(); menu.add(dup); menu.add(lock);
+    menu.show(this, x, y);
+  }
+
+  private void navigate(String key){
+    var w = SwingUtilities.getWindowAncestor(this);
+    if (w instanceof MainFrame mf) mf.openCard(key);
   }
 
   private int rowTopOf(UUID resourceId){

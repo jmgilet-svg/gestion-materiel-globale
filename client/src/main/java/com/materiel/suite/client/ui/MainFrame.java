@@ -112,5 +112,10 @@ public class MainFrame extends JFrame {
     b.addActionListener(e -> cards.show(center, card));
     return b;
   }
+
+  /** Navigation inter-panneaux depuis menus contextuels */
+  public void openCard(String key){
+    cards.show(center, key);
+  }
 }
 
