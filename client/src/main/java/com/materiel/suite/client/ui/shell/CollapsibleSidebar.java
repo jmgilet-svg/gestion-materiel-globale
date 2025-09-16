@@ -15,14 +15,19 @@ public class CollapsibleSidebar extends JPanel {
   public static final int EXPANDED_WIDTH = 220;
 
   private boolean expanded = false;
+  private boolean pinned = false;
   private final JPanel itemsPanel = new JPanel();
   private final List<SidebarButton> buttons = new ArrayList<>();
   private final Timer collapseTimer;
+  private final JToggleButton pinToggle = new JToggleButton("📌");
+  private final JLabel titleLabel = new JLabel("  Menu");
 
   public CollapsibleSidebar() {
     super(new BorderLayout());
     setBackground(new Color(245, 245, 245));
     setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, new Color(220, 220, 220)));
+
+    buildHeader();
 
     itemsPanel.setOpaque(false);
     itemsPanel.setLayout(new BoxLayout(itemsPanel, BoxLayout.Y_AXIS));
@@ -41,12 +46,16 @@ public class CollapsibleSidebar extends JPanel {
     MouseAdapter hover = new MouseAdapter() {
       @Override
       public void mouseEntered(MouseEvent e) {
-        setExpanded(true);
+        if (!pinned) {
+          setExpanded(true);
+        }
       }
 
       @Override
       public void mouseExited(MouseEvent e) {
-        scheduleCollapse();
+        if (!pinned) {
+          scheduleCollapse();
+        }
       }
     };
     addMouseListener(hover);
@@ -55,11 +64,25 @@ public class CollapsibleSidebar extends JPanel {
     itemsPanel.addMouseMotionListener(hover);
 
     collapseTimer = new Timer(220, ev -> {
-      if (!isMouseInside()) {
+      if (!pinned && !isMouseInside()) {
         setExpanded(false);
       }
     });
     collapseTimer.setRepeats(false);
+  }
+
+  private void buildHeader() {
+    JPanel header = new JPanel(new BorderLayout());
+    header.setOpaque(true);
+    header.setBackground(getBackground());
+    header.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+    titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
+    header.add(titleLabel, BorderLayout.WEST);
+    pinToggle.setFocusPainted(false);
+    pinToggle.setToolTipText("Épingler la barre");
+    pinToggle.addActionListener(e -> setPinned(pinToggle.isSelected()));
+    header.add(pinToggle, BorderLayout.EAST);
+    add(header, BorderLayout.NORTH);
   }
 
   private boolean isMouseInside() {
@@ -68,6 +91,9 @@ public class CollapsibleSidebar extends JPanel {
   }
 
   private void scheduleCollapse() {
+    if (pinned) {
+      return;
+    }
     collapseTimer.restart();
   }
 
@@ -93,16 +119,46 @@ public class CollapsibleSidebar extends JPanel {
     MouseAdapter hover = new MouseAdapter() {
       @Override
       public void mouseEntered(MouseEvent e) {
-        setExpanded(true);
+        if (!pinned) {
+          setExpanded(true);
+        }
       }
 
       @Override
       public void mouseExited(MouseEvent e) {
-        scheduleCollapse();
+        if (!pinned) {
+          scheduleCollapse();
+        }
       }
     };
     button.addMouseListener(hover);
     button.addMouseMotionListener(hover);
     return button;
+  }
+
+  public void setPinned(boolean pinned) {
+    if (this.pinned == pinned) {
+      return;
+    }
+    this.pinned = pinned;
+    pinToggle.setSelected(pinned);
+    if (pinned) {
+      collapseTimer.stop();
+      setExpanded(true);
+    } else if (!isMouseInside()) {
+      setExpanded(false);
+    }
+  }
+
+  public boolean isPinned() {
+    return pinned;
+  }
+
+  public void setTitle(String title) {
+    titleLabel.setText(title);
+  }
+
+  public String getTitle() {
+    return titleLabel.getText();
   }
 }
