@@ -1,5 +1,6 @@
 package com.materiel.suite.client.ui.planning;
 
+import com.materiel.suite.client.model.Client;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.net.ServiceFactory;
@@ -90,17 +91,12 @@ public class PlanningBoard extends JComponent {
     open.add(openQ); open.add(openO); open.add(openD); open.add(openI);
 
     JMenuItem miEdit = new JMenuItem("Renommer…");
+    // === CRM-INJECT BEGIN: planning-board-edit-action ===
     miEdit.addActionListener(e -> {
       if (selected==null) return;
-      String current = selected.getLabel()==null? "" : selected.getLabel();
-      String s = JOptionPane.showInputDialog(this, "Libellé :", current);
-      if (s!=null){
-        selected.setLabel(s.trim());
-        if (selected.getId()!=null) labelCache.put(selected.getId(), selected.getLabel());
-        ServiceFactory.planning().saveIntervention(selected);
-        repaint();
-      }
+      openInterventionEditDialog(selected);
     });
+    // === CRM-INJECT END ===
     JMenuItem miDelete = new JMenuItem("Supprimer");
     miDelete.addActionListener(e -> {
       if (selected==null) return;
@@ -138,12 +134,59 @@ public class PlanningBoard extends JComponent {
     if (selected.getDateHeureFin()!=null) copy.setDateHeureFin(selected.getDateHeureFin().plusDays(days));
     if (selected.getDateDebut()!=null) copy.setDateDebut(selected.getDateDebut().plusDays(days));
     if (selected.getDateFin()!=null) copy.setDateFin(selected.getDateFin().plusDays(days));
+    // === CRM-INJECT BEGIN: planning-board-duplicate-client ===
+    copy.setClientId(selected.getClientId());
+    copy.setClientName(selected.getClientName());
+    // === CRM-INJECT END ===
     copy.setStatus(selected.getStatus());
     copy.setFavorite(selected.isFavorite());
     copy.setLocked(selected.isLocked());
     ServiceFactory.planning().saveIntervention(copy);
     reload();
   }
+
+  // === CRM-INJECT BEGIN: planning-board-edit-dialog ===
+  private void openInterventionEditDialog(Intervention it){
+    JTextField tfLabel = new JTextField(it.getLabel()==null? "" : it.getLabel(), 24);
+    java.util.List<Client> clients = new java.util.ArrayList<>();
+    var clientService = ServiceFactory.clients();
+    if (clientService!=null){
+      try { clients.addAll(clientService.list()); } catch(Exception ignore){}
+    }
+    String[] names = new String[clients.size()+1];
+    names[0] = "(Aucun)";
+    int selectedIdx = 0;
+    java.util.UUID existingId = it.getClientId();
+    String existingName = it.getClientName();
+    for (int i=0;i<clients.size();i++){
+      Client c = clients.get(i);
+      names[i+1] = c.getName();
+      if (existingId!=null && existingId.equals(c.getId())) selectedIdx = i+1;
+      else if (selectedIdx==0 && existingId==null && existingName!=null
+          && existingName.equalsIgnoreCase(c.getName())) selectedIdx = i+1;
+    }
+    JComboBox<String> cbClient = new JComboBox<>(names);
+    cbClient.setSelectedIndex(selectedIdx);
+    Object[] msg = {"Libellé :", tfLabel, "Client :", cbClient};
+    int ok = JOptionPane.showConfirmDialog(this, msg, "Modifier l'intervention", JOptionPane.OK_CANCEL_OPTION);
+    if (ok==JOptionPane.OK_OPTION){
+      String label = tfLabel.getText()==null? "" : tfLabel.getText().trim();
+      if (!label.isEmpty()) it.setLabel(label);
+      if (it.getId()!=null) labelCache.put(it.getId(), it.getLabel());
+      int idx = cbClient.getSelectedIndex();
+      if (idx>0 && idx-1 < clients.size()){
+        Client c = clients.get(idx-1);
+        it.setClientId(c.getId());
+        it.setClientName(c.getName());
+      } else {
+        it.setClientId(null);
+        it.setClientName(null);
+      }
+      ServiceFactory.planning().saveIntervention(it);
+      repaint();
+    }
+  }
+  // === CRM-INJECT END ===
 
   private void toggleLockSelected(){
     if (selected==null) return;

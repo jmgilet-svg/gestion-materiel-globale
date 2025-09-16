@@ -180,6 +180,9 @@ public class ApiPlanningService implements PlanningService {
     Map<String,Object> m = new LinkedHashMap<>();
     if (it.getId()!=null) m.put("id", it.getId().toString());
     m.put("resourceId", it.getResourceId()!=null? it.getResourceId().toString() : null);
+    // === CRM-INJECT BEGIN: planning-api-client-id ===
+    m.put("clientId", it.getClientId()!=null? it.getClientId().toString() : null);
+    // === CRM-INJECT END ===
     m.put("label", it.getLabel());
     m.put("color", it.getColor());
     if (it.getDateDebut()!=null) m.put("dateDebut", it.getDateDebut().toString());
@@ -200,6 +203,12 @@ public class ApiPlanningService implements PlanningService {
       rid = SimpleJson.str(res.get("id"));
     }
     if (rid!=null && !rid.isBlank()) it.setResourceId(UUID.fromString(rid));
+    // === CRM-INJECT BEGIN: planning-api-client-mapping ===
+    String cid = SimpleJson.str(m.get("clientId"));
+    if (cid!=null && !cid.isBlank()) it.setClientId(UUID.fromString(cid));
+    String cname = SimpleJson.str(m.get("clientName"));
+    if (cname!=null) it.setClientName(cname);
+    // === CRM-INJECT END ===
     it.setLabel(SimpleJson.str(m.get("label")));
     it.setColor(SimpleJson.str(m.get("color")));
     String d1 = SimpleJson.str(m.get("dateDebut"));

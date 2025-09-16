@@ -8,6 +8,9 @@ import java.util.UUID;
 public class Intervention {
   private UUID id;
   private UUID resourceId;
+  // === CRM-INJECT BEGIN: intervention-client-id-field ===
+  private UUID clientId;
+  // === CRM-INJECT END ===
   private String label;
   private LocalDateTime dateHeureDebut;
   private LocalDateTime dateHeureFin;
@@ -40,6 +43,10 @@ public class Intervention {
   public void setId(UUID id){ this.id = id; }
   public UUID getResourceId(){ return resourceId; }
   public void setResourceId(UUID resourceId){ this.resourceId = resourceId; }
+  // === CRM-INJECT BEGIN: intervention-client-id-accessors ===
+  public UUID getClientId(){ return clientId; }
+  public void setClientId(UUID clientId){ this.clientId = clientId; }
+  // === CRM-INJECT END ===
   public String getLabel(){ return label; }
   public void setLabel(String label){ this.label = label; }
 
