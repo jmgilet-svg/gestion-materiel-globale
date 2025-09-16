@@ -17,18 +17,18 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class MockPlanningService implements PlanningService {
   private final Map<UUID, Resource> resources = new ConcurrentHashMap<>();
-  private final List<ResourceType> resourceTypes = new ArrayList<>(List.of(
-      new ResourceType("CRANE", "Grue"),
-      new ResourceType("TRUCK", "Camion"),
-      new ResourceType("PLATFORM", "Nacelle")
-  ));
+  private final Map<String, ResourceType> resourceTypes = new LinkedHashMap<>();
   private final Map<UUID, Intervention> interventions = new ConcurrentHashMap<>();
 
   public MockPlanningService(){
+    resourceTypes.put("CRANE", new ResourceType("CRANE", "Grue", "🏗️"));
+    resourceTypes.put("TRUCK", new ResourceType("TRUCK", "Camion", "🚚"));
+    resourceTypes.put("PLATFORM", new ResourceType("PLATFORM", "Nacelle", "🛠️"));
+    resourceTypes.put("GENERIC", new ResourceType("GENERIC", "Ressource", "🏷️"));
     if (resources.isEmpty()){
-      Resource r1 = new Resource(UUID.randomUUID(), "Grue A"); r1.setType(resourceTypes.get(0)); r1.setIcon("🏗️");
-      Resource r2 = new Resource(UUID.randomUUID(), "Grue B"); r2.setType(resourceTypes.get(0)); r2.setIcon("🏗️");
-      Resource r3 = new Resource(UUID.randomUUID(), "Nacelle 18m"); r3.setType(resourceTypes.get(2)); r3.setIcon("🛠️");
+      Resource r1 = new Resource(UUID.randomUUID(), "Grue A"); r1.setType(resourceTypes.get("CRANE"));
+      Resource r2 = new Resource(UUID.randomUUID(), "Grue B"); r2.setType(resourceTypes.get("CRANE"));
+      Resource r3 = new Resource(UUID.randomUUID(), "Nacelle 18m"); r3.setType(resourceTypes.get("PLATFORM"));
       // === CRM-INJECT BEGIN: resource-mock-defaults ===
       r1.setCapacity(2); r1.setTags("grue,90t"); r1.setWeeklyUnavailability("MON 08:00-12:00; THU 13:00-17:00");
       r2.setCapacity(1); r2.setTags("grue,60t"); r2.setWeeklyUnavailability("TUE 08:00-12:00");
@@ -76,7 +76,7 @@ public class MockPlanningService implements PlanningService {
 
   private Intervention attachPrimary(Intervention i, Resource r){
     if (i!=null && r!=null){
-      i.setResources(List.of(new ResourceRef(r.getId(), r.getName(), r.getIcon())));
+      i.setResources(List.of(new ResourceRef(r.getId(), r.getName(), iconOf(r))));
     }
     return i;
   }
@@ -88,7 +88,28 @@ public class MockPlanningService implements PlanningService {
     return r;
   }
   @Override public void deleteResource(UUID id){ resources.remove(id); }
-  @Override public List<ResourceType> listResourceTypes(){ return new ArrayList<>(resourceTypes); }
+  @Override public List<ResourceType> listResourceTypes(){ return new ArrayList<>(resourceTypes.values()); }
+  @Override public ResourceType createResourceType(ResourceType type){
+    ResourceType copy = copyType(type);
+    resourceTypes.put(copy.getCode(), copy);
+    return copy;
+  }
+  @Override public ResourceType updateResourceType(ResourceType type){
+    ResourceType copy = copyType(type);
+    resourceTypes.put(copy.getCode(), copy);
+    return copy;
+  }
+  @Override public void deleteResourceType(String code){
+    if (code==null || code.isBlank()) return;
+    resourceTypes.remove(code);
+    ResourceType fallback = resourceTypes.get("GENERIC");
+    for (Resource r : resources.values()){
+      ResourceType t = r.getType();
+      if (t!=null && code.equals(t.getCode())){
+        r.setType(fallback);
+      }
+    }
+  }
   @Override public List<Unavailability> listResourceUnavailabilities(UUID resourceId){
     Resource r = resources.get(resourceId);
     return r==null? List.of() : new ArrayList<>(r.getUnavailabilities());
@@ -125,7 +146,7 @@ public class MockPlanningService implements PlanningService {
     if (i.getResourceId()!=null && i.getResources().isEmpty()){
       Resource r = resources.get(i.getResourceId());
       if (r!=null){
-        i.setResources(List.of(new ResourceRef(r.getId(), r.getName(), r.getIcon())));
+        i.setResources(List.of(new ResourceRef(r.getId(), r.getName(), iconOf(r))));
       }
     }
     interventions.put(i.getId(), i);
@@ -171,7 +192,7 @@ public class MockPlanningService implements PlanningService {
     i.setResourceId(resourceId);
     Resource target = resources.get(resourceId);
     if (target!=null){
-      i.setResources(List.of(new ResourceRef(target.getId(), target.getName(), target.getIcon())));
+      i.setResources(List.of(new ResourceRef(target.getId(), target.getName(), iconOf(target))));
     } else {
       i.setResources(List.of());
     }
@@ -189,6 +210,30 @@ public class MockPlanningService implements PlanningService {
     interventions.put(tail.getId(), tail);
     i.setDateHeureFin(splitAt.minusMinutes(1));
     return true;
+  }
+
+  private ResourceType copyType(ResourceType type){
+    if (type==null || type.getCode()==null || type.getCode().isBlank()){
+      throw new IllegalArgumentException("code requis");
+    }
+    String code = type.getCode();
+    ResourceType existing = resourceTypes.get(code);
+    String label = type.getLabel();
+    if (label==null || label.isBlank()){
+      if (existing!=null && existing.getLabel()!=null && !existing.getLabel().isBlank()) label = existing.getLabel();
+      else label = code;
+    }
+    String icon = type.getIcon();
+    if (icon==null || icon.isBlank()){
+      if (existing!=null && existing.getIcon()!=null && !existing.getIcon().isBlank()) icon = existing.getIcon();
+    }
+    return new ResourceType(code, label, icon);
+  }
+
+  private String iconOf(Resource r){
+    if (r==null) return null;
+    ResourceType t = r.getType();
+    return t!=null? t.getIcon() : null;
   }
 
   @Override public PlanningValidation validate(Intervention i){

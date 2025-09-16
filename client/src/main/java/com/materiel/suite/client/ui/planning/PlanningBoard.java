@@ -599,7 +599,7 @@ public class PlanningBoard extends JComponent {
     if (id==null) return null;
     for (Resource r : resources){
       if (id.equals(r.getId())){
-        return new ResourceRef(r.getId(), r.getName(), r.getIcon());
+        return new ResourceRef(r.getId(), r.getName(), typeIcon(r));
       }
     }
     return null;
@@ -610,5 +610,9 @@ public class PlanningBoard extends JComponent {
       selected = hitTile(e.getPoint());
       repaint();
     }
+  }
+  private static String typeIcon(Resource resource){
+    if (resource==null || resource.getType()==null) return null;
+    return resource.getType().getIcon();
   }
 }

@@ -44,7 +44,6 @@ public class ApiPlanningService implements PlanningService {
         r.setName(SimpleJson.str(m.getOrDefault("name","")));
         r.setType(parseResourceType(m.get("type")));
         r.setColor(SimpleJson.str(m.get("color")));
-        r.setIcon(SimpleJson.str(m.get("icon")));
         r.setNotes(SimpleJson.str(m.get("notes")));
         // === CRM-INJECT BEGIN: resource-api-read ===
         Object cap = m.get("capacity");
@@ -63,6 +62,12 @@ public class ApiPlanningService implements PlanningService {
         r.setUnavailabilities(parseUnavailabilityList(m.get("unavailabilities")));
         out.add(r);
       }
+      Map<String, ResourceType> catalog = fetchResourceTypeCatalog();
+      if (!catalog.isEmpty()){
+        for (Resource r : out){
+          mergeType(r, catalog);
+        }
+      }
       return out;
     } catch(Exception e){ return fb.listResources(); }
   }
@@ -74,13 +79,10 @@ public class ApiPlanningService implements PlanningService {
       m.put("name", r.getName());
       ResourceType type = r.getType();
       if (type!=null){
-        Map<String,Object> tm = new LinkedHashMap<>();
-        if (type.getCode()!=null && !type.getCode().isBlank()) tm.put("code", type.getCode());
-        if (type.getLabel()!=null && !type.getLabel().isBlank()) tm.put("label", type.getLabel());
+        Map<String,Object> tm = toMap(type);
         if (!tm.isEmpty()) m.put("type", tm);
       }
       m.put("color", r.getColor());
-      m.put("icon", r.getIcon());
       m.put("notes", r.getNotes());
       // === CRM-INJECT BEGIN: resource-api-write ===
       m.put("capacity", r.getCapacity());
@@ -101,8 +103,8 @@ public class ApiPlanningService implements PlanningService {
       r.setName(SimpleJson.str(map.getOrDefault("name","")));
       r.setType(parseResourceType(map.get("type")));
       r.setColor(SimpleJson.str(map.get("color")));
-      r.setIcon(SimpleJson.str(map.get("icon")));
       r.setNotes(SimpleJson.str(map.get("notes")));
+      mergeType(r, fetchResourceTypeCatalog());
       // === CRM-INJECT BEGIN: resource-api-after-save ===
       Object cap = map.get("capacity");
       if (cap instanceof Number n) r.setCapacity((int)Math.max(1, n.intValue()));
@@ -140,6 +142,38 @@ public class ApiPlanningService implements PlanningService {
     } catch(Exception e){
       return fb.listResourceTypes();
     }
+  }
+
+  @Override public ResourceType createResourceType(ResourceType type){
+    String code = type!=null? type.getCode() : null;
+    if (code==null || code.isBlank()) throw new IllegalArgumentException("code requis");
+    try {
+      String body = rc.post("/api/v1/resource-types", toJson(toMap(type)));
+      var map = SimpleJson.asObj(SimpleJson.parse(body));
+      ResourceType created = parseResourceType(map);
+      return created!=null? created : type;
+    } catch(Exception e){
+      return fb.createResourceType(type);
+    }
+  }
+
+  @Override public ResourceType updateResourceType(ResourceType type){
+    String code = type!=null? type.getCode() : null;
+    if (code==null || code.isBlank()) throw new IllegalArgumentException("code requis");
+    try {
+      String body = rc.put("/api/v1/resource-types/"+code, toJson(toMap(type)));
+      var map = SimpleJson.asObj(SimpleJson.parse(body));
+      ResourceType updated = parseResourceType(map);
+      return updated!=null? updated : type;
+    } catch(Exception e){
+      return fb.updateResourceType(type);
+    }
+  }
+
+  @Override public void deleteResourceType(String code){
+    if (code==null || code.isBlank()) return;
+    try { rc.delete("/api/v1/resource-types/"+code); } catch(Exception ignore){}
+    fb.deleteResourceType(code);
   }
 
   @Override public List<Unavailability> listResourceUnavailabilities(UUID resourceId){
@@ -309,6 +343,15 @@ public class ApiPlanningService implements PlanningService {
     return map;
   }
 
+  private Map<String,Object> toMap(ResourceType type){
+    Map<String,Object> map = new LinkedHashMap<>();
+    if (type==null) return map;
+    if (type.getCode()!=null && !type.getCode().isBlank()) map.put("code", type.getCode());
+    if (type.getLabel()!=null && !type.getLabel().isBlank()) map.put("label", type.getLabel());
+    if (type.getIcon()!=null && !type.getIcon().isBlank()) map.put("icon", type.getIcon());
+    return map;
+  }
+
   private Intervention fromMap(Map<String,Object> m){
     Intervention it = new Intervention();
     String id = SimpleJson.str(m.get("id"));
@@ -428,6 +471,38 @@ public class ApiPlanningService implements PlanningService {
 
   private String escape(String s){ return s.replace("\\","\\\\").replace("\"","\\\""); }
 
+  private Map<String, ResourceType> fetchResourceTypeCatalog(){
+    Map<String, ResourceType> map = new LinkedHashMap<>();
+    try {
+      List<ResourceType> types = listResourceTypes();
+      for (ResourceType t : types){
+        if (t==null) continue;
+        String code = t.getCode();
+        if (code!=null && !code.isBlank()) map.put(code, t);
+      }
+    } catch(Exception ignore){}
+    return map;
+  }
+
+  private void mergeType(Resource resource, Map<String, ResourceType> catalog){
+    if (resource==null) return;
+    mergeType(resource.getType(), catalog);
+  }
+
+  private void mergeType(ResourceType type, Map<String, ResourceType> catalog){
+    if (type==null || catalog==null || catalog.isEmpty()) return;
+    String code = type.getCode();
+    if (code==null || code.isBlank()) return;
+    ResourceType ref = catalog.get(code);
+    if (ref==null) return;
+    if ((type.getLabel()==null || type.getLabel().isBlank()) && ref.getLabel()!=null){
+      type.setLabel(ref.getLabel());
+    }
+    if (ref.getIcon()!=null && !ref.getIcon().isBlank()){
+      type.setIcon(ref.getIcon());
+    }
+  }
+
   private ResourceType parseResourceType(Object value){
     if (value==null) return null;
     if (value instanceof Map<?,?> map){
@@ -435,7 +510,10 @@ public class ApiPlanningService implements PlanningService {
       String label = SimpleJson.str(map.get("label"));
       if ((code==null || code.isBlank()) && label!=null && !label.isBlank()) code = label;
       if (code==null || code.isBlank()) return null;
-      return new ResourceType(code, label);
+      ResourceType type = new ResourceType(code, label);
+      String icon = SimpleJson.str(map.get("icon"));
+      if (icon!=null && !icon.isBlank()) type.setIcon(icon);
+      return type;
     }
     String code = SimpleJson.str(value);
     if (code==null || code.isBlank()) return null;

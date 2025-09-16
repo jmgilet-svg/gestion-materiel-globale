@@ -17,6 +17,9 @@ public interface PlanningService {
   Resource saveResource(Resource r);
   void deleteResource(UUID id);
   default List<ResourceType> listResourceTypes(){ return List.of(); }
+  default ResourceType createResourceType(ResourceType type){ throw new UnsupportedOperationException(); }
+  default ResourceType updateResourceType(ResourceType type){ throw new UnsupportedOperationException(); }
+  default void deleteResourceType(String code){}
   default List<Unavailability> listResourceUnavailabilities(UUID resourceId){ return List.of(); }
   default Unavailability addUnavailability(UUID resourceId, Unavailability u){ throw new UnsupportedOperationException(); }
   default void deleteUnavailability(UUID resourceId, UUID unavailabilityId){}

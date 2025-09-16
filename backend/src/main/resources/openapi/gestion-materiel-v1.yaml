@@ -131,6 +131,54 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ResourceType'
+    post:
+      summary: Create resource type
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceType'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceType'
+  /api/v1/resource-types/{code}:
+    put:
+      summary: Update resource type
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceType'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceType'
+    delete:
+      summary: Delete resource type
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
   /api/v1/resources/{id}/unavailability:
     get:
       summary: List resource unavailability periods
@@ -255,9 +303,6 @@ components:
           format: uuid
         name:
           type: string
-        icon:
-          type: string
-          description: "Icône simple (emoji, caractère) pour affichage"
         type:
           $ref: '#/components/schemas/ResourceType'
         color:
@@ -329,6 +374,8 @@ components:
         code:
           type: string
         label:
+          type: string
+        icon:
           type: string
     Unavailability:
       type: object

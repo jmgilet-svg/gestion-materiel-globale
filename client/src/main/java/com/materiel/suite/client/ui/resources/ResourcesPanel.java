@@ -3,6 +3,7 @@ package com.materiel.suite.client.ui.resources;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.model.ResourceType;
 import com.materiel.suite.client.net.ServiceFactory;
+import com.materiel.suite.client.service.PlanningService;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -28,6 +29,7 @@ public class ResourcesPanel extends JPanel {
     JButton add = new JButton("+ Ressource");
     JButton edit = new JButton("Modifier");
     JButton del = new JButton("Supprimer");
+    JButton types = new JButton("Types…");
     add.addActionListener(e -> editResource(null));
     edit.addActionListener(e -> {
       int i = table.getSelectedRow();
@@ -41,7 +43,8 @@ public class ResourcesPanel extends JPanel {
         if (ok==JOptionPane.OK_OPTION){ ServiceFactory.planning().deleteResource(r.getId()); reload(); }
       }
     });
-    bar.add(add); bar.add(edit); bar.add(del);
+    types.addActionListener(e -> manageTypes());
+    bar.add(add); bar.add(edit); bar.add(del); bar.add(types);
     return bar;
   }
   private void editResource(Resource r){
@@ -49,6 +52,12 @@ public class ResourcesPanel extends JPanel {
     ResourceEditDialog dlg = new ResourceEditDialog(owner, ServiceFactory.planning(), r);
     dlg.setVisible(true);
     if (dlg.isSaved()) reload();
+  }
+  private void manageTypes(){
+    Window owner = SwingUtilities.getWindowAncestor(this);
+    PlanningService svc = ServiceFactory.planning();
+    new ResourceTypeListDialog(owner, svc).setVisible(true);
+    reload();
   }
   private void reload(){
     model.items = new ArrayList<>(ServiceFactory.planning().listResources());
@@ -62,9 +71,14 @@ public class ResourcesPanel extends JPanel {
     String code = t.getCode();
     return code!=null? code : "";
   }
+  private static String typeIcon(Resource r){
+    ResourceType t = r.getType();
+    String icon = t!=null? t.getIcon() : null;
+    return icon!=null? icon : "";
+  }
   private static class ResourceModel extends AbstractTableModel {
     List<Resource> items = new ArrayList<>();
-    String[] cols = {"Nom", "Icône", "Type", "Couleur", "Notes"
+    String[] cols = {"Nom", "Icône (type)", "Type", "Couleur", "Notes"
         // === CRM-INJECT BEGIN: resource-table-advanced-cols ===
         , "Capacité", "Tags", "Indispos hebdo"
         // === CRM-INJECT END ===
@@ -76,7 +90,7 @@ public class ResourcesPanel extends JPanel {
       Resource x = items.get(r);
       return switch(c){
         case 0 -> x.getName();
-        case 1 -> x.getIcon();
+        case 1 -> typeIcon(x);
         case 2 -> typeLabel(x);
         case 3 -> x.getColor();
         case 4 -> x.getNotes();
