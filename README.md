@@ -1,222 +1,166 @@
-# Gestion Matériel — Monorepo (offline-ready)
+# Gestion Matériel Globale
+ERP & planning multi-agences pour location de grues/camions/remorques avec chauffeur — monorepo Java (Spring Boot + Swing).
 
-> **Note Maven (parent introuvable)**  \
-> Si vous voyez :
-> ```
-> Could not find artifact com.materiel.suite:gestion-materiel-globale:pom:1.0.0-SNAPSHOT
-> ```
-> c’est que le **POM parent** n’était pas présent/installé. Solution :
-> 1) Assurez-vous d’avoir ce dépôt à la **racine** avec `pom.xml` (parent).  \
-> 2) Lancez la build depuis la racine :
-> ```bash
-> mvn -q -DskipTests install      # ou simplement: mvn -q install
-> ```
-> Maven résoudra alors les modules `backend` et `client` avec le parent local.
+## Table des matières
+- [Aperçu du monorepo](#aperçu-du-monorepo)
+- [Fonctionnalités (vue d’ensemble)](#fonctionnalités-vue-densemble)
+- [Démarrage rapide (dev)](#démarrage-rapide-dev)
+- [API & contrats](#api--contrats)
+- [Guide utilisateur (client Swing)](#guide-utilisateur-client-swing)
+- [Architecture & décisions clés](#architecture--décisions-clés)
+- [Roadmap (lots priorisés)](#roadmap-lots-priorisés)
+- [Contribuer / Dev notes](#contribuer--dev-notes)
+- [Licences & mentions](#licences--mentions)
 
-Monorepo Maven (Java 17) avec deux modules :
-- **backend/** : **API Spring Boot exécutable** (Ressources, Interventions, Conflits planning, seed mémoire + CORS)
-- **client/** : application Swing (Mode Mock par défaut), fenêtre de choix Mock/API, UI ERP + **Planning DnD**
+## Aperçu du monorepo
+- `backend/` – API Spring Boot 3 (Java 17)
+- `client/` – Application desktop Java Swing (Java 17)
+- `seeds/` – Données d’exemple (devis, commandes) pour tester le pipeline commercial
+- `docs/` – Notes techniques (offline build, OpenAPI vendored)
 
-## Sprint C — UX Planning
-- **Tuiles adaptatives** (rendu responsive selon largeur/hauteur), **menu contextuel** (ouvrir/dupliquer/verrouiller placeholder).
-- **Sélecteur de densité** (Compact / Normal / Spacieux), DnD plus stable (seuil, curseurs), entête de ligne **synchronisée** avec la grille.
+Statut : expérimental mais exploitable en dev.
 
-## Sprint C.1 — Vue Agenda 15 min
-- Nouvelle vue **Agenda** (colonnes = ressources, durée **verticale**, pas **15 min**), création rapide par clic, DnD vertical + changement de ressource par glisser horizontal.
-- Règle horaire configurable (début/fin de journée).
-- Menu contextuel **branché** vers les écrans Devis / Commandes / BL / Factures (navigation via `MainFrame.openCard`).
-- Modèle `Intervention`: champs optionnels `startDateTime/endDateTime` pour la granularité 15 min (fallback automatique si non renseignés).
+## Fonctionnalités (vue d’ensemble)
+### Planning & Agenda
+- ✅ DnD des interventions, redimensionnement, snapping 15 min
+- 🚧 Panneau “Conflits (N)” + actions d’auto-résolution (shift/reassign/split) côté client et endpoints côté serveur
+- 🚧 Lanes parallèles (affichage côte à côte en cas de chevauchements)
+- 🚧 Indisponibilités ressources (overlays, CRUD API)
+- ✅ Toolbar : bascule Semaine/Jour, densité, filtres rapides
+- ✅ Raccourcis clavier (N, D, Suppr, ←/→, Shift+←/→)
+- 🚧 Undo/Redo unifié (mouvements, resize, assignation)
 
-### ❗️Dépendance `com.materiel:gestion-materiel:1.0.0-SNAPSHOT` introuvable
-Si vous voyez :
-```
-Could not resolve dependencies for project com.materiel.suite:backend:jar:1.0.0-SNAPSHOT
-dependency: com.materiel:gestion-materiel:jar:1.0.0-SNAPSHOT (compile)
-```
-Cela signifie que le module **backend** déclare une dépendance vers **lui‑même** ou un ancien artefact externe.  
-**Correctif appliqué** : suppression de cette dépendance et renommage de l’artefact backend en `gestion-materiel` pour s’aligner sur les usages historiques.
+### Ressources & indispos
+- 🚧 Endpoints GET/POST/DELETE `/api/resources/{id}/unavailability` + overlay UI
 
-Rebuild propre :
-```bash
-mvn -q -DskipTests clean install
-```
+### Documents commerciaux (Devis → Bon de commande → BL → Facture)
+- 🚧 Pipeline statutaire (Brouillon→Validé→Envoyé→…)
+- 🚧 Totaux automatiques (multi-TVA), modèles de lignes (heure/jour/demi-journée, arrondis ¼ h)
+- 🚧 PDF multi-tenant (logo, palette, CGV, mentions), séquences (ex. FAC-00001)
 
-> Si vous gardez un backend séparé ailleurs, installez‑le d’abord : `cd ../gestion-materiel && mvn -q install`,
-> ou référencez‑le comme **module** du parent au lieu d’une dépendance.
+### Exports et conformité
+- 🧭 FEC export strict + ZIP avec SHA-256
+- 🧭 Exports CSV/XLSX
+- 🧭 Mapping comptable en base + mini admin UI
 
+### Sécurité & multi-tenant
+- 🚧 JWT (`/auth/login`) + Bearer sur `/api/**`
+- 🚧 En-tête `X-Tenant` bout-en-bout
+- ✅ SSE `/api/system/ping` (~15 s) pour keep-alive (client + serveur)
 
-## 🚀 Sprint 1 — Backend/Frontend
-**Objectif** : rendre le planning exploitable en mode **API** avec détection de conflits côté serveur et **panneau Conflits** côté client.
+### Offline & fiabilité
+- 🚧 File d’ordres locale (queue), retry avec backoff, reprise au démarrage
+- ✅ Mode Mock vs API sélectionnable au démarrage du client
 
-### Backend (nouveau)
-- App Spring Boot (`backend/`) avec endpoints :
-  - `GET/POST/PUT/DELETE /api/resources`
-  - `GET/POST/PUT/DELETE /api/interventions?from=YYYY-MM-DD&to=YYYY-MM-DD`
-  - `GET /api/planning/conflicts?from=YYYY-MM-DD&to=YYYY-MM-DD`
-- Stockage **en mémoire** (seed de données) pour un démarrage immédiat.
-- **CORS** ouvert sur `/api/**` (dev).
+### Qualité & CI
+- 🚧 Tests unitaires/services (conflits, résolution, indispos)
+- 🚧 CI Maven, packaging JAR, scripts d’exécution
 
-### Frontend
-- `ApiPlanningService` **branché** sur l’API (JSON ↔ modèles) avec **fallback** mock.
-- Nouvelle méthode `listConflicts(from,to)` dans `PlanningService` (+ implémentations mock & API).
-- **Bouton “Conflits (N)”** dans la toolbar du planning : affiche un dialogue listant les conflits par ressource avec des raccourcis d’auto-résolution (+30 min).
-
-Lancer localement :
-```bash
-mvn -q -pl backend spring-boot:run
-mvn -q -pl client -DskipTests exec:java
-```
-
-## 🚀 Sprint 2 — Agenda ++ (largeurs fractionnées) & Auto‑résolution
-**Objectif** : améliorer la lisibilité de l’Agenda en répartissant les tuiles chevauchées **côte à côte**, et offrir des **actions de résolution** directement depuis le panneau Conflits.
+## Démarrage rapide (dev)
+### Prérequis
+- Java 17
+- Maven 3.9+
+- (Optionnel) Docker pour un Postgres local
+- Lire `docs/OFFLINE.md` pour compiler le client en mode hors-ligne (`-Poffline`)
 
 ### Backend
-- `POST /api/planning/resolve` : actions `shift`, `reassign`, `split` sur une intervention.
-  - `shift` : décale début+fin de `minutes` (positif ou négatif).
-  - `reassign` : change de ressource (si pas de conflit sur la cible).
-  - `split` : coupe l’intervention à `splitAt` (création d’une deuxième intervention).
-
-### Frontend
-- **AgendaBoard** : calcul de “lanes” par **jour/ressource** → largeur = 1/N, avec marges, type Google Calendar.
-- Panneau **Conflits** : trois boutons d’action — *Décaler +30 min*, *Changer de ressource…*, *Couper à…* — branchés sur l’API (fallback mock si offline).
-
-Mesures de done : tuiles correctement fractionnées lors de chevauchements, actions exécutées sans erreur, Undo/Redo possible côté client pour DnD (inchangé).
-
----
-
-## 🚀 Sprint 3 — Indispos ressources + Création par glisser + Filtres rapides
-**Objectif** : confort d'usage du planning.
-
-### Backend
-- **Indisponibilités de ressource** (ex : maintenance, panne) :
-  - `GET/POST/DELETE /api/resources/{id}/unavailability?from=&to=`
-  - Modèle `ResourceUnavailability { id, resourceId, start, end, reason }`
-
-### Frontend
-- **Overlays d'indispos** : bandes hachurées grisées par-dessus les jours/heure concernés (Gantt & Agenda).
-- **Création par glisser (Agenda)** : cliquer-glisser sur une plage vide → saisie rapide du libellé → création d'une intervention.
-- **Filtres rapides** : champ *Filtrer ressources* dans la toolbar (filtre par nom), toggle *Afficher indispos*.
-- **DnD plus “doux”** : seuil de démarrage (6 px), poignées de resize ±6 px, snapping conservé.
-
-Lancer :
 ```bash
-mvn -q -pl backend spring-boot:run
-mvn -q -pl client -DskipTests exec:java
+cd backend
+mvn spring-boot:run
 ```
 
----
+- Profil `dev` (défaut) : `application.yml` → H2 en mémoire + console H2 activée.
+- Profil `pg` (en cours) : future `application-pg.yml` à activer via `--spring.profiles.active=pg` ; en attendant, injecter `SPRING_DATASOURCE_URL/USERNAME/PASSWORD`.
+- Variables d’environnement utiles : `JWT_SECRET`, `TENANT_DEFAULT`, `ALLOWED_ORIGINS`.
+- URL dev typique : http://localhost:8080.
 
-## Quick Wins (UX/Qualité)
-Cette livraison ajoute des améliorations ciblées, sans casser l’existant :
-
-### Planning
-- **Conflits visuels** : chevauchements par ressource détectés, tuile bordée en **rouge**, badge “⚠ conflit” au survol.
-- **Raccourcis** : `N` nouveau, `D` dupliquer, `Delete` supprimer, `←/→` ±15 min, `Shift+←/→` ±60 min sur la sélection.
-
-### ERP
-- **Statuts verrouillants** (Devis/BC/BL/Facture) : `BROUILLON → VALIDE → ENVOYE → …`. En dehors du brouillon, les champs sont **non éditables** (sauf actions permises).
-- **Export PDF (minimal)** : bouton dans les éditeurs. Utilise **OpenPDF** si dispo, sinon impression système (imprimante PDF).
-
-### Thème & style
-- **FlatLaf** clair/sombre (arrondis + hover uniformes). Fallback sur LAF par défaut si FlatLaf indisponible.
-
-> Dépendances optionnelles : `com.formdev:flatlaf` et `com.github.librepdf:openpdf`. Si elles ne sont pas résolues (hors-ligne), l’appli continue en mode dégradé.
-
-> Objectif : livrer une base **exécutable hors-ligne**.  
-> **Phase 2** : **éditeurs de lignes**, **totaux auto**, **badges de statuts**, **conversions** Devis→BC→BL→Facture (mock).
-> **Phase 3** : **Planning DnD** (glisser-déposer + resize, calcul de voies/chevauchements, hauteur de ligne auto, entêtes alignées), **CRUD minimal Ressources**, **câblage Backend/API (SDK léger)** avec fallback mock si l’API est indisponible.
-> **Phase 3.1** : **Précision horaire** (X = jours + heures), snap **15 min**, DnD **resize** bord G/D, drag vertical pour changer de ressource, tuiles arrondies & shadow.
-> **Phase 3.2** : **Mode Agenda (heures verticales)** + **Undo/Redo** global et corrections DnD (glissements précis, sans “sauts”).  
->  - Toggle Gantt/Agenda dans la barre d’outils du planning.  
->  - Undo: `Ctrl+Z`, Redo: `Ctrl+Y`.  
->  - DnD corrigé : calcul des minutes par delta de souris (dx/dy) + arrondi 5–60 min ; plus d’écarts catastrophiques.
-
-## Prérequis
-- Java 17+
-- Maven 3.8+
-
-## Build (hors-ligne)
+### Client (Swing)
 ```bash
-mvn -q -DskipTests compile
+cd client
+mvn -q exec:java
 ```
 
-## Lancer le client
-Dans votre IDE : `com.materiel.suite.client.Launcher#main`  
-Au premier démarrage : choix **Mock** (par défaut) ou **API**.
+- Classe main alternative : `com.materiel.suite.client.Launcher`.
+- Choix Mock/API : effectué sur l’écran d’accueil (base URL, token, tenant).
 
-## Structure
-```
-backend/
-  src/main/resources/openapi/gestion-materiel-v1.yaml   # snapshot OpenAPI (ERP + planning + ressources)
-client/
-  src/main/java/com/materiel/suite/client/Launcher.java
-  src/main/java/com/materiel/suite/client/config/AppConfig.java
-  src/main/java/com/materiel/suite/client/net/ServiceFactory.java
-  src/main/java/com/materiel/suite/client/model/{DocumentLine,DocumentTotals,Quote,Order,DeliveryNote,Invoice}.java
-  src/main/java/com/materiel/suite/client/model/{Resource,Intervention}.java
-  src/main/java/com/materiel/suite/client/service/{QuoteService,OrderService,DeliveryNoteService,InvoiceService}.java
-  src/main/java/com/materiel/suite/client/service/PlanningService.java
-  src/main/java/com/materiel/suite/client/service/mock/{MockData,MockQuoteService,MockOrderService,MockDeliveryNoteService,MockInvoiceService}.java
-  src/main/java/com/materiel/suite/client/service/mock/MockPlanningService.java
-  src/main/java/com/materiel/suite/client/service/api/{ApiQuoteService,ApiOrderService,ApiDeliveryNoteService,ApiInvoiceService,ApiPlanningService}.java
-  src/main/java/com/materiel/suite/client/ui/{MainFrame,ModeChoiceDialog,StatusBadgeRenderer}.java
-  src/main/java/com/materiel/suite/client/ui/doc/{DocumentLineTableModel,DocumentTotalsPanel}.java
-  src/main/java/com/materiel/suite/client/ui/quotes/{QuotesPanel,QuoteEditor}.java
-  src/main/java/com/materiel/suite/client/ui/orders/{OrdersPanel,OrderEditor}.java
-  src/main/java/com/materiel/suite/client/ui/delivery/{DeliveryNotesPanel,DeliveryNoteEditor}.java
-  src/main/java/com/materiel/suite/client/ui/invoices/{InvoicesPanel,InvoiceEditor}.java
-  src/main/java/com/materiel/suite/client/ui/planning/{PlanningPanel,PlanningBoard,DayHeader,LaneLayout}.java
-  src/main/java/com/materiel/suite/client/net/{RestClient,SimpleJson}.java
-  src/main/resources/ui/{logo.svg,tile-hatch.svg,resource-crane.svg}
-```
+> **Mode Mock vs API**  
+> Mock = données locales, pas de détection de conflits serveur ni de persistance.  
+> API = appelle le backend REST ; nécessite un token JWT (en cours) et l’en-tête `X-Tenant`.  
+> Le mode peut être rebasculé via `Paramètres → Connexion` ; une file offline (🚧) mettra en cache les actions lors des coupures réseau.
 
-## Phase 3 — Planning & Backend
-- **Planning** : DnD / resize sur tuiles, chevauchements en multiples voies, hauteur de ligne auto, entêtes jours alignées, zoom colonne 60–200 px.
-- **Backend/API** : `ServiceFactory` sélectionne **Api*** en mode backend (base URL par défaut `http://localhost:8080`). En cas d’échec réseau/parsing, **fallback** transparent sur **Mock*** pour garder l’UX fluide hors-ligne.
+### Seeds & données d’essai
+- Le backend charge un jeu d’essai en mémoire (`InMemoryStore`) : ressources “Grue A/B”, interventions de la semaine courante.
+- Jeux complémentaires : `seeds/quotes.json`, `seeds/orders.json` pour préparer les écrans Devis/Commandes.
+- Adapter les seeds lors du passage en multi-tenant (prévoir colonnes `tenantCode`).
 
-> Le SDK léger repose sur `java.net.http.HttpClient` sans dépendances. `SimpleJson` fournit un parsing minimal pour les champs nécessaires.
+## API & contrats
+- OpenAPI versionnée : `backend/src/main/resources/openapi/gestion-materiel-v1.yaml` (copie vendored dans `client/openapi/` pour build offline).
+- Contrats mis à jour à chaque livraison backend ; les clients Swing consomment un SDK généré à partir de ce fichier.
 
-## Phase 2 — Utilisation rapide
-- **Devis** : onglet Devis → **Nouveau** / **Modifier** → éditez les lignes (désignation, Qté, Unité, PU HT, Remise %, TVA %).  
-  Les colonnes **Ligne HT**, **TVA €**, **Ligne TTC** sont calculées. Les totaux **HT/TVA/TTC** s’actualisent.  
-  Bouton **Créer BC…** convertit en **Bon de commande**.
-- **Commandes** : idem, avec bouton **Générer BL…**.
-- **BL** : idem, avec bouton **Créer facture…**.
-- **Factures** : idem (sans conversion suivante).
+Endpoints clés :
+- POST `/auth/login` → JWT (🧭 roadmap)
+- GET `/api/system/ping` (SSE, dev) → keep-alive et surveillance des pannes
+- GET `/api/resources` / GET `/api/interventions` (dev)
+- GET `/api/planning/conflicts?from=&to=` (🚧)
+- POST `/api/planning/resolve` avec `action: shift|reassign|split` (🚧)
+- GET|POST|DELETE `/api/resources/{id}/unavailability` (🚧)
 
-Statuts (badges) : Brouillon, Envoyé, Accepté, Refusé, Expiré, Confirmé, Annulé, Signé, Verrouillé, Envoyée, Partiellement payée, Payée.
-
-> Tout est **en mémoire** (mock). Aucune dépendance réseau nécessaire.
-
-## Étapes suivantes
-1) Impression/PDF des documents, en-têtes société, mentions légales.  
-2) Planning : filtres par ressource, vue semaine/mois, fondu visuel des indispos.  
-3) Backend : authentification, pagination, mapping complet JSON ⇄ modèles.  
-4) FlatLaf (arrondis + hover) & micro-interactions.
-
-### Variables d’environnement utiles (optionnel)
-- `GM_API_BASE` (ex: `http://localhost:8080`)
-- `GM_API_TOKEN` (Bearer)
-
-> Note: Maven build currently requires network access to resolve Spring Boot parent POM.
-
-## Audit des classes non utilisées
+Exemples `curl` :
 ```bash
-mvn -q -DskipTests package
-bash tools/deadcode/find-dead-classes.sh
+curl -N http://localhost:8080/api/system/ping
+curl -H "X-Tenant: DEMO" http://localhost:8080/api/planning/conflicts?from=2025-09-15T00:00:00&to=2025-09-21T23:59:59
 ```
-Le rapport apparaît sous `tools/deadcode/report/` :
-- `dead-classes-client.txt`
-- `dead-classes-backend.txt`
 
-### Windows
-```bat
-mvn -q -DskipTests package
-tools\deadcode\find-dead-classes.bat
-```
-Les rapports sont dans `tools\deadcode\report\`.
+En-têtes à fournir :
+- `Authorization: Bearer <token>` (JWT, 🚧)
+- `X-Tenant: <code_agence>` (multi-tenant, 🚧)
 
-### Exclure des classes légitimes
-Ajoutez leur FQN (nom complet) dans `tools/deadcode/excludes.txt`. Les points d’entrée courants (UI, contrôleurs REST) sont déjà exclus.
+## Guide utilisateur (client Swing)
+- Vue Planning : bascule Semaine/Jour, drag & drop horizontal/vertical, resize avec pas de 15 min, densité d’affichage.
+- Vue Agenda (15 min) : colonnes par ressource, création rapide par double-clic, navigation clavier (←/→ pour ±15 min).
+- Panneau Conflits : liste des collisions, boutons **Décaler**, **Réassigner**, **Scinder** (API en cours d’activation).
+- Overlays d’indisponibilités : affichage (🚧) avec toggle dans la toolbar ; CRUD relié au backend en cours.
+- Documents commerciaux : création d’un Devis, conversions Devis→BC→BL→Facture (🚧), totaux multi-TVA et modèles de lignes (🚧).
+- Export PDF : thèmes par tenant, logos et CGV (🚧, utilise OpenPDF si dispo).
 
-> L’audit ne supprime rien. Une PR/commit de nettoyage manuel est recommandée après revue.
+Pipeline statuts (personnalisable) :
+
+| Étape | Description |
+| --- | --- |
+| Brouillon | édition libre + duplication |
+| Validé | verrouillage partiel, prêt pour envoi |
+| Envoyé | suivi client, relances |
+| Facturé | déclenche la facturation & export comptable |
+
+## Architecture & décisions clés
+- Monorepo Maven : `backend/` (API) vs `client/` (Swing) avec parent `pom.xml` commun.
+- OpenAPI embarqué pour garantir le build offline et éviter les divergences de contrat.
+- Multi-tenant via en-tête `X-Tenant` (🚧) + colonnes tenant dans les futures tables.
+- Authentification JWT (🚧) : filter Spring Security à activer, stockage des refresh tokens à définir.
+- SSE `/api/system/ping` : keep-alive 15 s pour détecter les coupures réseau (implémentation minimaliste côté serveur/client).
+- File offline (🚧) : ordonnancement local et reprise après reconnexion.
+- Documents commerciaux : pipeline Devis→BC→BL→Facture et PDF multi-tenant (🚧) avec séquences par agence.
+- Exports comptables : FEC/CSV/XLSX + archive ZIP signée SHA-256 (🧭).
+
+## Roadmap (lots priorisés)
+- **Lot A – Conflits (serveur & client)** : finaliser les endpoints `/api/planning/conflicts` & `/api/planning/resolve`, panneau Conflits interactif.
+- **Lot B – Indispos** : CRUD complet des indisponibilités + overlay UI et filtres.
+- **Lot C – Agenda pro** : lanes parallèles, snapping consolidé, DnD vertical/horizontal stabilisé.
+- **Lot D – Docs commerciaux** : statuts & conversions complètes, totaux multi-TVA, modèles de lignes, PDF multi-tenant & séquences.
+- **Lot E – Sécurité & multi-tenant** : auth JWT, propagation `X-Tenant`, SSE robuste, file offline & retry.
+
+## Contribuer / Dev notes
+- Branche principale : `main`. Utiliser des PRs courtes ; pas de branches longues non rebases.
+- Conventions de commit : Conventional Commits (`feat:`, `fix:`, `docs:`…).
+- Style Java : Google Java Style simplifié (imports groupés, pas de `*`).
+- Tests à compléter : services de détection de conflits, règles de résolution, indisponibilités, conversions Devis→Facture.
+- Build local : `mvn -q -DskipTests install` depuis la racine ; exécuter `mvn -pl backend test` avant PR dès que les suites seront ajoutées.
+- Scripts de lancement dédiés (`run-backend.sh`, `run-client.sh`) : TODO.
+- Pense-bête multi-tenant : toujours inclure `X-Tenant` dans les appels API et filtrer côté repo/service.
+
+## Licences & mentions
+- Licence : MIT (`LICENSE`).
+- Dépendances clés : Spring Boot 3, Spring Data JPA, OkHttp, Jackson, FlatLaf (UI), OpenPDF (PDF). Tous compatibles Java 17.
+- Packages tiers embarqués : SDK client généré depuis l’OpenAPI, thèmes FlatLaf clair/sombre.
+- Mentions légales : aligner CGV et identité visuelle par tenant ; signature électronique avancée (eIDAS) en 🧭 roadmap.
+- Sécurité : audit JWT/tenants à planifier avant déploiement prod ; vérifier les hachages SHA-256 sur les exports.
