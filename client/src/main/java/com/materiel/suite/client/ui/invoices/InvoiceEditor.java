@@ -1,10 +1,14 @@
 package com.materiel.suite.client.ui.invoices;
 
+import com.materiel.suite.client.model.Contact;
 import com.materiel.suite.client.model.DocumentLine;
 import com.materiel.suite.client.model.Invoice;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.ui.doc.DocumentLineTableModel;
 import com.materiel.suite.client.ui.doc.DocumentTotalsPanel;
+// === CRM-INJECT BEGIN: invoice-client-binding-import ===
+import com.materiel.suite.client.ui.doc.ClientContactBinding;
+// === CRM-INJECT END ===
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -17,6 +21,10 @@ public class InvoiceEditor extends JDialog {
   private final JTextField tfCustomer = new JTextField(24);
   private final JTextField tfDate = new JTextField(10);
   private final JComboBox<String> cbStatus = new JComboBox<>(new String[]{"Brouillon","Envoyée","Partiellement payée","Payée","Annulée"});
+  // === CRM-INJECT BEGIN: invoice-client-binding-fields ===
+  private final JComboBox<Contact> cbContact = new JComboBox<>();
+  private final ClientContactBinding clientBinding = new ClientContactBinding(tfCustomer, cbContact);
+  // === CRM-INJECT END ===
   private final DocumentTotalsPanel totalsPanel = new DocumentTotalsPanel();
   private DocumentLineTableModel lineModel;
   private Invoice bean;
@@ -57,6 +65,11 @@ public class InvoiceEditor extends JDialog {
     c.gridx=1;c.gridwidth=2; p.add(tfCustomer, c);
     c.gridx=3;c.gridwidth=1; p.add(new JLabel("Statut:"), c);
     c.gridx=4; p.add(cbStatus, c);
+    // === CRM-INJECT BEGIN: invoice-contact-row ===
+    c.gridx=0;c.gridy=2;c.gridwidth=1; p.add(new JLabel("Contact:"), c);
+    c.gridx=1;c.gridwidth=2; p.add(cbContact, c);
+    c.gridx=3;c.gridwidth=1;
+    // === CRM-INJECT END ===
     return p;
   }
   private JComponent buildCenter(){
@@ -92,14 +105,21 @@ public class InvoiceEditor extends JDialog {
   }
   private void refreshFromBean(){
     tfNumber.setText(bean.getNumber()==null? "" : bean.getNumber());
-    tfCustomer.setText(bean.getCustomerName()==null? "" : bean.getCustomerName());
+    // === CRM-INJECT BEGIN: invoice-client-refresh ===
+    clientBinding.loadFromBean(bean.getClientId(), bean.getCustomerName(), bean.getContactId());
+    // === CRM-INJECT END ===
     tfDate.setText(bean.getDate()==null? "" : bean.getDate().toString());
     cbStatus.setSelectedItem(bean.getStatus()==null? "Brouillon" : bean.getStatus());
     totalsPanel.setTotals(bean.getTotals());
   }
   private void flushToBean(){
     bean.setNumber(tfNumber.getText().trim().isEmpty()? null : tfNumber.getText().trim());
-    bean.setCustomerName(tfCustomer.getText().trim());
+    // === CRM-INJECT BEGIN: invoice-client-flush ===
+    String customerName = clientBinding.getCustomerName();
+    bean.setCustomerName(customerName==null? "" : customerName);
+    bean.setClientId(clientBinding.getClientId());
+    bean.setContactId(clientBinding.getContactId());
+    // === CRM-INJECT END ===
     try { bean.setDate(java.time.LocalDate.parse(tfDate.getText().trim())); } catch(Exception ignore){}
     bean.setStatus(cbStatus.getSelectedItem().toString());
     bean.recomputeTotals();

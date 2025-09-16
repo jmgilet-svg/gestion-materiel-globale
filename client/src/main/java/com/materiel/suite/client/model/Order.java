@@ -13,6 +13,10 @@ public class Order {
   private String status; // Brouillon, Confirmé, Annulé
   private final List<DocumentLine> lines = new ArrayList<>();
   private DocumentTotals totals = new DocumentTotals();
+  // === CRM-INJECT BEGIN: order-client-link ===
+  private UUID clientId;
+  private UUID contactId;
+  // === CRM-INJECT END ===
   public UUID getId(){ return id; }
   public void setId(UUID v){ id=v; }
   public String getNumber(){ return number; }
@@ -23,6 +27,12 @@ public class Order {
   public void setCustomerName(String v){ customerName=v; }
   public String getStatus(){ return status; }
   public void setStatus(String v){ status=v; }
+  // === CRM-INJECT BEGIN: order-client-accessors ===
+  public UUID getClientId(){ return clientId; }
+  public void setClientId(UUID v){ clientId=v; }
+  public UUID getContactId(){ return contactId; }
+  public void setContactId(UUID v){ contactId=v; }
+  // === CRM-INJECT END ===
   public List<DocumentLine> getLines(){ return lines; }
   public DocumentTotals getTotals(){ return totals; }
   public void recomputeTotals(){ totals = DocumentTotals.compute(lines); }

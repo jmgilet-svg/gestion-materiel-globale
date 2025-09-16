@@ -13,6 +13,10 @@ public class Quote {
   private String status; // Brouillon, Envoyé, Accepté, Refusé, Expiré
   private final List<DocumentLine> lines = new ArrayList<>();
   private DocumentTotals totals = new DocumentTotals();
+  // === CRM-INJECT BEGIN: quote-client-link ===
+  private UUID clientId;
+  private UUID contactId;
+  // === CRM-INJECT END ===
 
   public Quote() {}
   public Quote(UUID id, String number, LocalDate date, String customerName, String status) {
@@ -28,6 +32,12 @@ public class Quote {
   public void setCustomerName(String v){ customerName=v; }
   public String getStatus(){ return status; }
   public void setStatus(String v){ status=v; }
+  // === CRM-INJECT BEGIN: quote-client-accessors ===
+  public UUID getClientId(){ return clientId; }
+  public void setClientId(UUID v){ clientId=v; }
+  public UUID getContactId(){ return contactId; }
+  public void setContactId(UUID v){ contactId=v; }
+  // === CRM-INJECT END ===
   public List<DocumentLine> getLines(){ return lines; }
   public DocumentTotals getTotals(){ return totals; }
   public void recomputeTotals(){ totals = DocumentTotals.compute(lines); }
