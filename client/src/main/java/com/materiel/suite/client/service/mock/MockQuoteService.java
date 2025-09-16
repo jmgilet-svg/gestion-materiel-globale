@@ -12,7 +12,7 @@ public class MockQuoteService implements QuoteService {
   @Override public Quote save(Quote q){
     if (q.getId()==null){ q.setId(UUID.randomUUID()); }
     if (q.getNumber()==null || q.getNumber().isBlank()){
-      q.setNumber(MockData.nextNumber("DEV", new java.util.concurrent.atomic.AtomicInteger(MockData.QUOTES.size()+1)));
+      q.setNumber(MockData.nextQuoteNumber());
     }
     q.recomputeTotals();
     var existing = get(q.getId());

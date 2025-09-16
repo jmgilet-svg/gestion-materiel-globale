@@ -1,29 +1,41 @@
 package com.materiel.suite.client.service.mock;
 
 import com.materiel.suite.client.model.DeliveryNote;
+import com.materiel.suite.client.model.Order;
 import com.materiel.suite.client.service.DeliveryNoteService;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
 public class MockDeliveryNoteService implements DeliveryNoteService {
-  private final Map<UUID, DeliveryNote> store = new LinkedHashMap<>();
-
-  @Override public List<DeliveryNote> list(){ return new ArrayList<>(store.values()); }
-  @Override public DeliveryNote get(UUID id){ return store.get(id); }
+  @Override public List<DeliveryNote> list(){ return new ArrayList<>(MockData.DELIVERY_NOTES); }
+  @Override public DeliveryNote get(UUID id){ return MockData.findById(MockData.DELIVERY_NOTES, id); }
   @Override public DeliveryNote save(DeliveryNote d){
     if (d.getId()==null) d.setId(UUID.randomUUID());
-    store.put(d.getId(), d); return d;
+    if (d.getNumber()==null || d.getNumber().isBlank()){
+      d.setNumber(MockData.nextDeliveryNumber());
+    }
+    d.recomputeTotals();
+    replaceOrAdd(d);
+    return d;
   }
-  @Override public void delete(UUID id){ store.remove(id); }
+  @Override public void delete(UUID id){ MockData.DELIVERY_NOTES.removeIf(d -> d.getId().equals(id)); }
 
   @Override public DeliveryNote createFromOrder(UUID orderId){
-    DeliveryNote d = new DeliveryNote();
-    d.setId(UUID.randomUUID());
-    d.setNumber("BL-" + String.format("%06d", store.size()+1));
-    d.setCustomerName("Client depuis BC " + orderId.toString().substring(0,8));
-    d.setLines(new ArrayList<>());
-    save(d);
-    return d;
+    Order o = MockData.findById(MockData.ORDERS, orderId);
+    if (o==null) return null;
+    return save(MockData.fromOrder(o));
+  }
+
+  private void replaceOrAdd(DeliveryNote d){
+    for (int i=0; i<MockData.DELIVERY_NOTES.size(); i++){
+      if (MockData.DELIVERY_NOTES.get(i).getId().equals(d.getId())){
+        MockData.DELIVERY_NOTES.set(i, d);
+        return;
+      }
+    }
+    MockData.DELIVERY_NOTES.add(d);
   }
 }
 
