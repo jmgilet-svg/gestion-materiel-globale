@@ -14,13 +14,17 @@ public class CollapsibleSidebar extends JPanel {
   public static final int COLLAPSED_WIDTH = 56;
   public static final int EXPANDED_WIDTH = 220;
 
+  public enum PinMode { AUTO, PIN_EXPANDED, PIN_COLLAPSED }
+
   private boolean expanded = false;
-  private boolean pinned = false;
+  private PinMode pinMode = PinMode.AUTO;
   private final JPanel itemsPanel = new JPanel();
   private final List<SidebarButton> buttons = new ArrayList<>();
   private final Timer collapseTimer;
-  private final JToggleButton pinToggle = new JToggleButton("📌");
+  private final JToggleButton pinExpandToggle = new JToggleButton("📌");
+  private final JToggleButton pinCompactToggle = new JToggleButton("📎");
   private final JLabel titleLabel = new JLabel("  Menu");
+  private boolean adjustingPinToggle = false;
 
   public CollapsibleSidebar() {
     super(new BorderLayout());
@@ -46,14 +50,14 @@ public class CollapsibleSidebar extends JPanel {
     MouseAdapter hover = new MouseAdapter() {
       @Override
       public void mouseEntered(MouseEvent e) {
-        if (!pinned) {
+        if (pinMode == PinMode.AUTO) {
           setExpanded(true);
         }
       }
 
       @Override
       public void mouseExited(MouseEvent e) {
-        if (!pinned) {
+        if (pinMode == PinMode.AUTO) {
           scheduleCollapse();
         }
       }
@@ -64,11 +68,12 @@ public class CollapsibleSidebar extends JPanel {
     itemsPanel.addMouseMotionListener(hover);
 
     collapseTimer = new Timer(220, ev -> {
-      if (!pinned && !isMouseInside()) {
+      if (pinMode == PinMode.AUTO && !isMouseInside()) {
         setExpanded(false);
       }
     });
     collapseTimer.setRepeats(false);
+    setPinMode(PinMode.AUTO);
   }
 
   private void buildHeader() {
@@ -78,10 +83,17 @@ public class CollapsibleSidebar extends JPanel {
     header.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
     titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
     header.add(titleLabel, BorderLayout.WEST);
-    pinToggle.setFocusPainted(false);
-    pinToggle.setToolTipText("Épingler la barre");
-    pinToggle.addActionListener(e -> setPinned(pinToggle.isSelected()));
-    header.add(pinToggle, BorderLayout.EAST);
+    JPanel pinPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+    pinPanel.setOpaque(false);
+    pinCompactToggle.setFocusPainted(false);
+    pinCompactToggle.setToolTipText("Épingler en mode compact");
+    pinExpandToggle.setFocusPainted(false);
+    pinExpandToggle.setToolTipText("Épingler en mode élargi");
+    pinCompactToggle.addActionListener(e -> onCompactPinToggled());
+    pinExpandToggle.addActionListener(e -> onExpandPinToggled());
+    pinPanel.add(pinCompactToggle);
+    pinPanel.add(pinExpandToggle);
+    header.add(pinPanel, BorderLayout.EAST);
     add(header, BorderLayout.NORTH);
   }
 
@@ -91,7 +103,7 @@ public class CollapsibleSidebar extends JPanel {
   }
 
   private void scheduleCollapse() {
-    if (pinned) {
+    if (pinMode != PinMode.AUTO) {
       return;
     }
     collapseTimer.restart();
@@ -119,14 +131,14 @@ public class CollapsibleSidebar extends JPanel {
     MouseAdapter hover = new MouseAdapter() {
       @Override
       public void mouseEntered(MouseEvent e) {
-        if (!pinned) {
+        if (pinMode == PinMode.AUTO) {
           setExpanded(true);
         }
       }
 
       @Override
       public void mouseExited(MouseEvent e) {
-        if (!pinned) {
+        if (pinMode == PinMode.AUTO) {
           scheduleCollapse();
         }
       }
@@ -136,22 +148,28 @@ public class CollapsibleSidebar extends JPanel {
     return button;
   }
 
-  public void setPinned(boolean pinned) {
-    if (this.pinned == pinned) {
+  private void onExpandPinToggled(){
+    if (adjustingPinToggle) {
       return;
     }
-    this.pinned = pinned;
-    pinToggle.setSelected(pinned);
-    if (pinned) {
-      collapseTimer.stop();
-      setExpanded(true);
-    } else if (!isMouseInside()) {
-      setExpanded(false);
+    if (pinExpandToggle.isSelected()) {
+      pinCompactToggle.setSelected(false);
+      setPinMode(PinMode.PIN_EXPANDED);
+    } else {
+      setPinMode(pinCompactToggle.isSelected() ? PinMode.PIN_COLLAPSED : PinMode.AUTO);
     }
   }
 
-  public boolean isPinned() {
-    return pinned;
+  private void onCompactPinToggled(){
+    if (adjustingPinToggle) {
+      return;
+    }
+    if (pinCompactToggle.isSelected()) {
+      pinExpandToggle.setSelected(false);
+      setPinMode(PinMode.PIN_COLLAPSED);
+    } else {
+      setPinMode(pinExpandToggle.isSelected() ? PinMode.PIN_EXPANDED : PinMode.AUTO);
+    }
   }
 
   public void setTitle(String title) {
@@ -160,5 +178,54 @@ public class CollapsibleSidebar extends JPanel {
 
   public String getTitle() {
     return titleLabel.getText();
+  }
+
+  public void setPinMode(PinMode mode){
+    if (mode == null){
+      mode = PinMode.AUTO;
+    }
+    if (this.pinMode != mode) {
+      this.pinMode = mode;
+      switch (mode) {
+        case PIN_EXPANDED -> {
+          collapseTimer.stop();
+          setExpanded(true);
+        }
+        case PIN_COLLAPSED -> {
+          collapseTimer.stop();
+          setExpanded(false);
+        }
+        case AUTO -> {
+          if (!isMouseInside()) {
+            setExpanded(false);
+          }
+        }
+      }
+    } else if (mode == PinMode.AUTO && !isMouseInside()) {
+      setExpanded(false);
+    }
+    updatePinButtons();
+  }
+
+  public PinMode getPinMode(){
+    return pinMode;
+  }
+
+  public void setPinned(boolean pinned) {
+    setPinMode(pinned ? PinMode.PIN_EXPANDED : PinMode.AUTO);
+  }
+
+  public boolean isPinned() {
+    return pinMode == PinMode.PIN_EXPANDED;
+  }
+
+  private void updatePinButtons(){
+    adjustingPinToggle = true;
+    try {
+      pinExpandToggle.setSelected(pinMode == PinMode.PIN_EXPANDED);
+      pinCompactToggle.setSelected(pinMode == PinMode.PIN_COLLAPSED);
+    } finally {
+      adjustingPinToggle = false;
+    }
   }
 }
