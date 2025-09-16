@@ -1,6 +1,7 @@
 package com.materiel.suite.client.ui.commands;
 
 import com.materiel.suite.client.model.Intervention;
+import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.model.ResourceRef;
 import com.materiel.suite.client.net.ServiceFactory;
 
@@ -63,11 +64,32 @@ public class MoveResizeInterventionCommand implements Command {
     if (resourceId==null){
       return copy;
     }
+    ResourceRef details = lookup(resourceId);
     if (copy.isEmpty()){
-      return List.of(new ResourceRef(resourceId, null, null));
+      return List.of(details!=null? details : new ResourceRef(resourceId, null, null));
     }
-    ResourceRef first = copy.get(0);
-    copy.set(0, new ResourceRef(resourceId, first.getName(), first.getIcon()));
+    if (details!=null){
+      copy.set(0, details);
+    } else {
+      ResourceRef first = copy.get(0);
+      copy.set(0, new ResourceRef(resourceId, first.getName(), first.getIcon()));
+    }
     return copy;
+  }
+
+  private ResourceRef lookup(UUID resourceId){
+    if (resourceId==null) return null;
+    return ServiceFactory.planning().listResources().stream()
+        .filter(r -> resourceId.equals(r.getId()))
+        .findFirst()
+        .map(this::toRef)
+        .orElse(null);
+  }
+
+  private ResourceRef toRef(Resource resource){
+    if (resource==null) return null;
+    String icon = null;
+    if (resource.getType()!=null) icon = resource.getType().getIcon();
+    return new ResourceRef(resource.getId(), resource.getName(), icon);
   }
 }

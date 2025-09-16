@@ -560,7 +560,7 @@ public class AgendaBoard extends JComponent {
     if (id==null) return null;
     for (Resource r : resources){
       if (id.equals(r.getId())){
-        return new ResourceRef(r.getId(), r.getName(), r.getIcon());
+        return new ResourceRef(r.getId(), r.getName(), typeIcon(r));
       }
     }
     return null;
@@ -587,4 +587,8 @@ public class AgendaBoard extends JComponent {
     return 0;
   }
 
+  private static String typeIcon(Resource resource){
+    if (resource==null || resource.getType()==null) return null;
+    return resource.getType().getIcon();
+  }
 }
