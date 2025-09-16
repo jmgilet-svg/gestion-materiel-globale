@@ -3,11 +3,13 @@ package com.materiel.suite.client.model;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 public class Intervention {
   private UUID id;
-  private UUID resourceId;
+  private final List<ResourceRef> resources = new ArrayList<>();
   // === CRM-INJECT BEGIN: intervention-client-id-field ===
   private UUID clientId;
   // === CRM-INJECT END ===
@@ -36,13 +38,58 @@ public class Intervention {
     this(id, resourceId, label, start.atStartOfDay(), end.atTime(LocalTime.of(18,0)), color);
   }
   public Intervention(UUID id, UUID resourceId, String label, LocalDateTime start, LocalDateTime end, String color){
-    this.id=id; this.resourceId=resourceId; this.label=label; this.dateHeureDebut=start; this.dateHeureFin=end; this.color=color;
+    this.id = id;
+    setResourceId(resourceId);
+    this.label = label;
+    this.dateHeureDebut = start;
+    this.dateHeureFin = end;
+    this.color = color;
   }
 
   public UUID getId(){ return id; }
   public void setId(UUID id){ this.id = id; }
-  public UUID getResourceId(){ return resourceId; }
-  public void setResourceId(UUID resourceId){ this.resourceId = resourceId; }
+  public UUID getResourceId(){
+    ResourceRef ref = resources.isEmpty()? null : resources.get(0);
+    return ref==null? null : ref.getId();
+  }
+  public void setResourceId(UUID resourceId){
+    if (resourceId==null){
+      if (!resources.isEmpty()){
+        ResourceRef ref = resources.get(0);
+        ref.setId(null);
+        if (ref.getName()==null && ref.getIcon()==null){
+          resources.remove(0);
+        }
+      }
+      return;
+    }
+    ResourceRef ref;
+    if (resources.isEmpty()){
+      ref = new ResourceRef();
+      resources.add(ref);
+    } else {
+      ref = resources.get(0);
+      if (ref==null){
+        ref = new ResourceRef();
+        resources.set(0, ref);
+      }
+    }
+    ref.setId(resourceId);
+  }
+  public List<ResourceRef> getResources(){ return new ArrayList<>(resources); }
+  public void setResources(List<ResourceRef> refs){
+    resources.clear();
+    if (refs==null) return;
+    for (ResourceRef ref : refs){
+      if (ref==null) continue;
+      resources.add(new ResourceRef(ref.getId(), ref.getName(), ref.getIcon()));
+    }
+  }
+  public Intervention addResource(ResourceRef ref){
+    if (ref!=null) resources.add(new ResourceRef(ref.getId(), ref.getName(), ref.getIcon()));
+    return this;
+  }
+  public ResourceRef primaryResource(){ return resources.isEmpty()? null : resources.get(0); }
   // === CRM-INJECT BEGIN: intervention-client-id-accessors ===
   public UUID getClientId(){ return clientId; }
   public void setClientId(UUID clientId){ this.clientId = clientId; }

@@ -3,6 +3,7 @@ package com.materiel.suite.client.ui.planning;
 import com.materiel.suite.client.model.Client;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
+import com.materiel.suite.client.model.ResourceRef;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.PlanningValidation;
 
@@ -350,7 +351,7 @@ public class AgendaBoard extends JComponent {
       if (resizingBottom){ newStart = dragStartStart; newEnd = newStart.plusMinutes(Math.max(30, (int)Math.round(dragRect.height * (60.0/hourHeight)))); }
       if (!newEnd.isAfter(newStart)) newEnd = newStart.plusMinutes(30);
 
-      if (dragOverResource!=null) dragItem.setResourceId(dragOverResource); // FIX: apply resource
+      if (dragOverResource!=null) applyPrimaryResource(dragItem, dragOverResource); // FIX: apply resource
       dragItem.setDateHeureDebut(newStart); // FIX: persist new start
       dragItem.setDateHeureFin(newEnd); // FIX: persist new end
       dragItem.setDateDebut(newStart.toLocalDate());
@@ -363,7 +364,7 @@ public class AgendaBoard extends JComponent {
             JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null, opts, opts[0]);
         if (pick>=0){
           var s = v.suggestions.get(pick);
-          if (s.resourceId!=null) dragItem.setResourceId(s.resourceId);
+          if (s.resourceId!=null) applyPrimaryResource(dragItem, s.resourceId);
           if (s.startDateTime!=null && s.endDateTime!=null){
             dragItem.setDateHeureDebut(s.startDateTime);
             dragItem.setDateHeureFin(s.endDateTime);
@@ -390,7 +391,7 @@ public class AgendaBoard extends JComponent {
         label = label.strip();
         if (!label.isEmpty()){
           var it = new Intervention();
-          it.setResourceId(dragOverResource);
+          applyPrimaryResource(it, dragOverResource);
           it.setDateHeureDebut(newStart);
           it.setDateHeureFin(newEnd);
           it.setLabel(label);
@@ -468,7 +469,8 @@ public class AgendaBoard extends JComponent {
   private void duplicateContext(int days){
     if (contextItem==null) return;
     Intervention copy = new Intervention();
-    copy.setResourceId(contextItem.getResourceId());
+    copy.setResources(contextItem.getResources());
+    applyPrimaryResource(copy, contextItem.getResourceId());
     copy.setLabel(contextItem.getLabel()+" (copie)");
     copy.setColor(contextItem.getColor());
     if (contextItem.getDateHeureDebut()!=null) copy.setDateHeureDebut(contextItem.getDateHeureDebut().plusDays(days));
@@ -528,6 +530,41 @@ public class AgendaBoard extends JComponent {
     }
   }
   // === CRM-INJECT END ===
+
+  private void applyPrimaryResource(Intervention it, UUID resourceId){
+    if (it==null) return;
+    if (resourceId==null){
+      it.setResourceId(null);
+      it.setResources(List.of());
+      return;
+    }
+    List<ResourceRef> refs = it.getResources();
+    ResourceRef details = lookupResource(resourceId);
+    if (refs.isEmpty()){
+      it.setResources(details!=null? List.of(details) : List.of(new ResourceRef(resourceId, null, null)));
+    } else {
+      ResourceRef first = refs.get(0);
+      String name = first.getName();
+      String icon = first.getIcon();
+      if (details!=null){
+        name = details.getName();
+        icon = details.getIcon();
+      }
+      refs.set(0, new ResourceRef(resourceId, name, icon));
+      it.setResources(refs);
+    }
+    it.setResourceId(resourceId);
+  }
+
+  private ResourceRef lookupResource(UUID id){
+    if (id==null) return null;
+    for (Resource r : resources){
+      if (id.equals(r.getId())){
+        return new ResourceRef(r.getId(), r.getName(), r.getIcon());
+      }
+    }
+    return null;
+  }
 
   private void toggleLockContext(){
     if (contextItem==null) return;

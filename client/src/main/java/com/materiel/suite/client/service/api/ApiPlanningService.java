@@ -3,6 +3,7 @@ package com.materiel.suite.client.service.api;
 import com.materiel.suite.client.model.Conflict;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
+import com.materiel.suite.client.model.ResourceRef;
 import com.materiel.suite.client.model.ResourceType;
 import com.materiel.suite.client.model.Unavailability;
 import com.materiel.suite.client.net.RestClient;
@@ -43,6 +44,7 @@ public class ApiPlanningService implements PlanningService {
         r.setName(SimpleJson.str(m.getOrDefault("name","")));
         r.setType(parseResourceType(m.get("type")));
         r.setColor(SimpleJson.str(m.get("color")));
+        r.setIcon(SimpleJson.str(m.get("icon")));
         r.setNotes(SimpleJson.str(m.get("notes")));
         // === CRM-INJECT BEGIN: resource-api-read ===
         Object cap = m.get("capacity");
@@ -78,6 +80,7 @@ public class ApiPlanningService implements PlanningService {
         if (!tm.isEmpty()) m.put("type", tm);
       }
       m.put("color", r.getColor());
+      m.put("icon", r.getIcon());
       m.put("notes", r.getNotes());
       // === CRM-INJECT BEGIN: resource-api-write ===
       m.put("capacity", r.getCapacity());
@@ -98,6 +101,7 @@ public class ApiPlanningService implements PlanningService {
       r.setName(SimpleJson.str(map.getOrDefault("name","")));
       r.setType(parseResourceType(map.get("type")));
       r.setColor(SimpleJson.str(map.get("color")));
+      r.setIcon(SimpleJson.str(map.get("icon")));
       r.setNotes(SimpleJson.str(map.get("notes")));
       // === CRM-INJECT BEGIN: resource-api-after-save ===
       Object cap = map.get("capacity");
@@ -274,6 +278,15 @@ public class ApiPlanningService implements PlanningService {
     Map<String,Object> m = new LinkedHashMap<>();
     if (it.getId()!=null) m.put("id", it.getId().toString());
     m.put("resourceId", it.getResourceId()!=null? it.getResourceId().toString() : null);
+    List<ResourceRef> refs = it.getResources();
+    if (!refs.isEmpty()){
+      List<Map<String,Object>> arr = new ArrayList<>();
+      for (ResourceRef ref : refs){
+        Map<String,Object> rm = toMap(ref);
+        if (!rm.isEmpty()) arr.add(rm);
+      }
+      if (!arr.isEmpty()) m.put("resources", arr);
+    }
     // === CRM-INJECT BEGIN: planning-api-client-id ===
     m.put("clientId", it.getClientId()!=null? it.getClientId().toString() : null);
     // === CRM-INJECT END ===
@@ -287,14 +300,34 @@ public class ApiPlanningService implements PlanningService {
     return m;
   }
 
+  private Map<String,Object> toMap(ResourceRef ref){
+    Map<String,Object> map = new LinkedHashMap<>();
+    if (ref==null) return map;
+    if (ref.getId()!=null) map.put("id", ref.getId().toString());
+    if (ref.getName()!=null && !ref.getName().isBlank()) map.put("name", ref.getName());
+    if (ref.getIcon()!=null && !ref.getIcon().isBlank()) map.put("icon", ref.getIcon());
+    return map;
+  }
+
   private Intervention fromMap(Map<String,Object> m){
     Intervention it = new Intervention();
     String id = SimpleJson.str(m.get("id"));
     if (id!=null && !id.isBlank()) it.setId(UUID.fromString(id));
     String rid = SimpleJson.str(m.get("resourceId"));
-    if (rid==null && m.get("resource")!=null){
+    List<ResourceRef> refs = parseResourceRefs(m.get("resources"));
+    if (!refs.isEmpty()){
+      it.setResources(refs);
+      if ((rid==null || rid.isBlank()) && refs.get(0)!=null && refs.get(0).getId()!=null){
+        rid = refs.get(0).getId().toString();
+      }
+    }
+    if ((rid==null || rid.isBlank()) && m.get("resource")!=null){
       Map<String,Object> res = SimpleJson.asObj(m.get("resource"));
-      rid = SimpleJson.str(res.get("id"));
+      ResourceRef ref = parseResourceRef(res);
+      if (ref!=null){
+        it.setResources(List.of(ref));
+        if (ref.getId()!=null) rid = ref.getId().toString();
+      }
     }
     if (rid!=null && !rid.isBlank()) it.setResourceId(UUID.fromString(rid));
     // === CRM-INJECT BEGIN: planning-api-client-mapping ===
@@ -318,6 +351,40 @@ public class ApiPlanningService implements PlanningService {
     String st = SimpleJson.str(m.get("status"));
     if (st!=null && !st.isBlank()) it.setStatus(st);
     return it;
+  }
+
+  private List<ResourceRef> parseResourceRefs(Object value){
+    List<ResourceRef> list = new ArrayList<>();
+    if (value instanceof List<?> arr){
+      for (Object o : arr){
+        if (o instanceof Map<?,?> mm){
+          ResourceRef ref = parseResourceRef(mm);
+          if (ref!=null) list.add(ref);
+        }
+      }
+    } else if (value instanceof Map<?,?> mm){
+      ResourceRef ref = parseResourceRef(mm);
+      if (ref!=null) list.add(ref);
+    }
+    return list;
+  }
+
+  private ResourceRef parseResourceRef(Map<?,?> map){
+    if (map==null) return null;
+    ResourceRef ref = new ResourceRef();
+    String id = SimpleJson.str(map.get("id"));
+    if (id!=null && !id.isBlank()){
+      try { ref.setId(UUID.fromString(id)); } catch(Exception ignore){}
+    }
+    String name = SimpleJson.str(map.get("name"));
+    if (name!=null && !name.isBlank()) ref.setName(name);
+    String icon = SimpleJson.str(map.get("icon"));
+    if (icon!=null && !icon.isBlank()) ref.setIcon(icon);
+    if (ref.getId()==null && (ref.getName()==null || ref.getName().isBlank())
+        && (ref.getIcon()==null || ref.getIcon().isBlank())){
+      return null;
+    }
+    return ref;
   }
 
   private String toJson(Map<String,Object> m){

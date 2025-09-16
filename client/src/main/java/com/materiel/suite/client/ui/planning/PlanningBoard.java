@@ -3,6 +3,7 @@ package com.materiel.suite.client.ui.planning;
 import com.materiel.suite.client.model.Client;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
+import com.materiel.suite.client.model.ResourceRef;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.PlanningValidation;
 
@@ -127,6 +128,7 @@ public class PlanningBoard extends JComponent {
   private void duplicateSelected(int days){
     if (selected==null) return;
     Intervention copy = new Intervention();
+    copy.setResources(selected.getResources());
     copy.setResourceId(selected.getResourceId());
     copy.setLabel(selected.getLabel() + " (copie)");
     copy.setColor(selected.getColor());
@@ -509,7 +511,7 @@ public class PlanningBoard extends JComponent {
     if (dragItem.getId()!=null && dragItem.getLabel()!=null && !dragItem.getLabel().isBlank()){
       labelCache.put(dragItem.getId(), dragItem.getLabel());
     }
-    if (dragOverResource!=null) dragItem.setResourceId(dragOverResource);
+    if (dragOverResource!=null) applyPrimaryResource(dragItem, dragOverResource);
     dragItem.setDateHeureDebut(sdt);
     dragItem.setDateHeureFin(edt);
     dragItem.setDateDebut(sdt.toLocalDate());
@@ -521,7 +523,7 @@ public class PlanningBoard extends JComponent {
           JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null, opts, opts[0]);
       if (pick>=0){
         var s = v.suggestions.get(pick);
-        if (s.resourceId!=null) dragItem.setResourceId(s.resourceId);
+        if (s.resourceId!=null) applyPrimaryResource(dragItem, s.resourceId);
         if (s.startDateTime!=null && s.endDateTime!=null){
           dragItem.setDateHeureDebut(s.startDateTime);
           dragItem.setDateHeureFin(s.endDateTime);
@@ -567,6 +569,41 @@ public class PlanningBoard extends JComponent {
   }
 
   private static String safe(String s){ return (s==null? "—" : s); }
+
+  private void applyPrimaryResource(Intervention it, UUID resourceId){
+    if (it==null) return;
+    if (resourceId==null){
+      it.setResourceId(null);
+      it.setResources(List.of());
+      return;
+    }
+    List<ResourceRef> refs = it.getResources();
+    ResourceRef details = lookupResource(resourceId);
+    if (refs.isEmpty()){
+      it.setResources(details!=null? List.of(details) : List.of(new ResourceRef(resourceId, null, null)));
+    } else {
+      ResourceRef first = refs.get(0);
+      String name = first.getName();
+      String icon = first.getIcon();
+      if (details!=null){
+        name = details.getName();
+        icon = details.getIcon();
+      }
+      refs.set(0, new ResourceRef(resourceId, name, icon));
+      it.setResources(refs);
+    }
+    it.setResourceId(resourceId);
+  }
+
+  private ResourceRef lookupResource(UUID id){
+    if (id==null) return null;
+    for (Resource r : resources){
+      if (id.equals(r.getId())){
+        return new ResourceRef(r.getId(), r.getName(), r.getIcon());
+      }
+    }
+    return null;
+  }
 
   private void onClick(MouseEvent e){
     if (e.getButton()==MouseEvent.BUTTON1 && e.getClickCount()==1){

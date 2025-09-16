@@ -2,12 +2,14 @@ package com.materiel.suite.backend.model;
 
 import java.util.UUID;
 
-public class Resource {
+public class ResourceRef {
   private UUID id;
   private String name;
   private String icon;
-  public Resource(){}
-  public Resource(UUID id, String name){ this.id=id; this.name=name; }
+
+  public ResourceRef(){}
+  public ResourceRef(UUID id, String name, String icon){ this.id=id; this.name=name; this.icon=icon; }
+
   public UUID getId(){ return id; }
   public void setId(UUID id){ this.id=id; }
   public String getName(){ return name; }

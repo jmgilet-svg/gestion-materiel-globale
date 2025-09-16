@@ -3,6 +3,7 @@ package com.materiel.suite.client.service.mock;
 import com.materiel.suite.client.model.Conflict;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
+import com.materiel.suite.client.model.ResourceRef;
 import com.materiel.suite.client.model.ResourceType;
 import com.materiel.suite.client.model.Unavailability;
 import com.materiel.suite.client.service.PlanningService;
@@ -25,9 +26,9 @@ public class MockPlanningService implements PlanningService {
 
   public MockPlanningService(){
     if (resources.isEmpty()){
-      Resource r1 = new Resource(UUID.randomUUID(), "Grue A"); r1.setType(resourceTypes.get(0));
-      Resource r2 = new Resource(UUID.randomUUID(), "Grue B"); r2.setType(resourceTypes.get(0));
-      Resource r3 = new Resource(UUID.randomUUID(), "Nacelle 18m"); r3.setType(resourceTypes.get(2));
+      Resource r1 = new Resource(UUID.randomUUID(), "Grue A"); r1.setType(resourceTypes.get(0)); r1.setIcon("🏗️");
+      Resource r2 = new Resource(UUID.randomUUID(), "Grue B"); r2.setType(resourceTypes.get(0)); r2.setIcon("🏗️");
+      Resource r3 = new Resource(UUID.randomUUID(), "Nacelle 18m"); r3.setType(resourceTypes.get(2)); r3.setIcon("🛠️");
       // === CRM-INJECT BEGIN: resource-mock-defaults ===
       r1.setCapacity(2); r1.setTags("grue,90t"); r1.setWeeklyUnavailability("MON 08:00-12:00; THU 13:00-17:00");
       r2.setCapacity(1); r2.setTags("grue,60t"); r2.setWeeklyUnavailability("TUE 08:00-12:00");
@@ -39,23 +40,27 @@ public class MockPlanningService implements PlanningService {
           "Maintenance"));
       resources.put(r1.getId(), r1); resources.put(r2.getId(), r2); resources.put(r3.getId(), r3);
       LocalDate base = LocalDate.now().with(java.time.DayOfWeek.MONDAY);
-      add(fillCard(new Intervention(UUID.randomUUID(), r1.getId(), "Chantier Alpha", base.plusDays(0), base.plusDays(2), "#5E81AC"),
+      add(attachPrimary(fillCard(new Intervention(UUID.randomUUID(), r1.getId(), "Chantier Alpha", base.plusDays(0), base.plusDays(2), "#5E81AC"),
           "Durand BTP","Pont Anne-de-Bretagne","GMK4100L-1","Actros 26t","Bernard","Agence 1","PLANNED",true,
           "Q-2025-014","C-2025-003",null,null,
           LocalDateTime.of(base.plusDays(0), java.time.LocalTime.of(8,0)),
-          LocalDateTime.of(base.plusDays(0), java.time.LocalTime.of(12,30))));
-      add(fillCard(new Intervention(UUID.randomUUID(), r1.getId(), "Charpente Beta", base.plusDays(1), base.plusDays(3), "#A3BE8C"),
+          LocalDateTime.of(base.plusDays(0), java.time.LocalTime.of(12,30))), r1));
+      add(attachPrimary(fillCard(new Intervention(UUID.randomUUID(), r1.getId(), "Charpente Beta", base.plusDays(1), base.plusDays(3), "#A3BE8C"),
           "BTP Construction","Hall logistique","LTM 1050","Actros 26t","Bruno","Agence 1","CONFIRMED",false,
           "Q-2025-018",null,null,null,
           LocalDateTime.of(base.plusDays(1), java.time.LocalTime.of(9,0)),
-          LocalDateTime.of(base.plusDays(1), java.time.LocalTime.of(17,0))));
-      add(fillCard(new Intervention(UUID.randomUUID(), r1.getId(), "Levage Gamma", base.plusDays(2), base.plusDays(2), "#EBCB8B"),
+          LocalDateTime.of(base.plusDays(1), java.time.LocalTime.of(17,0))), r1));
+      add(attachPrimary(fillCard(new Intervention(UUID.randomUUID(), r1.getId(), "Levage Gamma", base.plusDays(2), base.plusDays(2), "#EBCB8B"),
           "Trx Publics","Passerelle Ouest","AC 100","—","Camille","Agence 2","PLANNED",false,
           null,null,"BL-1023",null,
           LocalDateTime.of(base.plusDays(2), java.time.LocalTime.of(7,30)),
-          LocalDateTime.of(base.plusDays(2), java.time.LocalTime.of(15,45))));
-      add(new Intervention(UUID.randomUUID(), r2.getId(), "Usine Delta", base.plusDays(0), base.plusDays(0), "#88C0D0"));
-      add(new Intervention(UUID.randomUUID(), r2.getId(), "Entretien", base.plusDays(4), base.plusDays(5), "#BF616A"));
+          LocalDateTime.of(base.plusDays(2), java.time.LocalTime.of(15,45))), r1));
+      Intervention i4 = new Intervention(UUID.randomUUID(), r2.getId(), "Usine Delta", base.plusDays(0), base.plusDays(0), "#88C0D0");
+      attachPrimary(i4, r2);
+      add(i4);
+      Intervention i5 = new Intervention(UUID.randomUUID(), r2.getId(), "Entretien", base.plusDays(4), base.plusDays(5), "#BF616A");
+      attachPrimary(i5, r2);
+      add(i5);
     }
   }
   private void add(Intervention i){ interventions.put(i.getId(), i); }
@@ -69,8 +74,19 @@ public class MockPlanningService implements PlanningService {
     return i;
   }
 
+  private Intervention attachPrimary(Intervention i, Resource r){
+    if (i!=null && r!=null){
+      i.setResources(List.of(new ResourceRef(r.getId(), r.getName(), r.getIcon())));
+    }
+    return i;
+  }
+
   @Override public List<Resource> listResources(){ return new ArrayList<>(resources.values()); }
-  @Override public Resource saveResource(Resource r){ if(r.getId()==null) r.setId(UUID.randomUUID()); resources.put(r.getId(), r); return r; }
+  @Override public Resource saveResource(Resource r){
+    if(r.getId()==null) r.setId(UUID.randomUUID());
+    resources.put(r.getId(), r);
+    return r;
+  }
   @Override public void deleteResource(UUID id){ resources.remove(id); }
   @Override public List<ResourceType> listResourceTypes(){ return new ArrayList<>(resourceTypes); }
   @Override public List<Unavailability> listResourceUnavailabilities(UUID resourceId){
@@ -104,7 +120,17 @@ public class MockPlanningService implements PlanningService {
     list.sort(Comparator.comparing(Intervention::getResourceId).thenComparing(Intervention::getDateDebut));
     return list;
   }
-  @Override public Intervention saveIntervention(Intervention i){ if(i.getId()==null) i.setId(UUID.randomUUID()); interventions.put(i.getId(), i); return i; }
+  @Override public Intervention saveIntervention(Intervention i){
+    if(i.getId()==null) i.setId(UUID.randomUUID());
+    if (i.getResourceId()!=null && i.getResources().isEmpty()){
+      Resource r = resources.get(i.getResourceId());
+      if (r!=null){
+        i.setResources(List.of(new ResourceRef(r.getId(), r.getName(), r.getIcon())));
+      }
+    }
+    interventions.put(i.getId(), i);
+    return i;
+  }
   @Override public void deleteIntervention(UUID id){ interventions.remove(id); }
 
   @Override public List<Conflict> listConflicts(LocalDate from, LocalDate to){
@@ -143,6 +169,12 @@ public class MockPlanningService implements PlanningService {
       if (overlap) return false;
     }
     i.setResourceId(resourceId);
+    Resource target = resources.get(resourceId);
+    if (target!=null){
+      i.setResources(List.of(new ResourceRef(target.getId(), target.getName(), target.getIcon())));
+    } else {
+      i.setResources(List.of());
+    }
     return true;
   }
   @Override public boolean resolveSplit(UUID id, LocalDateTime splitAt){
@@ -151,6 +183,7 @@ public class MockPlanningService implements PlanningService {
     if (!splitAt.isAfter(i.getDateHeureDebut()) || !i.getDateHeureFin().isAfter(splitAt)) return false;
     Intervention tail = new Intervention(UUID.randomUUID(), i.getResourceId(), i.getLabel()+" (suite)",
         splitAt.toLocalDate(), i.getDateHeureFin().toLocalDate(), i.getColor());
+    tail.setResources(i.getResources());
     tail.setDateHeureDebut(splitAt);
     tail.setDateHeureFin(i.getDateHeureFin());
     interventions.put(tail.getId(), tail);

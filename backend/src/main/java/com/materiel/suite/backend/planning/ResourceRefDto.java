@@ -2,9 +2,8 @@ package com.materiel.suite.backend.planning;
 
 import java.util.UUID;
 
-public record ResourceDto(
+public record ResourceRefDto(
     UUID id,
     String name,
     String icon
 ) {}
-

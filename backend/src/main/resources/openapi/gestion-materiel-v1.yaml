@@ -236,6 +236,17 @@ components:
         totalHT:
           type: number
           format: double
+    InterventionResourceRef:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        icon:
+          type: string
+          description: "Icône simple (emoji, caractère)"
     Resource:
       type: object
       properties:
@@ -244,6 +255,9 @@ components:
           format: uuid
         name:
           type: string
+        icon:
+          type: string
+          description: "Icône simple (emoji, caractère) pour affichage"
         type:
           $ref: '#/components/schemas/ResourceType'
         color:
@@ -260,6 +274,54 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Unavailability'
+    Intervention:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        resourceId:
+          type: string
+          format: uuid
+          description: "Ressource principale (compatibilité)"
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/InterventionResourceRef'
+        clientName:
+          type: string
+        siteLabel:
+          type: string
+        craneName:
+          type: string
+        truckName:
+          type: string
+        driverName:
+          type: string
+        agency:
+          type: string
+        status:
+          type: string
+        favorite:
+          type: boolean
+        quoteNumber:
+          type: string
+        orderNumber:
+          type: string
+        deliveryNumber:
+          type: string
+        invoiceNumber:
+          type: string
+        color:
+          type: string
+        locked:
+          type: boolean
+        dateHeureDebut:
+          type: string
+          format: date-time
+        dateHeureFin:
+          type: string
+          format: date-time
     ResourceType:
       type: object
       required: [code]

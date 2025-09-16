@@ -2,6 +2,7 @@ package com.materiel.suite.backend.store;
 
 import com.materiel.suite.backend.model.Intervention;
 import com.materiel.suite.backend.model.Resource;
+import com.materiel.suite.backend.model.ResourceRef;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Component;
 
@@ -19,9 +20,9 @@ public class InMemoryStore {
   @PostConstruct
   public void seed(){
     if (!resources.isEmpty()) return;
-    Resource r1 = new Resource(UUID.randomUUID(), "Grue A");
-    Resource r2 = new Resource(UUID.randomUUID(), "Grue B");
-    Resource r3 = new Resource(UUID.randomUUID(), "Nacelle 18m");
+    Resource r1 = new Resource(UUID.randomUUID(), "Grue A"); r1.setIcon("🏗️");
+    Resource r2 = new Resource(UUID.randomUUID(), "Grue B"); r2.setIcon("🏗️");
+    Resource r3 = new Resource(UUID.randomUUID(), "Nacelle 18m"); r3.setIcon("🛠️");
     resources.put(r1.getId(), r1);
     resources.put(r2.getId(), r2);
     resources.put(r3.getId(), r3);
@@ -36,6 +37,7 @@ public class InMemoryStore {
     Intervention it = new Intervention();
     it.setId(UUID.randomUUID());
     it.setResourceId(r.getId());
+    it.setResources(List.of(new ResourceRef(r.getId(), r.getName(), r.getIcon())));
     it.setLabel(label);
     it.setDateHeureDebut(s);
     it.setDateHeureFin(e);
@@ -58,6 +60,12 @@ public class InMemoryStore {
   }
   public Intervention save(Intervention i){
     if (i.getId()==null) i.setId(UUID.randomUUID());
+    if (i.getResourceId()!=null && i.getResources().isEmpty()){
+      Resource r = resources.get(i.getResourceId());
+      if (r!=null){
+        i.setResources(List.of(new ResourceRef(r.getId(), r.getName(), r.getIcon())));
+      }
+    }
     interventions.put(i.getId(), i);
     return i;
   }
