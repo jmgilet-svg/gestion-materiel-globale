@@ -29,11 +29,31 @@ public final class MockData {
     q2.getLines().add(new DocumentLine("Levage charpente", 1, "forfait", 1800, 5, 20));
     q2.recomputeTotals();
     QUOTES.add(q2);
+
+    ORDERS.add(fromQuote(q1));
+    DELIVERY_NOTES.add(fromOrder(ORDERS.get(0)));
+    INVOICES.add(fromQuoteToInvoice(q2));
   }
 
   static String nextNumber(String prefix, AtomicInteger seq){
     int n = seq.getAndIncrement();
     return "%s-%d-%05d".formatted(prefix, LocalDate.now().getYear(), n);
+  }
+
+  static String nextQuoteNumber(){
+    return nextNumber("DEV", seqQuote);
+  }
+
+  static String nextOrderNumber(){
+    return nextNumber("CMD", seqOrder);
+  }
+
+  static String nextDeliveryNumber(){
+    return nextNumber("BL", seqDN);
+  }
+
+  static String nextInvoiceNumber(){
+    return nextNumber("FAC", seqInv);
   }
 
   public static <T> T findById(List<T> list, UUID id){
