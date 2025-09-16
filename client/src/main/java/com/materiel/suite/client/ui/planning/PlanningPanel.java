@@ -36,6 +36,9 @@ import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 
 import com.materiel.suite.client.model.Conflict;
+// === CRM-INJECT BEGIN: planning-panel-client-import ===
+import com.materiel.suite.client.model.Client;
+// === CRM-INJECT END ===
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.net.ServiceFactory;
@@ -238,14 +241,37 @@ public class PlanningPanel extends JPanel {
     String[] names = rs.stream().map(Resource::getName).toArray(String[]::new);
     JTextField tfLabel = new JTextField(20);
     JComboBox<String> cbRes = new JComboBox<>(names);
+    // === CRM-INJECT BEGIN: planning-panel-client-selector ===
+    java.util.List<Client> clients = new java.util.ArrayList<>();
+    var clientService = ServiceFactory.clients();
+    if (clientService!=null){
+      try { clients.addAll(clientService.list()); } catch(Exception ignore){}
+    }
+    String[] clientNames = new String[clients.size()+1];
+    clientNames[0] = "(Aucun)";
+    for (int i=0;i<clients.size();i++) clientNames[i+1] = clients.get(i).getName();
+    JComboBox<String> cbClient = new JComboBox<>(clientNames);
+    // === CRM-INJECT END ===
     JTextField tfStart = new JTextField(LocalDateTime.now().withSecond(0).withNano(0).toString(), 16);
     JTextField tfEnd = new JTextField(LocalDateTime.now().plusHours(4).withSecond(0).withNano(0).toString(), 16);
-    Object[] msg = {"Libellé:", tfLabel, "Ressource:", cbRes, "Début (YYYY-MM-DDThh:mm):", tfStart, "Fin (YYYY-MM-DDThh:mm):", tfEnd};
+    Object[] msg = {"Libellé:", tfLabel,
+        // === CRM-INJECT BEGIN: planning-panel-client-prompt ===
+        "Client:", cbClient,
+        // === CRM-INJECT END ===
+        "Ressource:", cbRes, "Début (YYYY-MM-DDThh:mm):", tfStart, "Fin (YYYY-MM-DDThh:mm):", tfEnd};
     int ok = JOptionPane.showConfirmDialog(this, msg, "Nouvelle intervention", JOptionPane.OK_CANCEL_OPTION);
     if (ok==JOptionPane.OK_OPTION){
       Resource r = rs.get(cbRes.getSelectedIndex());
       Intervention it = new Intervention(UUID.randomUUID(), r.getId(), tfLabel.getText().trim(),
           LocalDateTime.parse(tfStart.getText().trim()), LocalDateTime.parse(tfEnd.getText().trim()), "#88C0D0");
+      // === CRM-INJECT BEGIN: planning-panel-client-apply ===
+      int clientIdx = cbClient.getSelectedIndex();
+      if (clientIdx > 0){
+        Client c = clients.get(clientIdx-1);
+        it.setClientId(c.getId());
+        it.setClientName(c.getName());
+      }
+      // === CRM-INJECT END ===
       ServiceFactory.planning().saveIntervention(it);
       board.reload();
       agenda.reload();

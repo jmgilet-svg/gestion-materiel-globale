@@ -42,6 +42,20 @@ public class ApiPlanningService implements PlanningService {
         r.setType(SimpleJson.str(m.get("type")));
         r.setColor(SimpleJson.str(m.get("color")));
         r.setNotes(SimpleJson.str(m.get("notes")));
+        // === CRM-INJECT BEGIN: resource-api-read ===
+        Object cap = m.get("capacity");
+        if (cap instanceof Number n) r.setCapacity((int) Math.max(1, n.intValue()));
+        else {
+          String sc = SimpleJson.str(cap);
+          if (sc!=null && !sc.isBlank()){
+            try { r.setCapacity(Math.max(1, (int) Double.parseDouble(sc))); } catch(NumberFormatException ignore){}
+          }
+        }
+        String tags = SimpleJson.str(m.get("tags"));
+        if (tags!=null) r.setTags(tags);
+        String weekly = SimpleJson.str(m.get("weeklyUnavailability"));
+        if (weekly!=null) r.setWeeklyUnavailability(weekly);
+        // === CRM-INJECT END ===
         out.add(r);
       }
       return out;
@@ -56,6 +70,11 @@ public class ApiPlanningService implements PlanningService {
       m.put("type", r.getType());
       m.put("color", r.getColor());
       m.put("notes", r.getNotes());
+      // === CRM-INJECT BEGIN: resource-api-write ===
+      m.put("capacity", r.getCapacity());
+      m.put("tags", r.getTags());
+      m.put("weeklyUnavailability", r.getWeeklyUnavailability());
+      // === CRM-INJECT END ===
       String json = toJson(m);
       String body = (r.getId()==null? rc.post("/api/v1/resources", json) : rc.put("/api/v1/resources/"+r.getId(), json));
       var map = SimpleJson.asObj(SimpleJson.parse(body));
@@ -64,6 +83,20 @@ public class ApiPlanningService implements PlanningService {
       r.setType(SimpleJson.str(map.get("type")));
       r.setColor(SimpleJson.str(map.get("color")));
       r.setNotes(SimpleJson.str(map.get("notes")));
+      // === CRM-INJECT BEGIN: resource-api-after-save ===
+      Object cap = map.get("capacity");
+      if (cap instanceof Number n) r.setCapacity((int)Math.max(1, n.intValue()));
+      else {
+        String sc = SimpleJson.str(cap);
+        if (sc!=null && !sc.isBlank()){
+          try { r.setCapacity(Math.max(1, (int) Double.parseDouble(sc))); } catch(NumberFormatException ignore){}
+        }
+      }
+      String tags = SimpleJson.str(map.get("tags"));
+      if (tags!=null) r.setTags(tags);
+      String weekly = SimpleJson.str(map.get("weeklyUnavailability"));
+      if (weekly!=null) r.setWeeklyUnavailability(weekly);
+      // === CRM-INJECT END ===
       return r;
     } catch(Exception e){ return fb.saveResource(r); }
   }
@@ -180,6 +213,9 @@ public class ApiPlanningService implements PlanningService {
     Map<String,Object> m = new LinkedHashMap<>();
     if (it.getId()!=null) m.put("id", it.getId().toString());
     m.put("resourceId", it.getResourceId()!=null? it.getResourceId().toString() : null);
+    // === CRM-INJECT BEGIN: planning-api-client-id ===
+    m.put("clientId", it.getClientId()!=null? it.getClientId().toString() : null);
+    // === CRM-INJECT END ===
     m.put("label", it.getLabel());
     m.put("color", it.getColor());
     if (it.getDateDebut()!=null) m.put("dateDebut", it.getDateDebut().toString());
@@ -200,6 +236,12 @@ public class ApiPlanningService implements PlanningService {
       rid = SimpleJson.str(res.get("id"));
     }
     if (rid!=null && !rid.isBlank()) it.setResourceId(UUID.fromString(rid));
+    // === CRM-INJECT BEGIN: planning-api-client-mapping ===
+    String cid = SimpleJson.str(m.get("clientId"));
+    if (cid!=null && !cid.isBlank()) it.setClientId(UUID.fromString(cid));
+    String cname = SimpleJson.str(m.get("clientName"));
+    if (cname!=null) it.setClientName(cname);
+    // === CRM-INJECT END ===
     it.setLabel(SimpleJson.str(m.get("label")));
     it.setColor(SimpleJson.str(m.get("color")));
     String d1 = SimpleJson.str(m.get("dateDebut"));
