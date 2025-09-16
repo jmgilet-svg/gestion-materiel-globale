@@ -185,23 +185,23 @@ public class AgendaBoard extends JComponent {
       g2.setClip(r.x+8, r.y+4, r.width-16, r.height-8);
       int textX = r.x + 10;
       int textY = r.y + 20;
-      Font base = g2.getFont();
+      Font base2 = g2.getFont();
       // === CRM-INJECT BEGIN: agenda-board-client-text ===
       String client = it.getClientName();
       if (client!=null && !client.isBlank()){
-        Font bold = base.deriveFont(Font.BOLD, base.getSize2D()+1f);
+        Font bold = base2.deriveFont(Font.BOLD, base2.getSize2D()+1f);
         g2.setFont(bold);
         g2.setColor(new Color(0x111827));
         String clientLine = PlanningUx.ellipsize(client, g2.getFontMetrics(), maxTextW);
         g2.drawString(clientLine, textX, textY);
         textY += g2.getFontMetrics().getHeight();
-        g2.setFont(base);
+        g2.setFont(base2);
       }
       // === CRM-INJECT END ===
       g2.setColor(PlanningUx.TILE_TX); // FIX: text color
       String labelLine = PlanningUx.ellipsize(label, g2.getFontMetrics(), maxTextW); // FIX: shared ellipsize
       g2.drawString(labelLine, textX, textY);
-      g2.setFont(base);
+      g2.setFont(base2);
       g2.setClip(null);
     }
   }

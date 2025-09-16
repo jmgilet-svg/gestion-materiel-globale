@@ -11,7 +11,7 @@ public class DeliveryNote {
   private LocalDate date;
   private String customerName;
   private String status; // Brouillon, Signé, Verrouillé
-  private final List<DocumentLine> lines = new ArrayList<>();
+  private List<DocumentLine> lines = new ArrayList<>();
   private DocumentTotals totals = new DocumentTotals();
   // === CRM-INJECT BEGIN: delivery-client-link ===
   private UUID clientId;
@@ -34,6 +34,7 @@ public class DeliveryNote {
   public void setContactId(UUID v){ contactId=v; }
   // === CRM-INJECT END ===
   public List<DocumentLine> getLines(){ return lines; }
+  public void setLines(List<DocumentLine> lines){ this.lines = lines; }
   public DocumentTotals getTotals(){ return totals; }
   public void recomputeTotals(){ totals = DocumentTotals.compute(lines); }
 }
