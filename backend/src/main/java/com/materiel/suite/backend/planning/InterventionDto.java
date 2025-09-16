@@ -1,11 +1,13 @@
 package com.materiel.suite.backend.planning;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 public record InterventionDto(
     UUID id,
     UUID resourceId,
+    List<ResourceRefDto> resources,
     String clientName,
     String siteLabel,
     String craneName,

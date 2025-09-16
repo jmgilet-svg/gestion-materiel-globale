@@ -64,7 +64,7 @@ public class ResourcesPanel extends JPanel {
   }
   private static class ResourceModel extends AbstractTableModel {
     List<Resource> items = new ArrayList<>();
-    String[] cols = {"Nom", "Type", "Couleur", "Notes"
+    String[] cols = {"Nom", "Icône", "Type", "Couleur", "Notes"
         // === CRM-INJECT BEGIN: resource-table-advanced-cols ===
         , "Capacité", "Tags", "Indispos hebdo"
         // === CRM-INJECT END ===
@@ -76,13 +76,14 @@ public class ResourcesPanel extends JPanel {
       Resource x = items.get(r);
       return switch(c){
         case 0 -> x.getName();
-        case 1 -> typeLabel(x);
-        case 2 -> x.getColor();
-        case 3 -> x.getNotes();
+        case 1 -> x.getIcon();
+        case 2 -> typeLabel(x);
+        case 3 -> x.getColor();
+        case 4 -> x.getNotes();
         // === CRM-INJECT BEGIN: resource-table-advanced-values ===
-        case 4 -> x.getCapacity();
-        case 5 -> x.getTags();
-        case 6 -> x.getWeeklyUnavailability();
+        case 5 -> x.getCapacity();
+        case 6 -> x.getTags();
+        case 7 -> x.getWeeklyUnavailability();
         // === CRM-INJECT END ===
         default -> "";
       };

@@ -19,6 +19,7 @@ import java.util.UUID;
 public class ResourceEditDialog extends JDialog {
   private final JTextField nameField = new JTextField(24);
   private final JTextField colorField = new JTextField(8);
+  private final ResourceIconPicker iconPicker = new ResourceIconPicker();
   private final JTextArea notesArea = new JTextArea(5, 30);
   private final JComboBox<ResourceType> typeCombo = new JComboBox<>();
   private final JSpinner capacitySpinner = new JSpinner(new SpinnerNumberModel(1, 1, 999, 1));
@@ -59,6 +60,8 @@ public class ResourceEditDialog extends JDialog {
     gc.gridx = 1; form.add(nameField, gc);
     gc.gridx = 0; gc.gridy++; form.add(new JLabel("Type"), gc);
     gc.gridx = 1; form.add(typeCombo, gc);
+    gc.gridx = 0; gc.gridy++; form.add(new JLabel("Icône"), gc);
+    gc.gridx = 1; form.add(iconPicker, gc);
     gc.gridx = 0; gc.gridy++; form.add(new JLabel("Couleur (hex)"), gc);
     gc.gridx = 1; form.add(colorField, gc);
     gc.gridx = 0; gc.gridy++; gc.anchor = GridBagConstraints.NORTHWEST; form.add(new JLabel("Notes"), gc);
@@ -124,6 +127,7 @@ public class ResourceEditDialog extends JDialog {
     } else {
       typeCombo.setSelectedItem(null);
     }
+    iconPicker.setValue(resource.getIcon());
     // === CRM-INJECT BEGIN: resource-editor-advanced-save ===
     Integer cap = resource.getCapacity();
     if (cap==null || cap<1) cap = 1;
@@ -208,6 +212,7 @@ public class ResourceEditDialog extends JDialog {
     resource.setNotes(notesArea.getText());
     ResourceType selectedType = resolveType();
     resource.setType(selectedType);
+    resource.setIcon(iconPicker.getValue());
     // === CRM-INJECT BEGIN: resource-editor-advanced-save ===
     Object capVal = capacitySpinner.getValue();
     int cap = 1;

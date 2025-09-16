@@ -264,6 +264,8 @@ final class InterventionTileRenderer {
       case LG -> Integer.MAX_VALUE;
     };
     paintChipsWrapped(g2, it, x, y, r.width - 2*PAD, allow);
+    Rectangle iconZone = new Rectangle(r.x + PAD, r.y + r.height - 20, r.width - 2*PAD, 16);
+    InterventionIconPainter.paintIcons(g2, iconZone, it.getResources());
   }
 
   /* Helpers de rendu */

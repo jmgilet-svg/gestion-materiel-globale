@@ -2,6 +2,8 @@ package com.materiel.suite.backend.web;
 
 import com.materiel.suite.backend.model.Conflict;
 import com.materiel.suite.backend.model.Intervention;
+import com.materiel.suite.backend.model.Resource;
+import com.materiel.suite.backend.model.ResourceRef;
 import com.materiel.suite.backend.store.InMemoryStore;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
@@ -71,6 +73,13 @@ public class PlanningController {
           }
         }
         it.setResourceId(req.resourceId());
+        Resource target = store.resources().stream()
+            .filter(r -> r.getId().equals(req.resourceId()))
+            .findFirst()
+            .orElse(null);
+        if (target!=null){
+          it.setResources(List.of(new ResourceRef(target.getId(), target.getName(), target.getIcon())));
+        }
         return store.save(it);
       }
       case "split" -> {
@@ -82,6 +91,7 @@ public class PlanningController {
         Intervention tail = new Intervention();
         tail.setId(UUID.randomUUID());
         tail.setResourceId(it.getResourceId());
+        tail.setResources(it.getResources());
         tail.setLabel(it.getLabel()+" (suite)");
         tail.setColor(it.getColor());
         tail.setDateHeureDebut(t);
