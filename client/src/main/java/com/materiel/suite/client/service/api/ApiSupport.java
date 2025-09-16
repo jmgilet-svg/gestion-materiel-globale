@@ -20,6 +20,10 @@ final class ApiSupport {
     q.setId(parseUUID(m.get("id")));
     q.setNumber(SimpleJson.str(m.get("number")));
     q.setCustomerName(SimpleJson.str(m.get("customerName")));
+    // === CRM-INJECT BEGIN: quote-client-mapping ===
+    q.setClientId(parseUUID(m.get("clientId")));
+    q.setContactId(parseUUID(m.get("contactId")));
+    // === CRM-INJECT END ===
     setStatusIfPresent(q, m.get("status"));
     setIfPresent(q, "setVersion", m.get("version"));
     setIfPresent(q, "setUpdatedAt", parseInstant(m.get("updatedAt")));
@@ -40,6 +44,10 @@ final class ApiSupport {
     o.setId(parseUUID(m.get("id")));
     setIfPresent(o, "setNumber", m.get("number"));
     setIfPresent(o, "setCustomerName", m.get("customerName"));
+    // === CRM-INJECT BEGIN: order-client-mapping ===
+    setIfPresent(o, "setClientId", parseUUID(m.get("clientId")));
+    setIfPresent(o, "setContactId", parseUUID(m.get("contactId")));
+    // === CRM-INJECT END ===
     setStatusIfPresent(o, m.get("status"));
     setIfPresent(o, "setVersion", m.get("version"));
     setIfPresent(o, "setUpdatedAt", parseInstant(m.get("updatedAt")));
@@ -53,6 +61,10 @@ final class ApiSupport {
     d.setId(parseUUID(m.get("id")));
     setIfPresent(d, "setNumber", m.get("number"));
     setIfPresent(d, "setCustomerName", m.get("customerName"));
+    // === CRM-INJECT BEGIN: delivery-client-mapping ===
+    setIfPresent(d, "setClientId", parseUUID(m.get("clientId")));
+    setIfPresent(d, "setContactId", parseUUID(m.get("contactId")));
+    // === CRM-INJECT END ===
     setStatusIfPresent(d, m.get("status"));
     setIfPresent(d, "setVersion", m.get("version"));
     setIfPresent(d, "setUpdatedAt", parseInstant(m.get("updatedAt")));
@@ -66,6 +78,10 @@ final class ApiSupport {
     i.setId(parseUUID(m.get("id")));
     setIfPresent(i, "setNumber", m.get("number"));
     setIfPresent(i, "setCustomerName", m.get("customerName"));
+    // === CRM-INJECT BEGIN: invoice-client-mapping ===
+    setIfPresent(i, "setClientId", parseUUID(m.get("clientId")));
+    setIfPresent(i, "setContactId", parseUUID(m.get("contactId")));
+    // === CRM-INJECT END ===
     setStatusIfPresent(i, m.get("status"));
     setIfPresent(i, "setVersion", m.get("version"));
     setIfPresent(i, "setUpdatedAt", parseInstant(m.get("updatedAt")));
@@ -114,6 +130,10 @@ final class ApiSupport {
     sb.append("{");
     field(sb,"id", q.getId()==null? null : q.getId().toString()); comma(sb);
     field(sb,"number", q.getNumber()); comma(sb);
+    // === CRM-INJECT BEGIN: quote-client-json ===
+    field(sb,"clientId", q.getClientId()==null? null : q.getClientId().toString()); comma(sb);
+    field(sb,"contactId", q.getContactId()==null? null : q.getContactId().toString()); comma(sb);
+    // === CRM-INJECT END ===
     field(sb,"customerName", q.getCustomerName()); comma(sb);
     field(sb,"status", q.getStatus()==null? null : q.getStatus().toString()); comma(sb);
     numeric(sb,"version", readNumber(q,"getVersion")); comma(sb);
@@ -132,6 +152,10 @@ final class ApiSupport {
     sb.append("{");
     field(sb,"id", o.getId()==null? null : o.getId().toString()); comma(sb);
     field(sb,"number", o.getNumber()); comma(sb);
+    // === CRM-INJECT BEGIN: order-client-json ===
+    field(sb,"clientId", o.getClientId()==null? null : o.getClientId().toString()); comma(sb);
+    field(sb,"contactId", o.getContactId()==null? null : o.getContactId().toString()); comma(sb);
+    // === CRM-INJECT END ===
     field(sb,"customerName", o.getCustomerName()); comma(sb);
     field(sb,"status", o.getStatus()==null? null : o.getStatus().toString()); comma(sb);
     numeric(sb,"version", readNumber(o,"getVersion")); comma(sb);
@@ -148,6 +172,10 @@ final class ApiSupport {
     sb.append("{");
     field(sb,"id", d.getId()==null? null : d.getId().toString()); comma(sb);
     field(sb,"number", d.getNumber()); comma(sb);
+    // === CRM-INJECT BEGIN: delivery-client-json ===
+    field(sb,"clientId", d.getClientId()==null? null : d.getClientId().toString()); comma(sb);
+    field(sb,"contactId", d.getContactId()==null? null : d.getContactId().toString()); comma(sb);
+    // === CRM-INJECT END ===
     field(sb,"customerName", d.getCustomerName()); comma(sb);
     field(sb,"status", d.getStatus()==null? null : d.getStatus().toString()); comma(sb);
     numeric(sb,"version", readNumber(d,"getVersion")); comma(sb);
@@ -164,6 +192,10 @@ final class ApiSupport {
     sb.append("{");
     field(sb,"id", i.getId()==null? null : i.getId().toString()); comma(sb);
     field(sb,"number", i.getNumber()); comma(sb);
+    // === CRM-INJECT BEGIN: invoice-client-json ===
+    field(sb,"clientId", i.getClientId()==null? null : i.getClientId().toString()); comma(sb);
+    field(sb,"contactId", i.getContactId()==null? null : i.getContactId().toString()); comma(sb);
+    // === CRM-INJECT END ===
     field(sb,"customerName", i.getCustomerName()); comma(sb);
     field(sb,"status", i.getStatus()==null? null : i.getStatus().toString()); comma(sb);
     numeric(sb,"version", readNumber(i,"getVersion")); comma(sb);

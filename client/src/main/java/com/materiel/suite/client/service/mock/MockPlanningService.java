@@ -21,6 +21,11 @@ public class MockPlanningService implements PlanningService {
       Resource r1 = new Resource(UUID.randomUUID(), "Grue A");
       Resource r2 = new Resource(UUID.randomUUID(), "Grue B");
       Resource r3 = new Resource(UUID.randomUUID(), "Nacelle 18m");
+      // === CRM-INJECT BEGIN: resource-mock-defaults ===
+      r1.setCapacity(2); r1.setTags("grue,90t"); r1.setWeeklyUnavailability("MON 08:00-12:00; THU 13:00-17:00");
+      r2.setCapacity(1); r2.setTags("grue,60t"); r2.setWeeklyUnavailability("TUE 08:00-12:00");
+      r3.setCapacity(1); r3.setTags("nacelle"); r3.setWeeklyUnavailability("FRI 14:00-18:00");
+      // === CRM-INJECT END ===
       resources.put(r1.getId(), r1); resources.put(r2.getId(), r2); resources.put(r3.getId(), r3);
       LocalDate base = LocalDate.now().with(java.time.DayOfWeek.MONDAY);
       add(fillCard(new Intervention(UUID.randomUUID(), r1.getId(), "Chantier Alpha", base.plusDays(0), base.plusDays(2), "#5E81AC"),

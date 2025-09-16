@@ -52,6 +52,10 @@ public final class MockData {
     o.setNumber(nextNumber("CMD", seqOrder));
     o.setDate(LocalDate.now());
     o.setCustomerName(q.getCustomerName());
+    // === CRM-INJECT BEGIN: order-from-quote-client ===
+    o.setClientId(q.getClientId());
+    o.setContactId(q.getContactId());
+    // === CRM-INJECT END ===
     o.setStatus("Brouillon");
     q.getLines().forEach(l -> o.getLines().add(copy(l)));
     o.recomputeTotals();
@@ -63,6 +67,10 @@ public final class MockData {
     d.setNumber(nextNumber("BL", seqDN));
     d.setDate(LocalDate.now());
     d.setCustomerName(o.getCustomerName());
+    // === CRM-INJECT BEGIN: delivery-from-order-client ===
+    d.setClientId(o.getClientId());
+    d.setContactId(o.getContactId());
+    // === CRM-INJECT END ===
     d.setStatus("Brouillon");
     o.getLines().forEach(l -> d.getLines().add(copy(l)));
     d.recomputeTotals();
@@ -74,6 +82,10 @@ public final class MockData {
     i.setNumber(nextNumber("FAC", seqInv));
     i.setDate(LocalDate.now());
     i.setCustomerName(q.getCustomerName());
+    // === CRM-INJECT BEGIN: invoice-from-quote-client ===
+    i.setClientId(q.getClientId());
+    i.setContactId(q.getContactId());
+    // === CRM-INJECT END ===
     i.setStatus("Brouillon");
     q.getLines().forEach(l -> i.getLines().add(copy(l)));
     i.recomputeTotals();
@@ -85,6 +97,12 @@ public final class MockData {
     i.setNumber(nextNumber("FAC", seqInv));
     i.setDate(LocalDate.now());
     i.setCustomerName(dns.isEmpty() ? "" : dns.get(0).getCustomerName());
+    // === CRM-INJECT BEGIN: invoice-from-dn-client ===
+    if (!dns.isEmpty()) {
+      i.setClientId(dns.get(0).getClientId());
+      i.setContactId(dns.get(0).getContactId());
+    }
+    // === CRM-INJECT END ===
     i.setStatus("Brouillon");
     for (var d : dns) d.getLines().forEach(l -> i.getLines().add(copy(l)));
     i.recomputeTotals();
