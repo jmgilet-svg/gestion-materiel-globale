@@ -3,6 +3,8 @@ package com.materiel.suite.client.service.api;
 import com.materiel.suite.client.model.Conflict;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
+import com.materiel.suite.client.model.ResourceType;
+import com.materiel.suite.client.model.Unavailability;
 import com.materiel.suite.client.net.RestClient;
 import com.materiel.suite.client.net.SimpleJson;
 import com.materiel.suite.client.service.PlanningService;
@@ -39,7 +41,7 @@ public class ApiPlanningService implements PlanningService {
         Resource r = new Resource();
         r.setId(UUID.fromString(SimpleJson.str(m.get("id"))));
         r.setName(SimpleJson.str(m.getOrDefault("name","")));
-        r.setType(SimpleJson.str(m.get("type")));
+        r.setType(parseResourceType(m.get("type")));
         r.setColor(SimpleJson.str(m.get("color")));
         r.setNotes(SimpleJson.str(m.get("notes")));
         // === CRM-INJECT BEGIN: resource-api-read ===
@@ -56,6 +58,7 @@ public class ApiPlanningService implements PlanningService {
         String weekly = SimpleJson.str(m.get("weeklyUnavailability"));
         if (weekly!=null) r.setWeeklyUnavailability(weekly);
         // === CRM-INJECT END ===
+        r.setUnavailabilities(parseUnavailabilityList(m.get("unavailabilities")));
         out.add(r);
       }
       return out;
@@ -67,20 +70,33 @@ public class ApiPlanningService implements PlanningService {
       Map<String,Object> m = new LinkedHashMap<>();
       if (r.getId()!=null) m.put("id", r.getId().toString());
       m.put("name", r.getName());
-      m.put("type", r.getType());
+      ResourceType type = r.getType();
+      if (type!=null){
+        Map<String,Object> tm = new LinkedHashMap<>();
+        if (type.getCode()!=null && !type.getCode().isBlank()) tm.put("code", type.getCode());
+        if (type.getLabel()!=null && !type.getLabel().isBlank()) tm.put("label", type.getLabel());
+        if (!tm.isEmpty()) m.put("type", tm);
+      }
       m.put("color", r.getColor());
       m.put("notes", r.getNotes());
       // === CRM-INJECT BEGIN: resource-api-write ===
       m.put("capacity", r.getCapacity());
       m.put("tags", r.getTags());
       m.put("weeklyUnavailability", r.getWeeklyUnavailability());
+      if (!r.getUnavailabilities().isEmpty()){
+        List<Map<String,Object>> ua = new ArrayList<>();
+        for (Unavailability u : r.getUnavailabilities()){
+          ua.add(toMap(u));
+        }
+        m.put("unavailabilities", ua);
+      }
       // === CRM-INJECT END ===
       String json = toJson(m);
       String body = (r.getId()==null? rc.post("/api/v1/resources", json) : rc.put("/api/v1/resources/"+r.getId(), json));
       var map = SimpleJson.asObj(SimpleJson.parse(body));
       r.setId(UUID.fromString(SimpleJson.str(map.get("id"))));
       r.setName(SimpleJson.str(map.getOrDefault("name","")));
-      r.setType(SimpleJson.str(map.get("type")));
+      r.setType(parseResourceType(map.get("type")));
       r.setColor(SimpleJson.str(map.get("color")));
       r.setNotes(SimpleJson.str(map.get("notes")));
       // === CRM-INJECT BEGIN: resource-api-after-save ===
@@ -96,6 +112,7 @@ public class ApiPlanningService implements PlanningService {
       if (tags!=null) r.setTags(tags);
       String weekly = SimpleJson.str(map.get("weeklyUnavailability"));
       if (weekly!=null) r.setWeeklyUnavailability(weekly);
+      r.setUnavailabilities(parseUnavailabilityList(map.get("unavailabilities")));
       // === CRM-INJECT END ===
       return r;
     } catch(Exception e){ return fb.saveResource(r); }
@@ -104,6 +121,50 @@ public class ApiPlanningService implements PlanningService {
   @Override public void deleteResource(UUID id){
     try { rc.delete("/api/v1/resources/"+id); } catch(Exception ignore){}
     fb.deleteResource(id);
+  }
+
+  @Override public List<ResourceType> listResourceTypes(){
+    try {
+      String body = rc.get("/api/v1/resource-types");
+      var arr = SimpleJson.asArr(SimpleJson.parse(body));
+      List<ResourceType> list = new ArrayList<>();
+      for (Object o : arr){
+        ResourceType t = parseResourceType(o);
+        if (t!=null) list.add(t);
+      }
+      return list;
+    } catch(Exception e){
+      return fb.listResourceTypes();
+    }
+  }
+
+  @Override public List<Unavailability> listResourceUnavailabilities(UUID resourceId){
+    try {
+      String body = rc.get("/api/v1/resources/"+resourceId+"/unavailability");
+      var arr = SimpleJson.asArr(SimpleJson.parse(body));
+      List<Unavailability> list = new ArrayList<>();
+      for (Object o : arr){
+        if (o instanceof Map<?,?> mm) list.add(parseUnavailability(mm));
+      }
+      return list;
+    } catch(Exception e){
+      return fb.listResourceUnavailabilities(resourceId);
+    }
+  }
+
+  @Override public Unavailability addUnavailability(UUID resourceId, Unavailability u){
+    try {
+      String body = rc.post("/api/v1/resources/"+resourceId+"/unavailability", toJson(toMap(u)));
+      var map = SimpleJson.asObj(SimpleJson.parse(body));
+      return parseUnavailability(map);
+    } catch(Exception e){
+      return fb.addUnavailability(resourceId, u);
+    }
+  }
+
+  @Override public void deleteUnavailability(UUID resourceId, UUID unavailabilityId){
+    try { rc.delete("/api/v1/resources/"+resourceId+"/unavailability/"+unavailabilityId); } catch(Exception ignore){}
+    fb.deleteUnavailability(resourceId, unavailabilityId);
   }
 
   @Override public List<Intervention> listInterventions(LocalDate from, LocalDate to){
@@ -260,21 +321,95 @@ public class ApiPlanningService implements PlanningService {
   }
 
   private String toJson(Map<String,Object> m){
+    return toJsonMap(m);
+  }
+
+  private String toJsonMap(Map<?,?> map){
     StringBuilder sb = new StringBuilder("{");
     boolean first = true;
-    for (var e : m.entrySet()){
+    for (var e : map.entrySet()){
+      Object key = e.getKey();
+      if (!(key instanceof String)) continue;
       if (!first) sb.append(',');
       first = false;
-      sb.append('"').append(e.getKey()).append('"').append(':');
-      Object v = e.getValue();
-      if (v==null){ sb.append("null"); }
-      else if (v instanceof Number || v instanceof Boolean){ sb.append(v.toString()); }
-      else { sb.append('"').append(escape(v.toString())).append('"'); }
+      sb.append('"').append(escape((String) key)).append('"').append(':');
+      appendJsonValue(sb, e.getValue());
     }
     sb.append('}');
     return sb.toString();
   }
 
+  private String toJsonList(List<?> list){
+    StringBuilder sb = new StringBuilder("[");
+    boolean first = true;
+    for (Object v : list){
+      if (!first) sb.append(',');
+      first = false;
+      appendJsonValue(sb, v);
+    }
+    sb.append(']');
+    return sb.toString();
+  }
+
+  private void appendJsonValue(StringBuilder sb, Object v){
+    if (v==null){ sb.append("null"); }
+    else if (v instanceof Number || v instanceof Boolean){ sb.append(v.toString()); }
+    else if (v instanceof Map<?,?> map){ sb.append(toJsonMap(map)); }
+    else if (v instanceof List<?> list){ sb.append(toJsonList(list)); }
+    else { sb.append('"').append(escape(v.toString())).append('"'); }
+  }
+
   private String escape(String s){ return s.replace("\\","\\\\").replace("\"","\\\""); }
+
+  private ResourceType parseResourceType(Object value){
+    if (value==null) return null;
+    if (value instanceof Map<?,?> map){
+      String code = SimpleJson.str(map.get("code"));
+      String label = SimpleJson.str(map.get("label"));
+      if ((code==null || code.isBlank()) && label!=null && !label.isBlank()) code = label;
+      if (code==null || code.isBlank()) return null;
+      return new ResourceType(code, label);
+    }
+    String code = SimpleJson.str(value);
+    if (code==null || code.isBlank()) return null;
+    return new ResourceType(code, code);
+  }
+
+  private List<Unavailability> parseUnavailabilityList(Object value){
+    List<Unavailability> list = new ArrayList<>();
+    if (!(value instanceof List<?> arr)) return list;
+    for (Object o : arr){
+      if (o instanceof Map<?,?> mm) list.add(parseUnavailability(mm));
+    }
+    return list;
+  }
+
+  private Unavailability parseUnavailability(Map<?,?> mm){
+    Unavailability u = new Unavailability();
+    String id = SimpleJson.str(mm.get("id"));
+    if (id!=null && !id.isBlank()){
+      try { u.setId(UUID.fromString(id)); } catch(Exception ignore){}
+    }
+    String start = SimpleJson.str(mm.get("start"));
+    String end = SimpleJson.str(mm.get("end"));
+    try {
+      if (start!=null && !start.isBlank()) u.setStart(LocalDateTime.parse(start));
+    } catch(Exception ignore){}
+    try {
+      if (end!=null && !end.isBlank()) u.setEnd(LocalDateTime.parse(end));
+    } catch(Exception ignore){}
+    String reason = SimpleJson.str(mm.get("reason"));
+    if (reason!=null) u.setReason(reason);
+    return u;
+  }
+
+  private Map<String,Object> toMap(Unavailability u){
+    Map<String,Object> m = new LinkedHashMap<>();
+    if (u.getId()!=null) m.put("id", u.getId().toString());
+    if (u.getStart()!=null) m.put("start", u.getStart().format(DTF));
+    if (u.getEnd()!=null) m.put("end", u.getEnd().format(DTF));
+    if (u.getReason()!=null) m.put("reason", u.getReason());
+    return m;
+  }
 }
 

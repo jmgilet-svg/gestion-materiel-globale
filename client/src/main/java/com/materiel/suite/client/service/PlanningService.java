@@ -1,8 +1,10 @@
 package com.materiel.suite.client.service;
 
+import com.materiel.suite.client.model.Conflict;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
-import com.materiel.suite.client.model.Conflict;
+import com.materiel.suite.client.model.ResourceType;
+import com.materiel.suite.client.model.Unavailability;
 import com.materiel.suite.client.service.PlanningValidation;
 
 import java.time.LocalDate;
@@ -14,6 +16,10 @@ public interface PlanningService {
   List<Resource> listResources();
   Resource saveResource(Resource r);
   void deleteResource(UUID id);
+  default List<ResourceType> listResourceTypes(){ return List.of(); }
+  default List<Unavailability> listResourceUnavailabilities(UUID resourceId){ return List.of(); }
+  default Unavailability addUnavailability(UUID resourceId, Unavailability u){ throw new UnsupportedOperationException(); }
+  default void deleteUnavailability(UUID resourceId, UUID unavailabilityId){}
 
   List<Intervention> listInterventions(LocalDate from, LocalDate to);
   Intervention saveIntervention(Intervention i);
