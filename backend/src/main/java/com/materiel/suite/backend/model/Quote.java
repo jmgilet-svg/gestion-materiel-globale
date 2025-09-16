@@ -17,7 +17,7 @@ public class Quote {
     private List<DocumentLine> lines = new ArrayList<>();
     private BigDecimal totalHT = BigDecimal.ZERO;
     private BigDecimal totalTVA = BigDecimal.ZERO;
-    private BigDecimal totalTTC = BigDecimal.ZERO;
+    private BigDecimal totalTtc = BigDecimal.ZERO;
 
     // getters and setters
     public UUID getId() { return id; }
@@ -40,6 +40,6 @@ public class Quote {
     public void setTotalHT(BigDecimal totalHT) { this.totalHT = totalHT; }
     public BigDecimal getTotalTVA() { return totalTVA; }
     public void setTotalTVA(BigDecimal totalTVA) { this.totalTVA = totalTVA; }
-    public BigDecimal getTotalTTC() { return totalTTC; }
-    public void setTotalTTC(BigDecimal totalTTC) { this.totalTTC = totalTTC; }
+    public BigDecimal getTotalTtc() { return totalTtc; }
+    public void setTotalTtc(BigDecimal totalTtc) { this.totalTtc = totalTtc; }
 }
