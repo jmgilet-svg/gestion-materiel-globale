@@ -19,10 +19,10 @@ public class TotalsService {
         }
         quote.setTotalHT(totalHT);
         quote.setTotalTVA(totalTVA);
-        quote.setTotalTTC(totalHT.add(totalTVA));
+        quote.setTotalTtc(totalHT.add(totalTVA));
     }
 
-	public void computeTotals(Order order) {
+    public void computeTotals(Order order) {
         BigDecimal totalHT = BigDecimal.ZERO;
         BigDecimal totalTVA = BigDecimal.ZERO;
         for (DocumentLine l : order.getLines()) {
@@ -31,7 +31,7 @@ public class TotalsService {
         }
         order.setTotalHT(totalHT);
         order.setTotalTVA(totalTVA);
-        order.setTotalTTC(totalHT.add(totalTVA));
+        order.setTotalTtc(totalHT.add(totalTVA));
     }
-		
+
 }
