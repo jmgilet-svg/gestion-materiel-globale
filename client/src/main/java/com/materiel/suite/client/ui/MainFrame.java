@@ -13,16 +13,21 @@ import com.materiel.suite.client.ui.resources.ResourcesPanel;
 import com.materiel.suite.client.ui.crm.ClientsPanel;
 import com.materiel.suite.client.ui.theme.ThemeManager;
 import com.materiel.suite.client.ui.commands.CommandBus;
+import com.materiel.suite.client.ui.shell.CollapsibleSidebar;
+import com.materiel.suite.client.ui.shell.SidebarButton;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class MainFrame extends JFrame {
   private final CardLayout cards = new CardLayout();
   private final JPanel center = new JPanel(cards);
   private final JLabel status = new JLabel("Prêt.");
   private javax.swing.Timer syncTimer;
+  private final Map<String, SidebarButton> navButtons = new LinkedHashMap<>();
 
   public MainFrame(AppConfig cfg) {
     super("Gestion Matériel — Suite");
@@ -46,7 +51,7 @@ public class MainFrame extends JFrame {
     center.add(new ResourcesPanel(), "resources");
     center.add(new ClientsPanel(), "clients");
 
-    cards.show(center, "quotes");
+    openCard("quotes");
 
     if (ServiceFactory.http()!=null){
       SyncService sync = new SyncService(ServiceFactory.http());
@@ -89,39 +94,27 @@ public class MainFrame extends JFrame {
   }
 
   private JComponent buildSidebar() {
-    JPanel side = new JPanel();
-    side.setLayout(new BoxLayout(side, BoxLayout.Y_AXIS));
-    side.setBorder(new EmptyBorder(8,8,8,8));
-    side.setPreferredSize(new Dimension(220, 0));
-    side.add(navButton("Planning", "planning"));
-    side.add(Box.createVerticalStrut(6));
-    side.add(navButton("Agenda", "agenda"));
-    side.add(Box.createVerticalStrut(6));
-    side.add(navButton("Devis", "quotes"));
-    side.add(Box.createVerticalStrut(6));
-    side.add(navButton("Commandes", "orders"));
-    side.add(Box.createVerticalStrut(6));
-    side.add(navButton("Bons de livraison", "delivery"));
-    side.add(Box.createVerticalStrut(6));
-    side.add(navButton("Factures", "invoices"));
-    side.add(Box.createVerticalStrut(6));
-    side.add(navButton("Clients", "clients"));
-    side.add(Box.createVerticalStrut(6));
-    side.add(navButton("Ressources", "resources"));
-    side.add(Box.createVerticalGlue());
+    CollapsibleSidebar side = new CollapsibleSidebar();
+    addSidebarItem(side, "planning", "🗓", "Planning");
+    addSidebarItem(side, "agenda", "📒", "Agenda");
+    addSidebarItem(side, "quotes", "🧾", "Devis");
+    addSidebarItem(side, "orders", "📦", "Commandes");
+    addSidebarItem(side, "delivery", "🚚", "Bons de livraison");
+    addSidebarItem(side, "invoices", "💶", "Factures");
+    addSidebarItem(side, "clients", "👥", "Clients");
+    addSidebarItem(side, "resources", "🏷️", "Ressources");
     return side;
   }
 
-  private JButton navButton(String label, String card) {
-    JButton b = new JButton(label);
-    b.putClientProperty("JButton.buttonType", "roundRect");
-    b.addActionListener(e -> cards.show(center, card));
-    return b;
+  private void addSidebarItem(CollapsibleSidebar side, String card, String icon, String label) {
+    SidebarButton button = side.addItem(icon, label, () -> openCard(card));
+    navButtons.put(card, button);
   }
 
   /** Navigation inter-panneaux depuis menus contextuels */
   public void openCard(String key){
     cards.show(center, key);
+    navButtons.forEach((card, button) -> button.setActive(card.equals(key)));
   }
 }
 
