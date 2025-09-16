@@ -57,6 +57,140 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Order'
+  /api/v1/resources:
+    get:
+      summary: List resources
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Resource'
+    post:
+      summary: Create resource
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Resource'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+  /api/v1/resources/{id}:
+    put:
+      summary: Update resource
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Resource'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+    delete:
+      summary: Delete resource
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deleted
+  /api/v1/resource-types:
+    get:
+      summary: List resource types
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ResourceType'
+  /api/v1/resources/{id}/unavailability:
+    get:
+      summary: List resource unavailability periods
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Unavailability'
+    post:
+      summary: Add unavailability period
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Unavailability'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Unavailability'
+  /api/v1/resources/{id}/unavailability/{uid}:
+    delete:
+      summary: Remove unavailability period
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deleted
 components:
   schemas:
     DocumentLine:
@@ -102,3 +236,50 @@ components:
         totalHT:
           type: number
           format: double
+    Resource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/ResourceType'
+        color:
+          type: string
+        notes:
+          type: string
+        capacity:
+          type: integer
+        tags:
+          type: string
+        weeklyUnavailability:
+          type: string
+        unavailabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Unavailability'
+    ResourceType:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+    Unavailability:
+      type: object
+      required: [start, end]
+      properties:
+        id:
+          type: string
+          format: uuid
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+        reason:
+          type: string

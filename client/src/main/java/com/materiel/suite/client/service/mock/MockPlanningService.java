@@ -1,8 +1,10 @@
 package com.materiel.suite.client.service.mock;
 
+import com.materiel.suite.client.model.Conflict;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
-import com.materiel.suite.client.model.Conflict;
+import com.materiel.suite.client.model.ResourceType;
+import com.materiel.suite.client.model.Unavailability;
 import com.materiel.suite.client.service.PlanningService;
 import com.materiel.suite.client.service.PlanningValidation;
 
@@ -14,18 +16,27 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class MockPlanningService implements PlanningService {
   private final Map<UUID, Resource> resources = new ConcurrentHashMap<>();
+  private final List<ResourceType> resourceTypes = new ArrayList<>(List.of(
+      new ResourceType("CRANE", "Grue"),
+      new ResourceType("TRUCK", "Camion"),
+      new ResourceType("PLATFORM", "Nacelle")
+  ));
   private final Map<UUID, Intervention> interventions = new ConcurrentHashMap<>();
 
   public MockPlanningService(){
     if (resources.isEmpty()){
-      Resource r1 = new Resource(UUID.randomUUID(), "Grue A");
-      Resource r2 = new Resource(UUID.randomUUID(), "Grue B");
-      Resource r3 = new Resource(UUID.randomUUID(), "Nacelle 18m");
+      Resource r1 = new Resource(UUID.randomUUID(), "Grue A"); r1.setType(resourceTypes.get(0));
+      Resource r2 = new Resource(UUID.randomUUID(), "Grue B"); r2.setType(resourceTypes.get(0));
+      Resource r3 = new Resource(UUID.randomUUID(), "Nacelle 18m"); r3.setType(resourceTypes.get(2));
       // === CRM-INJECT BEGIN: resource-mock-defaults ===
       r1.setCapacity(2); r1.setTags("grue,90t"); r1.setWeeklyUnavailability("MON 08:00-12:00; THU 13:00-17:00");
       r2.setCapacity(1); r2.setTags("grue,60t"); r2.setWeeklyUnavailability("TUE 08:00-12:00");
       r3.setCapacity(1); r3.setTags("nacelle"); r3.setWeeklyUnavailability("FRI 14:00-18:00");
       // === CRM-INJECT END ===
+      r1.getUnavailabilities().add(new Unavailability(UUID.randomUUID(),
+          LocalDateTime.now().plusDays(1).withHour(8).withMinute(0).withSecond(0).withNano(0),
+          LocalDateTime.now().plusDays(1).withHour(12).withMinute(0).withSecond(0).withNano(0),
+          "Maintenance"));
       resources.put(r1.getId(), r1); resources.put(r2.getId(), r2); resources.put(r3.getId(), r3);
       LocalDate base = LocalDate.now().with(java.time.DayOfWeek.MONDAY);
       add(fillCard(new Intervention(UUID.randomUUID(), r1.getId(), "Chantier Alpha", base.plusDays(0), base.plusDays(2), "#5E81AC"),
@@ -61,6 +72,29 @@ public class MockPlanningService implements PlanningService {
   @Override public List<Resource> listResources(){ return new ArrayList<>(resources.values()); }
   @Override public Resource saveResource(Resource r){ if(r.getId()==null) r.setId(UUID.randomUUID()); resources.put(r.getId(), r); return r; }
   @Override public void deleteResource(UUID id){ resources.remove(id); }
+  @Override public List<ResourceType> listResourceTypes(){ return new ArrayList<>(resourceTypes); }
+  @Override public List<Unavailability> listResourceUnavailabilities(UUID resourceId){
+    Resource r = resources.get(resourceId);
+    return r==null? List.of() : new ArrayList<>(r.getUnavailabilities());
+  }
+  @Override public Unavailability addUnavailability(UUID resourceId, Unavailability u){
+    Resource r = resources.get(resourceId);
+    if (r==null) throw new NoSuchElementException("resource not found");
+    Unavailability copy = new Unavailability(
+        u.getId()!=null? u.getId():UUID.randomUUID(),
+        u.getStart(),
+        u.getEnd(),
+        u.getReason()
+    );
+    r.getUnavailabilities().add(copy);
+    return copy;
+  }
+  @Override public void deleteUnavailability(UUID resourceId, UUID unavailabilityId){
+    Resource r = resources.get(resourceId);
+    if (r==null) return;
+    if (unavailabilityId==null) return;
+    r.getUnavailabilities().removeIf(u -> unavailabilityId.equals(u.getId()));
+  }
 
   @Override public List<Intervention> listInterventions(LocalDate from, LocalDate to){
     List<Intervention> list = new ArrayList<>();
