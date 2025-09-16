@@ -1,11 +1,12 @@
 package com.materiel.suite.backend.v1.service;
 
-import com.materiel.suite.backend.v1.domain.DocumentStatus;
-
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+
+import com.materiel.suite.backend.v1.domain.DocumentStatus;
 
 /**
  * Machine à états simple et déterministe pour les documents.
@@ -29,7 +30,7 @@ public class DocumentStateMachine {
   }
 
   private final Map<DocumentStatus, Set<Action>> allowed = new EnumMap<>(DocumentStatus.class);
-  private final Map<TransitionKey, DocumentStatus> transitions = new EnumMap<>(TransitionKey.class);
+  private final Map<TransitionKey, DocumentStatus> transitions = new HashMap<TransitionKey, DocumentStatus>();
 
   public DocumentStateMachine(){
     // Par défaut, rien n'est autorisé -> on remplit explicitement
@@ -68,6 +69,6 @@ public class DocumentStateMachine {
     transitions.put(new TransitionKey(from, action), to);
   }
 
-  private record TransitionKey(DocumentStatus from, Action action) {}
+  public record TransitionKey(DocumentStatus from, Action action) {}
 }
 

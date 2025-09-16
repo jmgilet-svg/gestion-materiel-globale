@@ -2,7 +2,6 @@ package com.materiel.suite.backend.planning;
 
 import org.springframework.stereotype.Service;
 
-import javax.annotation.PostConstruct;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -12,7 +11,7 @@ public class InMemoryPlanningService implements PlanningService {
   private final Map<UUID, ResourceDto> resources = new ConcurrentHashMap<>();
   private final Map<UUID, InterventionDto> interventions = new ConcurrentHashMap<>();
 
-  @PostConstruct
+  @jakarta.annotation.PostConstruct
   public void seed(){
     if (!resources.isEmpty()) return;
     ResourceDto r1 = new ResourceDto(UUID.randomUUID(), "Grue A");
