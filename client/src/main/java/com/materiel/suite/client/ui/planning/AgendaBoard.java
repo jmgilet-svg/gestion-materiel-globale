@@ -1,5 +1,6 @@
 package com.materiel.suite.client.ui.planning;
 
+import com.materiel.suite.client.model.Client;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.net.ServiceFactory;
@@ -181,11 +182,26 @@ public class AgendaBoard extends JComponent {
     if (label == null || label.isBlank()) label = labelCache.getOrDefault(it.getId(), "(sans titre)"); // FIX: cache fallback
     int maxTextW = Math.max(0, r.width - 20);
     if (maxTextW > 0){
-      g2.setColor(PlanningUx.TILE_TX); // FIX: text color
       g2.setClip(r.x+8, r.y+4, r.width-16, r.height-8);
-      label = PlanningUx.ellipsize(label, g2.getFontMetrics(), maxTextW); // FIX: shared ellipsize
-      int baseline = r.y + Math.min(r.height-6, Math.max(14, g2.getFontMetrics().getAscent()+2));
-      g2.drawString(label, r.x+10, baseline);
+      int textX = r.x + 10;
+      int textY = r.y + 20;
+      Font base = g2.getFont();
+      // === CRM-INJECT BEGIN: agenda-board-client-text ===
+      String client = it.getClientName();
+      if (client!=null && !client.isBlank()){
+        Font bold = base.deriveFont(Font.BOLD, base.getSize2D()+1f);
+        g2.setFont(bold);
+        g2.setColor(new Color(0x111827));
+        String clientLine = PlanningUx.ellipsize(client, g2.getFontMetrics(), maxTextW);
+        g2.drawString(clientLine, textX, textY);
+        textY += g2.getFontMetrics().getHeight();
+        g2.setFont(base);
+      }
+      // === CRM-INJECT END ===
+      g2.setColor(PlanningUx.TILE_TX); // FIX: text color
+      String labelLine = PlanningUx.ellipsize(label, g2.getFontMetrics(), maxTextW); // FIX: shared ellipsize
+      g2.drawString(labelLine, textX, textY);
+      g2.setFont(base);
       g2.setClip(null);
     }
   }
@@ -393,7 +409,12 @@ public class AgendaBoard extends JComponent {
     if (SwingUtilities.isRightMouseButton(e)){
       Intervention it = findAt(e.getPoint());
       if (it!=null) showTileMenu(e.getX(), e.getY(), it);
+    // === CRM-INJECT BEGIN: agenda-board-double-click-edit ===
+    } else if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount()==2){
+      Intervention it = findAt(e.getPoint());
+      if (it!=null) editIntervention(it);
     }
+    // === CRM-INJECT END ===
   }
 
   private Intervention findAt(Point p){
@@ -415,6 +436,14 @@ public class AgendaBoard extends JComponent {
   private void showTileMenu(int x, int y, Intervention it){
     contextItem = it;
     var menu = new JPopupMenu();
+    // === CRM-INJECT BEGIN: agenda-board-edit-action ===
+    JMenuItem edit = new JMenuItem("Modifier…");
+    edit.addActionListener(a -> {
+      if (contextItem!=null) editIntervention(contextItem);
+    });
+    menu.add(edit);
+    menu.addSeparator();
+    // === CRM-INJECT END ===
     JMenu open = new JMenu("Ouvrir…");
     JMenuItem openQ = new JMenuItem("Devis");
     JMenuItem openO = new JMenuItem("Commande");
@@ -446,12 +475,59 @@ public class AgendaBoard extends JComponent {
     if (contextItem.getDateHeureFin()!=null) copy.setDateHeureFin(contextItem.getDateHeureFin().plusDays(days));
     if (contextItem.getDateDebut()!=null) copy.setDateDebut(contextItem.getDateDebut().plusDays(days));
     if (contextItem.getDateFin()!=null) copy.setDateFin(contextItem.getDateFin().plusDays(days));
+    // === CRM-INJECT BEGIN: agenda-board-duplicate-client ===
+    copy.setClientId(contextItem.getClientId());
+    copy.setClientName(contextItem.getClientName());
+    // === CRM-INJECT END ===
     copy.setStatus(contextItem.getStatus());
     copy.setFavorite(contextItem.isFavorite());
     copy.setLocked(contextItem.isLocked());
     ServiceFactory.planning().saveIntervention(copy);
     reload();
   }
+
+  // === CRM-INJECT BEGIN: agenda-board-edit-dialog ===
+  private void editIntervention(Intervention it){
+    JTextField tfLabel = new JTextField(it.getLabel()==null? "" : it.getLabel(), 24);
+    java.util.List<Client> clients = new java.util.ArrayList<>();
+    var clientService = ServiceFactory.clients();
+    if (clientService!=null){
+      try { clients.addAll(clientService.list()); } catch(Exception ignore){}
+    }
+    String[] names = new String[clients.size()+1];
+    names[0] = "(Aucun)";
+    int selectedIdx = 0;
+    java.util.UUID existingId = it.getClientId();
+    String existingName = it.getClientName();
+    for (int i=0;i<clients.size();i++){
+      Client c = clients.get(i);
+      names[i+1] = c.getName();
+      if (existingId!=null && existingId.equals(c.getId())) selectedIdx = i+1;
+      else if (selectedIdx==0 && existingId==null && existingName!=null
+          && existingName.equalsIgnoreCase(c.getName())) selectedIdx = i+1;
+    }
+    JComboBox<String> cbClient = new JComboBox<>(names);
+    cbClient.setSelectedIndex(selectedIdx);
+    Object[] msg = {"Libellé :", tfLabel, "Client :", cbClient};
+    int ok = JOptionPane.showConfirmDialog(this, msg, "Modifier l'intervention", JOptionPane.OK_CANCEL_OPTION);
+    if (ok==JOptionPane.OK_OPTION){
+      String label = tfLabel.getText()==null? "" : tfLabel.getText().trim();
+      if (!label.isEmpty()) it.setLabel(label);
+      if (it.getId()!=null) labelCache.put(it.getId(), it.getLabel());
+      int idx = cbClient.getSelectedIndex();
+      if (idx>0 && idx-1 < clients.size()){
+        Client c = clients.get(idx-1);
+        it.setClientId(c.getId());
+        it.setClientName(c.getName());
+      } else {
+        it.setClientId(null);
+        it.setClientName(null);
+      }
+      ServiceFactory.planning().saveIntervention(it);
+      reload();
+    }
+  }
+  // === CRM-INJECT END ===
 
   private void toggleLockContext(){
     if (contextItem==null) return;
