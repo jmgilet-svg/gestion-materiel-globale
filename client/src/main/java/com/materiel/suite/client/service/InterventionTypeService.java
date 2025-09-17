@@ -8,4 +8,10 @@ import java.util.List;
 public interface InterventionTypeService {
   /** Retourne la liste des types disponibles (peut être vide). */
   List<InterventionType> list();
+
+  /** Crée ou met à jour un type d'intervention. */
+  InterventionType save(InterventionType type);
+
+  /** Supprime le type correspondant au code fourni. */
+  void delete(String code);
 }
