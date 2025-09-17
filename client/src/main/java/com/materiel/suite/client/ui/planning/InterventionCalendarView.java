@@ -10,34 +10,53 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /** Regroupement par journée pour une lecture "agenda" rapide. */
 public class InterventionCalendarView implements InterventionView {
+  private static final Color HEADER_BG = new Color(245, 245, 245);
+  private static final Color DROP_TARGET_BG = new Color(232, 245, 233);
+  private static final int START_HOUR = 6;
+  private static final int END_HOUR = 20;
+  private static final int HOUR_HEIGHT = 40;
+  private static final int SLOT_MINUTES = 15;
+  private static final int COLUMN_WIDTH = 180;
+  private static final int RESIZE_HANDLE = 6;
+
+  private final JPanel root = new JPanel(new BorderLayout());
   private final JPanel days = new JPanel();
-  private final JScrollPane scroller = new JScrollPane(days);
+  private final JScrollPane dayScroll = new JScrollPane(days);
+  private final JScrollPane weekScroll = new JScrollPane();
   private final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
   private final DateTimeFormatter dayFormatter = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.FRENCH);
   private Consumer<Intervention> onOpen = it -> {};
   private BiConsumer<Intervention, LocalDate> onMove = (it, day) -> {};
+  private BiConsumer<Intervention, java.util.Date> onMoveDateTime = (it, date) -> {};
+  private BiConsumer<Intervention, java.util.Date> onResizeDateTime = (it, date) -> {};
   private Intervention dragging;
   private JComponent dragSource;
-  private static final Color HEADER_BG = new Color(245, 245, 245);
-  private static final Color DROP_TARGET_BG = new Color(232, 245, 233);
+  private List<Intervention> current = List.of();
+  private String mode = "Semaine";
 
   public InterventionCalendarView(){
     days.setLayout(new BoxLayout(days, BoxLayout.Y_AXIS));
     days.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-    scroller.setBorder(BorderFactory.createEmptyBorder());
-    scroller.getVerticalScrollBar().setUnitIncrement(18);
+    dayScroll.setBorder(BorderFactory.createEmptyBorder());
+    dayScroll.getVerticalScrollBar().setUnitIncrement(18);
+    weekScroll.setBorder(BorderFactory.createEmptyBorder());
+    weekScroll.getVerticalScrollBar().setUnitIncrement(18);
+    root.add(dayScroll, BorderLayout.CENTER);
     days.addMouseListener(new MouseAdapter(){
       @Override public void mouseReleased(MouseEvent e){
         dragging = null;
@@ -50,39 +69,12 @@ public class InterventionCalendarView implements InterventionView {
   }
 
   @Override public JComponent getComponent(){
-    return scroller;
+    return root;
   }
 
   @Override public void setData(List<Intervention> list){
-    days.removeAll();
-    dragging = null;
-    dragSource = null;
-    List<Intervention> data = new ArrayList<>();
-    if (list != null){
-      for (Intervention it : list){
-        if (it != null){
-          data.add(it);
-        }
-      }
-    }
-    if (data.isEmpty()){
-      days.add(emptyState());
-      refresh();
-      return;
-    }
-    Map<LocalDate, List<Intervention>> byDay = new TreeMap<>();
-    for (Intervention it : data){
-      LocalDate day = dayOf(it);
-      byDay.computeIfAbsent(day, d -> new ArrayList<>()).add(it);
-    }
-    for (Map.Entry<LocalDate, List<Intervention>> entry : byDay.entrySet()){
-      days.add(dayHeader(entry.getKey()));
-      entry.getValue().stream()
-          .sorted(Comparator.comparing(this::startDateTime))
-          .forEach(it -> days.add(row(it)));
-      days.add(Box.createVerticalStrut(6));
-    }
-    refresh();
+    current = sanitize(list);
+    renderCurrent();
   }
 
   @Override public void setOnOpen(Consumer<Intervention> onOpen){
@@ -93,7 +85,77 @@ public class InterventionCalendarView implements InterventionView {
     this.onMove = onMove != null ? onMove : (it, day) -> {};
   }
 
-  private void refresh(){
+  @Override public void setOnMoveDateTime(BiConsumer<Intervention, java.util.Date> onMoveDateTime){
+    this.onMoveDateTime = onMoveDateTime != null ? onMoveDateTime : (it, date) -> {};
+  }
+
+  @Override public void setOnResizeDateTime(BiConsumer<Intervention, java.util.Date> onResizeDateTime){
+    this.onResizeDateTime = onResizeDateTime != null ? onResizeDateTime : (it, date) -> {};
+  }
+
+  @Override public void setMode(String mode){
+    this.mode = mode != null ? mode : "Semaine";
+    root.removeAll();
+    if (isWeekMode()){
+      root.add(weekScroll, BorderLayout.CENTER);
+    } else {
+      root.add(dayScroll, BorderLayout.CENTER);
+    }
+    root.revalidate();
+    root.repaint();
+    renderCurrent();
+  }
+
+  private boolean isWeekMode(){
+    return "Semaine".equalsIgnoreCase(mode);
+  }
+
+  private void renderCurrent(){
+    if (isWeekMode()){
+      renderWeek();
+    } else {
+      renderDays();
+    }
+  }
+
+  private List<Intervention> sanitize(List<Intervention> list){
+    if (list == null || list.isEmpty()){
+      return List.of();
+    }
+    List<Intervention> data = new ArrayList<>();
+    for (Intervention it : list){
+      if (it != null){
+        data.add(it);
+      }
+    }
+    return data;
+  }
+
+  private void renderDays(){
+    days.removeAll();
+    dragging = null;
+    dragSource = null;
+    if (current.isEmpty()){
+      days.add(emptyState());
+      refreshDays();
+      return;
+    }
+    Map<LocalDate, List<Intervention>> byDay = new TreeMap<>();
+    for (Intervention it : current){
+      LocalDate day = dayOf(it);
+      byDay.computeIfAbsent(day, d -> new ArrayList<>()).add(it);
+    }
+    for (Map.Entry<LocalDate, List<Intervention>> entry : byDay.entrySet()){
+      days.add(dayHeader(entry.getKey()));
+      entry.getValue().stream()
+          .sorted(Comparator.comparing(this::startDateTime))
+          .forEach(it -> days.add(row(it)));
+      days.add(Box.createVerticalStrut(6));
+    }
+    refreshDays();
+  }
+
+  private void refreshDays(){
     days.revalidate();
     days.repaint();
   }
@@ -204,6 +266,90 @@ public class InterventionCalendarView implements InterventionView {
     return panel;
   }
 
+  private void renderWeek(){
+    List<LocalDate> daysList = current.stream()
+        .map(this::weekDay)
+        .filter(Objects::nonNull)
+        .distinct()
+        .sorted()
+        .collect(Collectors.toList());
+    if (daysList.isEmpty()){
+      JPanel p = new JPanel(new BorderLayout());
+      p.add(emptyState(), BorderLayout.CENTER);
+      weekScroll.setViewportView(p);
+      weekScroll.revalidate();
+      weekScroll.repaint();
+      return;
+    }
+
+    JPanel header = new JPanel(new GridLayout(1, daysList.size() + 1));
+    header.setBackground(Color.WHITE);
+    header.add(new JLabel(""));
+    for (LocalDate day : daysList){
+      JLabel l = new JLabel(capitalize(dayFormatter.format(day)), SwingConstants.CENTER);
+      l.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 1, new Color(230, 230, 230)));
+      header.add(l);
+    }
+
+    JPanel grid = new JPanel(new GridBagLayout());
+    grid.setBackground(Color.WHITE);
+    GridBagConstraints gc = new GridBagConstraints();
+    gc.fill = GridBagConstraints.BOTH;
+    gc.gridy = 0;
+    gc.weighty = 1;
+    gc.insets = new Insets(0, 0, 0, 0);
+
+    gc.gridx = 0;
+    gc.weightx = 0;
+    grid.add(buildHourColumn(), gc);
+
+    int column = 1;
+    for (LocalDate day : daysList){
+      gc.gridx = column++;
+      gc.weightx = 1;
+      grid.add(new DayColumn(day, filterForDay(day)), gc);
+    }
+
+    JPanel wrap = new JPanel(new BorderLayout());
+    wrap.add(header, BorderLayout.NORTH);
+    wrap.add(grid, BorderLayout.CENTER);
+    weekScroll.setViewportView(wrap);
+    weekScroll.revalidate();
+    weekScroll.repaint();
+  }
+
+  private JComponent buildHourColumn(){
+    int totalHeight = (END_HOUR - START_HOUR) * HOUR_HEIGHT;
+    return new JComponent(){
+      @Override protected void paintComponent(Graphics g){
+        super.paintComponent(g);
+        g.setColor(new Color(120, 120, 120));
+        for (int h = START_HOUR; h <= END_HOUR; h++){
+          int y = (h - START_HOUR) * HOUR_HEIGHT;
+          g.drawString(String.format("%02d:00", h), 6, y + 12);
+        }
+      }
+      @Override public Dimension getPreferredSize(){
+        return new Dimension(60, totalHeight);
+      }
+    };
+  }
+
+  private List<Intervention> filterForDay(LocalDate day){
+    return current.stream()
+        .filter(it -> {
+          LocalDateTime start = effectiveStart(it);
+          return start != null && day.equals(start.toLocalDate());
+        })
+        .sorted(Comparator.comparing(this::effectiveStart))
+        .collect(Collectors.toList());
+  }
+
+  private LocalDate weekDay(Intervention it){
+    LocalDateTime start = effectiveStart(it);
+    return start != null ? start.toLocalDate() : null;
+  }
+
   private LocalDate dayOf(Intervention it){
     LocalDateTime start = it.getDateHeureDebut();
     if (start != null){
@@ -228,6 +374,33 @@ public class InterventionCalendarView implements InterventionView {
     return LocalDateTime.MIN;
   }
 
+  private LocalDateTime effectiveStart(Intervention it){
+    LocalDateTime start = it.getDateHeureDebut();
+    if (start != null){
+      return start;
+    }
+    LocalDate day = it.getDateDebut();
+    if (day != null){
+      return day.atTime(START_HOUR, 0);
+    }
+    return null;
+  }
+
+  private LocalDateTime effectiveEnd(Intervention it, LocalDateTime start){
+    LocalDateTime end = it.getDateHeureFin();
+    if (end != null){
+      return end;
+    }
+    LocalDate day = it.getDateFin();
+    if (day != null){
+      return day.atTime(END_HOUR, 0);
+    }
+    if (start != null){
+      return start.plusHours(1);
+    }
+    return null;
+  }
+
   private String escape(String value){
     if (value == null){
       return "";
@@ -243,5 +416,215 @@ public class InterventionCalendarView implements InterventionView {
       return "";
     }
     return value.substring(0, 1).toUpperCase(Locale.FRENCH) + value.substring(1);
+  }
+
+  private class DayColumn extends JPanel {
+    private final LocalDate day;
+
+    DayColumn(LocalDate day, List<Intervention> items){
+      super(null);
+      this.day = day;
+      setOpaque(true);
+      setBackground(Color.WHITE);
+      setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, new Color(235, 235, 235)));
+      setPreferredSize(new Dimension(COLUMN_WIDTH, (END_HOUR - START_HOUR) * HOUR_HEIGHT));
+      for (Intervention it : items){
+        LocalDateTime start = effectiveStart(it);
+        if (start == null){
+          continue;
+        }
+        LocalDateTime end = effectiveEnd(it, start);
+        if (end == null){
+          end = start.plusHours(1);
+        }
+        add(makeBlock(it, start, end));
+      }
+    }
+
+    @Override protected void paintComponent(Graphics g){
+      super.paintComponent(g);
+      Graphics2D g2 = (Graphics2D) g.create();
+      g2.setColor(new Color(245, 245, 245));
+      for (int hour = START_HOUR; hour <= END_HOUR; hour++){
+        int y = (hour - START_HOUR) * HOUR_HEIGHT;
+        g2.drawLine(0, y, getWidth(), y);
+        if (hour < END_HOUR){
+          g2.setColor(new Color(236, 236, 236));
+          g2.drawLine(0, y + HOUR_HEIGHT / 2, getWidth(), y + HOUR_HEIGHT / 2);
+          g2.setColor(new Color(245, 245, 245));
+        }
+      }
+      g2.dispose();
+    }
+
+    private JComponent makeBlock(Intervention it, LocalDateTime start, LocalDateTime end){
+      LocalDateTime localStart = alignToDay(start);
+      LocalDateTime localEnd = alignToDay(end);
+      int y = snapY(toY(localStart));
+      int h = snapHeight(Math.max(HOUR_HEIGHT / 2, toY(localEnd) - toY(localStart)));
+      JPanel block = new JPanel(new BorderLayout()){
+        private boolean resizing;
+        private int pressY;
+        private int pressHeight;
+        private int pressBlockY;
+        {
+          setOpaque(true);
+          setBackground(new Color(197, 225, 250));
+          setBorder(BorderFactory.createLineBorder(new Color(144, 202, 249)));
+          JLabel label = new JLabel(blockLabel(it, localStart, localEnd));
+          InterventionType type = it.getType();
+          if (type != null && type.getIconKey() != null){
+            label.setIcon(IconRegistry.small(type.getIconKey()));
+          }
+          label.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+          add(label, BorderLayout.CENTER);
+          addMouseListener(new MouseAdapter(){
+            @Override public void mouseClicked(MouseEvent e){
+              if (e.getClickCount() == 2){
+                onOpen.accept(it);
+              }
+            }
+            @Override public void mousePressed(MouseEvent e){
+              pressY = e.getYOnScreen();
+              pressHeight = getHeight();
+              pressBlockY = getY();
+              resizing = e.getY() >= getHeight() - RESIZE_HANDLE;
+              setCursor(Cursor.getPredefinedCursor(resizing ? Cursor.S_RESIZE_CURSOR : Cursor.MOVE_CURSOR));
+            }
+            @Override public void mouseReleased(MouseEvent e){
+              setCursor(Cursor.getDefaultCursor());
+              LocalDateTime baseStart = startOfY(getY());
+              if (resizing){
+                LocalDateTime newEnd = snapQuarter(baseStart.plusMinutes(heightToMinutes(getHeight())));
+                onResizeDateTime.accept(it, toDate(newEnd));
+              } else {
+                LocalDateTime newStart = snapQuarter(baseStart);
+                onMoveDateTime.accept(it, toDate(newStart));
+              }
+            }
+          });
+          addMouseMotionListener(new java.awt.event.MouseMotionAdapter(){
+            @Override public void mouseDragged(MouseEvent e){
+              int dy = e.getYOnScreen() - pressY;
+              if (resizing){
+                int nh = clamp(pressHeight + dy, slotStep(), getParent().getHeight() - getY());
+                setSize(getWidth(), snapHeight(nh));
+              } else {
+                int ny = clamp(pressBlockY + dy, 0, getParent().getHeight() - getHeight());
+                setLocation(getX(), snapY(ny));
+              }
+              getParent().repaint();
+            }
+          });
+        }
+      };
+      block.setBounds(8, y, COLUMN_WIDTH - 16, h);
+      return block;
+    }
+
+    private int toY(LocalDateTime dateTime){
+      LocalDateTime base = day.atTime(START_HOUR, 0);
+      long minutes = java.time.Duration.between(base, dateTime).toMinutes();
+      double pxPerMinute = HOUR_HEIGHT / 60.0;
+      return (int) Math.round(minutes * pxPerMinute);
+    }
+
+    private LocalDateTime alignToDay(LocalDateTime value){
+      if (value == null){
+        return day.atTime(START_HOUR, 0);
+      }
+      if (!Objects.equals(value.toLocalDate(), day)){
+        return day.atTime(value.toLocalTime());
+      }
+      return value;
+    }
+
+    private int heightToMinutes(int height){
+      double minutes = height * (60.0 / HOUR_HEIGHT);
+      return (int) Math.max(SLOT_MINUTES, Math.round(minutes));
+    }
+
+    private int snapY(int y){
+      int step = slotStep();
+      if (step <= 0){
+        return y;
+      }
+      int snapped = (y / step) * step;
+      int max = getParent() != null ? getParent().getHeight() - step : y;
+      return Math.max(0, Math.min(snapped, Math.max(0, max)));
+    }
+
+    private int snapHeight(int h){
+      int step = slotStep();
+      if (step <= 0){
+        return h;
+      }
+      int snapped = (h / step) * step;
+      if (snapped < step){
+        snapped = step;
+      }
+      return snapped;
+    }
+
+    private int slotStep(){
+      return (int) Math.max(1, Math.round(SLOT_MINUTES * (HOUR_HEIGHT / 60.0)));
+    }
+
+    private int clamp(int value, int min, int max){
+      return Math.max(min, Math.min(max, value));
+    }
+
+    private LocalDateTime startOfY(int y){
+      int minutes = (int) Math.round(y * (60.0 / HOUR_HEIGHT));
+      if (minutes < 0){
+        minutes = 0;
+      }
+      LocalDateTime base = day.atTime(START_HOUR, 0).plusMinutes(minutes);
+      LocalDateTime max = day.atTime(END_HOUR, 0);
+      if (base.isAfter(max)){
+        base = max.minusMinutes(SLOT_MINUTES);
+      }
+      return base;
+    }
+
+    private LocalDateTime snapQuarter(LocalDateTime dateTime){
+      if (dateTime == null){
+        return day.atTime(START_HOUR, 0);
+      }
+      int minute = dateTime.getMinute();
+      int snapped = (minute / SLOT_MINUTES) * SLOT_MINUTES;
+      LocalDateTime aligned = dateTime.withMinute(snapped).withSecond(0).withNano(0);
+      LocalDateTime min = day.atTime(START_HOUR, 0);
+      LocalDateTime max = day.atTime(END_HOUR, 0);
+      if (aligned.isBefore(min)){
+        return min;
+      }
+      if (aligned.isAfter(max)){
+        return max;
+      }
+      return aligned;
+    }
+
+    private java.util.Date toDate(LocalDateTime dateTime){
+      return java.util.Date.from(dateTime.atZone(ZoneId.systemDefault()).toInstant());
+    }
+
+    private String blockLabel(Intervention it, LocalDateTime start, LocalDateTime end){
+      StringBuilder sb = new StringBuilder("<html><b>")
+          .append(escape(it.getLabel()))
+          .append("</b>");
+      if (start != null){
+        sb.append(" ").append(timeFormatter.format(start));
+        if (end != null){
+          sb.append("–").append(timeFormatter.format(end));
+        }
+      }
+      String address = escape(it.getAddress());
+      if (!address.isBlank()){
+        sb.append("<br/><span style='color:#555555'>").append(address).append("</span>");
+      }
+      sb.append("</html>");
+      return sb.toString();
+    }
   }
 }
