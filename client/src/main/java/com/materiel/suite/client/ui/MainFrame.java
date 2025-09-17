@@ -15,6 +15,7 @@ import com.materiel.suite.client.ui.theme.ThemeManager;
 import com.materiel.suite.client.ui.commands.CommandBus;
 import com.materiel.suite.client.ui.shell.CollapsibleSidebar;
 import com.materiel.suite.client.ui.shell.SidebarButton;
+import com.materiel.suite.client.ui.settings.SettingsPanel;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -50,6 +51,7 @@ public class MainFrame extends JFrame {
     center.add(new InvoicesPanel(), "invoices");
     center.add(new ResourcesPanel(), "resources");
     center.add(new ClientsPanel(), "clients");
+    center.add(new SettingsPanel(), "settings");
 
     openCard("quotes");
 
@@ -103,6 +105,7 @@ public class MainFrame extends JFrame {
     addSidebarItem(side, "invoices", "invoice", "Factures");
     addSidebarItem(side, "clients", "user", "Clients");
     addSidebarItem(side, "resources", "wrench", "Ressources");
+    addSidebarItem(side, "settings", "settings", "Paramètres");
     return side;
   }
 
