@@ -3,7 +3,6 @@ package com.materiel.suite.client.ui.planning;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
-import java.awt.Container;
 import java.awt.Dialog;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -29,7 +28,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSlider;
-import javax.swing.JTextField;
+import javax.swing.JTabbedPane;
 import javax.swing.JToggleButton;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
@@ -42,6 +41,7 @@ import com.materiel.suite.client.ui.interventions.InterventionDialog;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.PlanningService;
+import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.commands.CommandBus;
 import com.materiel.suite.client.ui.MainFrame;
 
@@ -49,6 +49,13 @@ public class PlanningPanel extends JPanel {
   private final PlanningBoard board = new PlanningBoard();
   private final AgendaBoard agenda = new AgendaBoard();
   private JButton conflictsBtn;
+  private JPanel ganttContainer;
+  private JTabbedPane tabs;
+  private final InterventionView calendarView = new InterventionCalendarView();
+  private final InterventionView tableView = new InterventionTableView();
+  private JToggleButton modeToggle;
+  private boolean agendaMode;
+  private boolean updatingModeToggle;
 
   public PlanningPanel(){
     super(new BorderLayout());
@@ -99,7 +106,18 @@ public class PlanningPanel extends JPanel {
       rowHeader.repaint();
     });
 
-    add(center, BorderLayout.CENTER);
+    calendarView.setOnOpen(this::openInterventionEditor);
+    tableView.setOnOpen(this::openInterventionEditor);
+
+    ganttContainer = center;
+    tabs = new JTabbedPane();
+    tabs.addTab("Planning", IconRegistry.small("task"), center);
+    tabs.addTab("Calendrier", IconRegistry.small("calendar"), calendarView.getComponent());
+    tabs.addTab("Liste", IconRegistry.small("file"), tableView.getComponent());
+    tabs.addChangeListener(e -> updateModeToggleState());
+    add(tabs, BorderLayout.CENTER);
+    updateModeToggleState();
+
     reload();
 
     putUndoRedoKeymap();
@@ -118,12 +136,15 @@ public class PlanningPanel extends JPanel {
     gran.setSelectedItem(board.getSlotMinutes()+" min");
     JLabel densL = new JLabel("Densité:");
     JComboBox<String> density = new JComboBox<>(new String[]{"COMPACT","NORMAL","SPACIOUS"});
-    JToggleButton mode = new JToggleButton("Agenda");
+    modeToggle = new JToggleButton("Agenda");
     conflictsBtn = new JButton("Conflits (0)");
     JButton toAgenda = new JButton("↔ Agenda");
     JButton addI = new JButton("+ Intervention", IconRegistry.small("task"));
 
-    mode.addActionListener(e -> switchMode(mode.isSelected()));
+    modeToggle.addActionListener(e -> {
+      if (updatingModeToggle) return;
+      switchMode(modeToggle.isSelected());
+    });
     conflictsBtn.addActionListener(e -> openConflictsDialog());
     density.setSelectedItem(board.getDensity().name());
     density.addActionListener(e -> {
@@ -150,7 +171,7 @@ public class PlanningPanel extends JPanel {
     addI.addActionListener(e -> addInterventionDialog());
     toAgenda.addActionListener(e -> navigate("agenda"));
 
-    bar.add(prev); bar.add(next); bar.add(today); bar.add(mode);
+    bar.add(prev); bar.add(next); bar.add(today); bar.add(modeToggle);
     bar.add(Box.createHorizontalStrut(16)); bar.add(zoomL); bar.add(zoom);
     bar.add(Box.createHorizontalStrut(12)); bar.add(granL); bar.add(gran);
     bar.add(Box.createHorizontalStrut(12)); bar.add(densL); bar.add(density);
@@ -166,8 +187,29 @@ public class PlanningPanel extends JPanel {
   }
 
   private void switchMode(boolean agendaMode){
-    CardLayout cl = (CardLayout) ((Container)getComponent(1)).getLayout();
-    cl.show((Container)getComponent(1), agendaMode? "agenda" : "gantt");
+    this.agendaMode = agendaMode;
+    if (ganttContainer != null){
+      CardLayout cl = (CardLayout) ganttContainer.getLayout();
+      cl.show(ganttContainer, agendaMode ? "agenda" : "gantt");
+    }
+    if (tabs != null && ganttContainer != null && tabs.getSelectedComponent() != ganttContainer){
+      tabs.setSelectedComponent(ganttContainer);
+    }
+    updateModeToggleState();
+  }
+
+  private void updateModeToggleState(){
+    if (modeToggle == null){
+      return;
+    }
+    boolean onPlanningTab = tabs != null && ganttContainer != null && tabs.getSelectedComponent() == ganttContainer;
+    updatingModeToggle = true;
+    try {
+      modeToggle.setEnabled(onPlanningTab);
+      modeToggle.setSelected(onPlanningTab && agendaMode);
+    } finally {
+      updatingModeToggle = false;
+    }
   }
 
   private void openConflictsDialog(){
@@ -235,7 +277,42 @@ public class PlanningPanel extends JPanel {
     refreshPlanning();
   }
 
-  private void refreshPlanning(){ board.reload(); agenda.reload(); }
+  private void refreshPlanning(){
+    PlanningService planning = ServiceFactory.planning();
+    if (planning == null){
+      calendarView.setData(List.of());
+      tableView.setData(List.of());
+      return;
+    }
+    board.reload();
+    agenda.reload();
+    refreshSimpleViews(planning);
+  }
+
+  private void refreshSimpleViews(PlanningService planning){
+    List<Intervention> list = List.of();
+    boolean success = true;
+    LocalDate from = board.getStartDate();
+    if (from == null){
+      from = LocalDate.now().with(java.time.DayOfWeek.MONDAY);
+    }
+    LocalDate to = from.plusDays(6);
+    try {
+      List<Intervention> fetched = planning.listInterventions(from, to);
+      if (fetched != null){
+        list = fetched;
+      }
+    } catch (Exception ex){
+      success = false;
+      list = List.of();
+      Toasts.error(this, "Impossible de charger les interventions");
+    }
+    calendarView.setData(list);
+    tableView.setData(list);
+    if (success){
+      Toasts.info(this, list.size() + " intervention(s) chargée(s)");
+    }
+  }
 
   private void addInterventionDialog(){
     var planning = ServiceFactory.planning();
@@ -256,11 +333,33 @@ public class PlanningPanel extends JPanel {
     dialog.setVisible(true);
   }
 
+  private void openInterventionEditor(Intervention it){
+    if (it == null){
+      return;
+    }
+    PlanningService planning = ServiceFactory.planning();
+    if (planning == null){
+      JOptionPane.showMessageDialog(this, "Service planning indisponible", "Erreur", JOptionPane.ERROR_MESSAGE);
+      return;
+    }
+    InterventionDialog dialog = new InterventionDialog(
+        SwingUtilities.getWindowAncestor(this),
+        planning,
+        ServiceFactory.clients(),
+        ServiceFactory.interventionTypes());
+    dialog.setOnSave(updated -> {
+      planning.saveIntervention(updated);
+      refreshPlanning();
+    });
+    dialog.edit(it);
+    dialog.setVisible(true);
+  }
+
   private void putUndoRedoKeymap(){
     int WHEN = JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT;
     getInputMap(WHEN).put(KeyStroke.getKeyStroke("control Z"), "undo");
     getInputMap(WHEN).put(KeyStroke.getKeyStroke("control Y"), "redo");
-    getActionMap().put("undo", new AbstractAction(){ public void actionPerformed(java.awt.event.ActionEvent e){ CommandBus.get().undo(); board.reload(); agenda.reload(); }});
-    getActionMap().put("redo", new AbstractAction(){ public void actionPerformed(java.awt.event.ActionEvent e){ CommandBus.get().redo(); board.reload(); agenda.reload(); }});
+    getActionMap().put("undo", new AbstractAction(){ public void actionPerformed(java.awt.event.ActionEvent e){ CommandBus.get().undo(); refreshPlanning(); }});
+    getActionMap().put("redo", new AbstractAction(){ public void actionPerformed(java.awt.event.ActionEvent e){ CommandBus.get().redo(); refreshPlanning(); }});
   }
 }
