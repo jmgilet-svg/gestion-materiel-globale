@@ -3,7 +3,10 @@ package com.materiel.suite.client.ui.interventions;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.model.ResourceRef;
 import com.materiel.suite.client.model.ResourceType;
+import com.materiel.suite.client.net.ServiceFactory;
+import com.materiel.suite.client.service.PlanningService;
 import com.materiel.suite.client.ui.icons.IconRegistry;
+import com.materiel.suite.client.ui.resources.ResourcePriceEditorDialog;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -11,6 +14,7 @@ import javax.swing.event.DocumentListener;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.*;
+import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -24,19 +28,29 @@ import java.util.UUID;
 public class ResourcePickerPanel extends JPanel {
   private static final String ALL_TYPES = "Tous les types";
 
+  private final PlanningService planningService;
   private final JComboBox<String> typeFilter = new JComboBox<>();
   private final JTextField searchField = new JTextField();
   private final JButton selectAllButton = new JButton("Tout");
   private final JButton clearAllButton = new JButton("Aucun");
+  private final JButton editPriceButton = new JButton("Tarif…");
   private final ResourceTableModel model = new ResourceTableModel();
   private final JTable table = new JTable(model);
+  private final NumberFormat priceFormat = NumberFormat.getNumberInstance(Locale.FRANCE);
 
   private final List<Resource> allResources = new ArrayList<>();
   private final Map<UUID, Resource> resourceIndex = new LinkedHashMap<>();
   private final LinkedHashMap<String, ResourceRef> selectedRefs = new LinkedHashMap<>();
 
   public ResourcePickerPanel(){
+    this(ServiceFactory.planning());
+  }
+
+  public ResourcePickerPanel(PlanningService planningService){
     super(new BorderLayout(8, 8));
+    this.planningService = planningService;
+    priceFormat.setMaximumFractionDigits(2);
+    priceFormat.setMinimumFractionDigits(0);
     buildNorth();
     buildTable();
     installListeners();
@@ -54,6 +68,7 @@ public class ResourcePickerPanel extends JPanel {
     filters.add(searchField);
 
     JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+    actions.add(editPriceButton);
     actions.add(selectAllButton);
     actions.add(clearAllButton);
 
@@ -66,9 +81,14 @@ public class ResourcePickerPanel extends JPanel {
     table.setFillsViewportHeight(true);
     table.setRowHeight(24);
     table.setAutoCreateRowSorter(true);
+    table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
     table.getColumnModel().getColumn(0).setMaxWidth(50);
     table.getColumnModel().getColumn(1).setMaxWidth(36);
     table.getColumnModel().getColumn(1).setCellRenderer(new IconRenderer());
+    if (table.getColumnModel().getColumnCount() > 4){
+      table.getColumnModel().getColumn(4).setPreferredWidth(90);
+      table.getColumnModel().getColumn(4).setCellRenderer(new PriceRenderer());
+    }
     add(new JScrollPane(table), BorderLayout.CENTER);
   }
 
@@ -79,6 +99,13 @@ public class ResourcePickerPanel extends JPanel {
     });
     selectAllButton.addActionListener(e -> selectFiltered(true));
     clearAllButton.addActionListener(e -> selectFiltered(false));
+    editPriceButton.addActionListener(e -> openPriceDialog());
+    table.getSelectionModel().addListSelectionListener(e -> {
+      if (!e.getValueIsAdjusting()){
+        updateEditPriceButtonState();
+      }
+    });
+    updateEditPriceButtonState();
   }
 
   private void selectFiltered(boolean select){
@@ -236,6 +263,7 @@ public class ResourcePickerPanel extends JPanel {
       filtered.add(resource);
     }
     model.setRows(filtered);
+    updateEditPriceButtonState();
   }
 
   private boolean matches(Resource resource, String query){
@@ -285,6 +313,35 @@ public class ResourcePickerPanel extends JPanel {
     return new ResourceRef(resource.getId(), resource.getName(), iconKey(resource));
   }
 
+  private Resource selectedResource(){
+    int viewRow = table.getSelectedRow();
+    if (viewRow < 0){
+      return null;
+    }
+    int modelRow = table.convertRowIndexToModel(viewRow);
+    return model.getAt(modelRow);
+  }
+
+  private void openPriceDialog(){
+    Resource resource = selectedResource();
+    if (resource == null || planningService == null){
+      return;
+    }
+    Window owner = SwingUtilities.getWindowAncestor(this);
+    ResourcePriceEditorDialog dialog = new ResourcePriceEditorDialog(owner, planningService, resource);
+    dialog.setVisible(true);
+    if (resource.getId() != null){
+      resourceIndex.put(resource.getId(), resource);
+    }
+    model.refreshAll();
+    updateEditPriceButtonState();
+  }
+
+  private void updateEditPriceButtonState(){
+    boolean hasSelection = table.getSelectedRow() >= 0;
+    editPriceButton.setEnabled(planningService != null && hasSelection);
+  }
+
   private static String typeLabel(Resource resource){
     ResourceType type = resource != null ? resource.getType() : null;
     if (type == null){
@@ -303,7 +360,7 @@ public class ResourcePickerPanel extends JPanel {
 
   private class ResourceTableModel extends AbstractTableModel {
     private final List<Resource> rows = new ArrayList<>();
-    private final String[] columns = {"", "Icône", "Nom", "Type"};
+    private final String[] columns = {"", "Icône", "Nom", "Type", "PU HT"};
 
     @Override public int getRowCount(){ return rows.size(); }
     @Override public int getColumnCount(){ return columns.length; }
@@ -327,6 +384,7 @@ public class ResourcePickerPanel extends JPanel {
         case 1 -> iconKey(resource);
         case 2 -> resource != null ? resource.getName() : "";
         case 3 -> typeLabel(resource);
+        case 4 -> resource != null ? resource.getUnitPriceHt() : null;
         default -> "";
       };
     }
@@ -361,6 +419,13 @@ public class ResourcePickerPanel extends JPanel {
       return List.copyOf(rows);
     }
 
+    Resource getAt(int index){
+      if (index < 0 || index >= rows.size()){
+        return null;
+      }
+      return rows.get(index);
+    }
+
     void refreshAll(){
       if (!rows.isEmpty()){
         fireTableRowsUpdated(0, rows.size() - 1);
@@ -383,6 +448,20 @@ public class ResourcePickerPanel extends JPanel {
         } else if (!key.isBlank()){
           label.setText(key);
         }
+      }
+      return label;
+    }
+  }
+
+  private class PriceRenderer extends DefaultTableCellRenderer {
+    @Override
+    public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column){
+      JLabel label = (JLabel) super.getTableCellRendererComponent(table, "", isSelected, hasFocus, row, column);
+      label.setHorizontalAlignment(SwingConstants.RIGHT);
+      if (value instanceof Number number){
+        label.setText(priceFormat.format(number));
+      } else {
+        label.setText("");
       }
       return label;
     }
