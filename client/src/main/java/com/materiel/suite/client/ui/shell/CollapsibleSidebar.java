@@ -11,8 +11,8 @@ import java.util.List;
  * Barre latérale rétractable : au repos = icônes seules ; en survol = icône + libellé.
  */
 public class CollapsibleSidebar extends JPanel {
-  public static final int COLLAPSED_WIDTH = 56;
-  public static final int EXPANDED_WIDTH = 220;
+  public static final int COLLAPSED_WIDTH = 48;
+  public static final int EXPANDED_WIDTH = 200;
 
   public enum PinMode { AUTO, PIN_EXPANDED, PIN_COLLAPSED }
 
@@ -23,7 +23,8 @@ public class CollapsibleSidebar extends JPanel {
   private final Timer collapseTimer;
   private final JToggleButton pinExpandToggle = new JToggleButton("📌");
   private final JToggleButton pinCompactToggle = new JToggleButton("📎");
-  private final JLabel titleLabel = new JLabel("  Menu");
+  private final JLabel titleLabel = new JLabel();
+  private String headerTitle = "Menu";
   private boolean adjustingPinToggle = false;
 
   public CollapsibleSidebar() {
@@ -81,7 +82,9 @@ public class CollapsibleSidebar extends JPanel {
     header.setOpaque(true);
     header.setBackground(getBackground());
     header.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-    titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
+    titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 12f));
+    titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 2, 0, 0));
+    updateHeader();
     header.add(titleLabel, BorderLayout.WEST);
     JPanel pinPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
     pinPanel.setOpaque(false);
@@ -117,6 +120,7 @@ public class CollapsibleSidebar extends JPanel {
     for (SidebarButton b : buttons) {
       b.setExpanded(expanded);
     }
+    updateHeader();
     setPreferredSize(new Dimension(expanded ? EXPANDED_WIDTH : COLLAPSED_WIDTH, getHeight()));
     revalidate();
     repaint();
@@ -127,7 +131,7 @@ public class CollapsibleSidebar extends JPanel {
     SidebarButton button = new SidebarButton(iconText, label, action);
     buttons.add(button);
     itemsPanel.add(button);
-    itemsPanel.add(Box.createVerticalStrut(4));
+    itemsPanel.add(Box.createVerticalStrut(2));
     MouseAdapter hover = new MouseAdapter() {
       @Override
       public void mouseEntered(MouseEvent e) {
@@ -173,11 +177,12 @@ public class CollapsibleSidebar extends JPanel {
   }
 
   public void setTitle(String title) {
-    titleLabel.setText(title);
+    headerTitle = title;
+    updateHeader();
   }
 
   public String getTitle() {
-    return titleLabel.getText();
+    return headerTitle;
   }
 
   public void setPinMode(PinMode mode){
@@ -227,5 +232,17 @@ public class CollapsibleSidebar extends JPanel {
     } finally {
       adjustingPinToggle = false;
     }
+  }
+
+  private void updateHeader() {
+    String title = headerTitle;
+    boolean hasTitle = title != null && !title.isBlank();
+    String displayTitle = hasTitle ? title.strip() : "";
+    if (expanded && hasTitle) {
+      titleLabel.setText("  ☰  " + displayTitle);
+    } else {
+      titleLabel.setText("  ☰");
+    }
+    titleLabel.setToolTipText(expanded || displayTitle.isEmpty() ? null : displayTitle);
   }
 }
