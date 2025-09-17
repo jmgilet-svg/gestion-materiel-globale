@@ -29,6 +29,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 /** Fenêtre avancée pour créer ou modifier une intervention. */
 public class InterventionDialog extends JDialog {
@@ -57,6 +58,7 @@ public class InterventionDialog extends JDialog {
   private Intervention current;
   private boolean saved;
   private String signatureBase64;
+  private Consumer<Intervention> onSaveCallback;
 
   public InterventionDialog(Window owner, PlanningService planningService, ClientService clientService, InterventionTypeService typeService){
     super(owner, "Intervention", ModalityType.APPLICATION_MODAL);
@@ -265,11 +267,20 @@ public class InterventionDialog extends JDialog {
   private void onSave(){
     try {
       collect();
+      if (onSaveCallback != null){
+        onSaveCallback.accept(current);
+      }
       saved = true;
       dispose();
       Toasts.success(this, "Intervention enregistrée");
     } catch (IllegalArgumentException ex){
       JOptionPane.showMessageDialog(this, ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
+    } catch (RuntimeException ex){
+      String message = ex.getMessage();
+      if (message == null || message.isBlank()){
+        message = "Impossible d'enregistrer l'intervention.";
+      }
+      JOptionPane.showMessageDialog(this, message, "Erreur", JOptionPane.ERROR_MESSAGE);
     }
   }
 
@@ -354,7 +365,7 @@ public class InterventionDialog extends JDialog {
     model.addElement(null);
     if (clientService != null){
       try {
-        List<Client> clients = clientService.list();
+        List<Client> clients = clientService.listClients();
         for (Client client : clients){
           model.addElement(client);
         }
@@ -495,6 +506,10 @@ public class InterventionDialog extends JDialog {
 
   public Intervention getIntervention(){
     return current;
+  }
+
+  public void setOnSave(Consumer<Intervention> onSave){
+    this.onSaveCallback = onSave;
   }
 
   private LocalDateTime toLocalDateTime(Object value){

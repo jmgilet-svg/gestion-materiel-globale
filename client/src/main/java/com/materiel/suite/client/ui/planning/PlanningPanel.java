@@ -100,8 +100,7 @@ public class PlanningPanel extends JPanel {
     });
 
     add(center, BorderLayout.CENTER);
-    board.reload();
-    agenda.reload();
+    reload();
 
     putUndoRedoKeymap();
   }
@@ -232,6 +231,10 @@ public class PlanningPanel extends JPanel {
     dlg.setVisible(true);
   }
 
+  public void reload(){
+    refreshPlanning();
+  }
+
   private void refreshPlanning(){ board.reload(); agenda.reload(); }
 
   private void addInterventionDialog(){
@@ -245,13 +248,12 @@ public class PlanningPanel extends JPanel {
         planning,
         ServiceFactory.clients(),
         ServiceFactory.interventionTypes());
-    dialog.edit(new Intervention());
-    dialog.setVisible(true);
-    if (dialog.isSaved()){
-      Intervention intervention = dialog.getIntervention();
+    dialog.setOnSave(intervention -> {
       planning.saveIntervention(intervention);
       refreshPlanning();
-    }
+    });
+    dialog.edit(new Intervention());
+    dialog.setVisible(true);
   }
 
   private void putUndoRedoKeymap(){

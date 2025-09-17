@@ -506,13 +506,12 @@ public class AgendaBoard extends JComponent {
         planning,
         ServiceFactory.clients(),
         ServiceFactory.interventionTypes());
-    dialog.edit(it);
-    dialog.setVisible(true);
-    if (dialog.isSaved()){
-      Intervention updated = dialog.getIntervention();
+    dialog.setOnSave(updated -> {
       planning.saveIntervention(updated);
       reload();
-    }
+    });
+    dialog.edit(it);
+    dialog.setVisible(true);
   }
   // === CRM-INJECT END ===
 
