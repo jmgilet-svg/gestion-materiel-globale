@@ -55,6 +55,7 @@ import com.materiel.suite.client.ui.MainFrame;
 
 public class PlanningPanel extends JPanel {
   private static final DateTimeFormatter SIMPLE_DAY_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+  private static final DateTimeFormatter SIMPLE_DAY_TIME_FORMAT = DateTimeFormatter.ofPattern("dd/MM HH:mm");
   private final PlanningBoard board = new PlanningBoard();
   private final AgendaBoard agenda = new AgendaBoard();
   private JButton conflictsBtn;
@@ -120,6 +121,8 @@ public class PlanningPanel extends JPanel {
 
     calendarView.setOnOpen(this::openInterventionEditor);
     calendarView.setOnMove(this::moveIntervention);
+    calendarView.setOnMoveDateTime(this::moveInterventionDateTime);
+    calendarView.setOnResizeDateTime(this::resizeInterventionEndDateTime);
     tableView.setOnOpen(this::openInterventionEditor);
 
     ganttContainer = center;
@@ -334,6 +337,7 @@ public class PlanningPanel extends JPanel {
   private void refreshPlanning(){
     PlanningService planning = ServiceFactory.planning();
     if (planning == null){
+      calendarView.setMode(isMonthSelected() ? "Mois" : "Semaine");
       calendarView.setData(List.of());
       tableView.setData(List.of());
       return;
@@ -346,6 +350,7 @@ public class PlanningPanel extends JPanel {
   private void reloadSimpleViews(){
     PlanningService planning = ServiceFactory.planning();
     if (planning == null){
+      calendarView.setMode(isMonthSelected() ? "Mois" : "Semaine");
       calendarView.setData(List.of());
       tableView.setData(List.of());
       return;
@@ -419,6 +424,13 @@ public class PlanningPanel extends JPanel {
     return date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
   }
 
+  private LocalDateTime toLocalDateTime(Date date){
+    if (date == null){
+      return null;
+    }
+    return date.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
+  }
+
   private void refreshSimpleViews(PlanningService planning){
     List<Intervention> list = List.of();
     boolean success = true;
@@ -435,6 +447,7 @@ public class PlanningPanel extends JPanel {
       list = List.of();
       Toasts.error(this, "Impossible de charger les interventions");
     }
+    calendarView.setMode(isMonthSelected() ? "Mois" : "Semaine");
     calendarView.setData(list);
     tableView.setData(list);
     if (success){
@@ -469,6 +482,64 @@ public class PlanningPanel extends JPanel {
       it.setDateHeureDebut(originalStart);
       it.setDateHeureFin(originalEnd);
       Toasts.error(this, "Impossible de déplacer l'intervention");
+    }
+    refreshPlanning();
+  }
+
+  private void moveInterventionDateTime(Intervention it, Date newStartDate){
+    if (it == null || newStartDate == null){
+      return;
+    }
+    PlanningService planning = ServiceFactory.planning();
+    if (planning == null){
+      Toasts.error(this, "Service planning indisponible");
+      return;
+    }
+    LocalDateTime originalStart = it.getDateHeureDebut();
+    LocalDateTime originalEnd = it.getDateHeureFin();
+    LocalDateTime newStart = toLocalDateTime(newStartDate);
+    try {
+      it.setDateHeureDebut(newStart);
+      if (originalStart != null && originalEnd != null){
+        long minutes = Math.max(0, Duration.between(originalStart, originalEnd).toMinutes());
+        it.setDateHeureFin(newStart.plusMinutes(minutes));
+      } else if (originalEnd != null){
+        it.setDateHeureFin(newStart.toLocalDate().atTime(originalEnd.toLocalTime()));
+      }
+      planning.saveIntervention(it);
+      if (newStart != null){
+        Toasts.success(this, "Intervention déplacée au " + newStart.format(SIMPLE_DAY_TIME_FORMAT));
+      }
+    } catch (Exception ex){
+      it.setDateHeureDebut(originalStart);
+      it.setDateHeureFin(originalEnd);
+      Toasts.error(this, "Impossible de déplacer l'intervention");
+    }
+    refreshPlanning();
+  }
+
+  private void resizeInterventionEndDateTime(Intervention it, Date newEndDate){
+    if (it == null || newEndDate == null){
+      return;
+    }
+    PlanningService planning = ServiceFactory.planning();
+    if (planning == null){
+      Toasts.error(this, "Service planning indisponible");
+      return;
+    }
+    LocalDateTime originalEnd = it.getDateHeureFin();
+    LocalDateTime newEnd = toLocalDateTime(newEndDate);
+    try {
+      LocalDateTime start = it.getDateHeureDebut();
+      if (start != null && newEnd != null && !newEnd.isAfter(start)){
+        newEnd = start.plusMinutes(Math.max(15, board.getSlotMinutes()));
+      }
+      it.setDateHeureFin(newEnd);
+      planning.saveIntervention(it);
+      Toasts.success(this, "Durée mise à jour");
+    } catch (Exception ex){
+      it.setDateHeureFin(originalEnd);
+      Toasts.error(this, "Impossible de mettre à jour la durée");
     }
     refreshPlanning();
   }
