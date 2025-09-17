@@ -1,61 +1,90 @@
 package com.materiel.suite.client.ui.resources;
 
+import com.materiel.suite.client.ui.icons.IconPickerDialog;
+import com.materiel.suite.client.ui.icons.IconRegistry;
+
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.*;
-import java.util.Arrays;
-import java.util.List;
 
-/** Sélecteur simple pour associer une icône (emoji ou caractère) à une ressource. */
+/** Sélecteur combinant saisie libre et bibliothèque d'icônes SVG. */
 public class ResourceIconPicker extends JPanel {
-  private static final List<String> PALETTE = Arrays.asList(
-      "🏗️", "🚚", "🚛", "👷", "🧰", "🛠️", "🔧", "🔩", "⚙️", "🏷️"
-  );
-
-  private final JTextField custom = new JTextField(4);
-  private String value;
+  private final JLabel preview = new JLabel();
+  private final JTextField valueField = new JTextField(8);
+  private final JButton libraryButton = new JButton("Bibliothèque…");
+  private boolean updating;
 
   public ResourceIconPicker(){
-    super(new FlowLayout(FlowLayout.LEFT, 4, 0));
+    super(new FlowLayout(FlowLayout.LEFT, 6, 0));
     setOpaque(false);
-    ButtonGroup group = new ButtonGroup();
-    for (String icon : PALETTE){
-      JToggleButton toggle = new JToggleButton(icon);
-      toggle.setMargin(new Insets(2,6,2,6));
-      toggle.addActionListener(e -> {
-        value = icon;
-        custom.setText("");
-      });
-      group.add(toggle);
-      add(toggle);
-    }
-    custom.setColumns(4);
-    custom.setToolTipText("Saisir un caractère ou emoji personnalisé");
-    custom.getDocument().addDocumentListener(new DocumentListener() {
-      private void sync(){ value = custom.getText(); }
+
+    preview.setPreferredSize(new Dimension(28, 28));
+    preview.setHorizontalAlignment(SwingConstants.CENTER);
+
+    valueField.setColumns(8);
+    valueField.setToolTipText("Emoji, caractère ou clé d'icône (ex: truck)");
+
+    valueField.getDocument().addDocumentListener(new DocumentListener() {
+      private void sync(){
+        if (updating){
+          return;
+        }
+        updatePreview();
+      }
+
       @Override public void insertUpdate(DocumentEvent e){ sync(); }
       @Override public void removeUpdate(DocumentEvent e){ sync(); }
       @Override public void changedUpdate(DocumentEvent e){ sync(); }
     });
-    add(new JLabel("Perso :"));
-    add(custom);
+
+    libraryButton.addActionListener(e -> openLibrary());
+
+    add(preview);
+    add(valueField);
+    add(libraryButton);
+
+    updatePreview();
   }
 
-  public void setValue(String v){
-    value = v;
-    boolean match = v!=null && PALETTE.contains(v);
-    for (Component c : getComponents()){
-      if (c instanceof JToggleButton btn){
-        btn.setSelected(match && btn.getText().equals(v));
-      }
+  private void openLibrary(){
+    Window owner = SwingUtilities.getWindowAncestor(this);
+    IconPickerDialog dialog = new IconPickerDialog(owner);
+    String pick = dialog.pick();
+    if (pick != null){
+      setValue(pick);
     }
-    custom.setText(!match && v!=null? v : "");
+  }
+
+  private void updatePreview(){
+    String value = rawValue();
+    Icon icon = IconRegistry.large(value);
+    if (icon != null){
+      preview.setIcon(icon);
+      preview.setText("");
+    } else if (value != null && !value.isBlank()){
+      preview.setIcon(null);
+      preview.setText(value);
+    } else {
+      preview.setIcon(IconRegistry.placeholder(28));
+      preview.setText("");
+    }
+  }
+
+  private String rawValue(){
+    String txt = valueField.getText();
+    return txt == null ? "" : txt.trim();
+  }
+
+  public void setValue(String value){
+    updating = true;
+    valueField.setText(value != null ? value : "");
+    updating = false;
+    updatePreview();
   }
 
   public String getValue(){
-    if (value!=null && !value.isBlank()) return value;
-    String txt = custom.getText();
-    return txt==null? "" : txt.trim();
+    String value = rawValue();
+    return value != null ? value : "";
   }
 }

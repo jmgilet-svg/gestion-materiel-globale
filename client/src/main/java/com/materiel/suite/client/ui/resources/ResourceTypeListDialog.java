@@ -2,8 +2,10 @@ package com.materiel.suite.client.ui.resources;
 
 import com.materiel.suite.client.model.ResourceType;
 import com.materiel.suite.client.service.PlanningService;
+import com.materiel.suite.client.ui.icons.IconRegistry;
 
 import javax.swing.*;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.util.List;
@@ -19,6 +21,13 @@ public class ResourceTypeListDialog extends JDialog {
     super(owner, "Types de ressource", ModalityType.APPLICATION_MODAL);
     this.service = service;
     buildUI();
+    table.setRowHeight(32);
+    if (table.getColumnModel().getColumnCount() > 1){
+      table.getColumnModel().getColumn(1).setMinWidth(70);
+      table.getColumnModel().getColumn(1).setMaxWidth(90);
+      table.getColumnModel().getColumn(1).setPreferredWidth(80);
+      table.getColumnModel().getColumn(1).setCellRenderer(new IconCellRenderer());
+    }
     reload();
     pack();
     setLocationRelativeTo(owner);
@@ -54,7 +63,7 @@ public class ResourceTypeListDialog extends JDialog {
     model.setRowCount(0);
     List<ResourceType> types = service.listResourceTypes();
     for (ResourceType type : types){
-      model.addRow(new Object[]{ type.getCode(), safeIcon(type.getIcon()), type.getLabel() });
+      model.addRow(new Object[]{ type.getCode(), type.getIcon(), type.getLabel() });
     }
   }
 
@@ -100,7 +109,21 @@ public class ResourceTypeListDialog extends JDialog {
     }
   }
 
-  private static String safeIcon(String icon){
-    return (icon==null || icon.isBlank())? "" : icon;
+  private static class IconCellRenderer extends DefaultTableCellRenderer {
+    @Override
+    public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column){
+      JLabel label = (JLabel) super.getTableCellRendererComponent(table, "", isSelected, hasFocus, row, column);
+      label.setHorizontalAlignment(SwingConstants.CENTER);
+      label.setIcon(null);
+      label.setText("");
+      String iconKey = value != null ? value.toString() : null;
+      Icon icon = IconRegistry.medium(iconKey);
+      if (icon != null){
+        label.setIcon(icon);
+      } else if (iconKey != null && !iconKey.isBlank()){
+        label.setText(iconKey);
+      }
+      return label;
+    }
   }
 }
