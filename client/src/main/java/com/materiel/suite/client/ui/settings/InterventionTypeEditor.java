@@ -1,0 +1,231 @@
+package com.materiel.suite.client.ui.settings;
+
+import com.materiel.suite.client.model.InterventionType;
+import com.materiel.suite.client.service.ServiceLocator;
+import com.materiel.suite.client.ui.common.Toasts;
+import com.materiel.suite.client.ui.icons.IconPickerDialog;
+import com.materiel.suite.client.ui.icons.IconRegistry;
+
+import javax.swing.*;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.DefaultTableModel;
+import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.util.ArrayList;
+import java.util.List;
+
+/** Éditeur simple pour les types d'intervention (nom + icône). */
+public class InterventionTypeEditor extends JPanel {
+  private final DefaultTableModel model = new DefaultTableModel(new Object[]{"Icône", "Nom"}, 0){
+    @Override public boolean isCellEditable(int row, int column){
+      return false;
+    }
+  };
+  private final JTable table = new JTable(model);
+  private final JButton addButton = new JButton("Ajouter", IconRegistry.small("plus"));
+  private final JButton editButton = new JButton("Modifier", IconRegistry.small("edit"));
+  private final JButton deleteButton = new JButton("Supprimer", IconRegistry.small("trash"));
+  private final JButton refreshButton = new JButton("Recharger", IconRegistry.small("refresh"));
+  private final List<InterventionType> data = new ArrayList<>();
+
+  public InterventionTypeEditor(){
+    super(new BorderLayout(8, 8));
+    table.setRowHeight(28);
+    table.setFillsViewportHeight(true);
+    table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+    table.setAutoCreateRowSorter(true);
+    table.getColumnModel().getColumn(0).setMaxWidth(60);
+    table.getColumnModel().getColumn(0).setCellRenderer(new IconRenderer());
+
+    JScrollPane scrollPane = new JScrollPane(table);
+    scrollPane.setBorder(BorderFactory.createEmptyBorder());
+    add(scrollPane, BorderLayout.CENTER);
+
+    JToolBar toolbar = new JToolBar();
+    toolbar.setFloatable(false);
+    toolbar.add(addButton);
+    toolbar.add(editButton);
+    toolbar.add(deleteButton);
+    toolbar.addSeparator();
+    toolbar.add(refreshButton);
+    add(toolbar, BorderLayout.NORTH);
+
+    addButton.addActionListener(e -> openEditor(null));
+    editButton.addActionListener(e -> {
+      InterventionType type = selectedType();
+      if (type != null){
+        openEditor(type);
+      }
+    });
+    deleteButton.addActionListener(e -> deleteSelected());
+    refreshButton.addActionListener(e -> reload());
+
+    table.addMouseListener(new MouseAdapter(){
+      @Override public void mouseClicked(MouseEvent e){
+        if (e.getClickCount() == 2){
+          InterventionType type = selectedType();
+          if (type != null){
+            openEditor(type);
+          }
+        }
+      }
+    });
+
+    reload();
+  }
+
+  private void reload(){
+    List<InterventionType> list = ServiceLocator.interventionTypes().list();
+    data.clear();
+    if (list != null){
+      data.addAll(list);
+    }
+    model.setRowCount(0);
+    for (InterventionType type : data){
+      model.addRow(new Object[]{type.getIconKey(), type.getLabel()});
+    }
+  }
+
+  private InterventionType selectedType(){
+    int viewRow = table.getSelectedRow();
+    if (viewRow < 0){
+      return null;
+    }
+    int modelRow = table.convertRowIndexToModel(viewRow);
+    if (modelRow < 0 || modelRow >= data.size()){
+      return null;
+    }
+    return data.get(modelRow);
+  }
+
+  private void deleteSelected(){
+    InterventionType type = selectedType();
+    if (type == null){
+      return;
+    }
+    int confirm = JOptionPane.showConfirmDialog(this,
+        "Supprimer le type \"" + safe(type.getLabel()) + "\" ?",
+        "Confirmation", JOptionPane.YES_NO_OPTION);
+    if (confirm != JOptionPane.YES_OPTION){
+      return;
+    }
+    ServiceLocator.interventionTypes().delete(type.getCode());
+    Toasts.success(this, "Type supprimé");
+    reload();
+  }
+
+  private void openEditor(InterventionType existing){
+    InterventionType working = existing == null ? new InterventionType() : copy(existing);
+    Window owner = SwingUtilities.getWindowAncestor(this);
+    JDialog dialog = new JDialog(owner, existing == null ? "Nouveau type" : "Modifier le type", Dialog.ModalityType.APPLICATION_MODAL);
+
+    JTextField nameField = new JTextField(safe(working.getLabel()));
+    JTextField iconField = new JTextField(safe(working.getIconKey()));
+    iconField.setEditable(false);
+    JLabel iconPreview = new JLabel(IconRegistry.large(iconField.getText()));
+    iconPreview.setHorizontalAlignment(SwingConstants.CENTER);
+    iconPreview.setPreferredSize(new Dimension(36, 36));
+    JButton chooseIcon = new JButton("Choisir…", IconRegistry.small("image"));
+    chooseIcon.addActionListener(e -> {
+      IconPickerDialog picker = new IconPickerDialog(owner);
+      String chosen = picker.pick();
+      if (chosen != null && !chosen.isBlank()){
+        iconField.setText(chosen);
+        iconPreview.setIcon(IconRegistry.large(chosen));
+      }
+    });
+
+    JPanel iconRow = new JPanel(new BorderLayout(6, 0));
+    iconRow.add(iconPreview, BorderLayout.WEST);
+    iconRow.add(iconField, BorderLayout.CENTER);
+    iconRow.add(chooseIcon, BorderLayout.EAST);
+
+    JPanel form = new JPanel(new GridBagLayout());
+    GridBagConstraints gc = new GridBagConstraints();
+    gc.insets = new Insets(8, 8, 8, 8);
+    gc.anchor = GridBagConstraints.WEST;
+    gc.fill = GridBagConstraints.HORIZONTAL;
+    gc.gridx = 0; gc.gridy = 0;
+    form.add(new JLabel("Nom"), gc);
+    gc.gridx = 1; gc.weightx = 1;
+    form.add(nameField, gc);
+    gc.gridx = 0; gc.gridy = 1; gc.weightx = 0;
+    form.add(new JLabel("Icône"), gc);
+    gc.gridx = 1; gc.weightx = 1;
+    form.add(iconRow, gc);
+
+    JButton saveButton = new JButton("Enregistrer", IconRegistry.small("success"));
+    JButton cancelButton = new JButton("Annuler");
+    JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+    actions.add(saveButton);
+    actions.add(cancelButton);
+
+    dialog.getContentPane().add(form, BorderLayout.CENTER);
+    dialog.getContentPane().add(actions, BorderLayout.SOUTH);
+    dialog.pack();
+    dialog.setLocationRelativeTo(owner);
+
+    saveButton.addActionListener(e -> {
+      String name = nameField.getText() != null ? nameField.getText().trim() : "";
+      if (name.isEmpty()){
+        Toasts.error(dialog, "Le nom est requis");
+        return;
+      }
+      working.setLabel(name);
+      String icon = iconField.getText();
+      working.setIconKey(icon == null || icon.isBlank() ? null : icon.trim());
+      InterventionType saved = ServiceLocator.interventionTypes().save(working);
+      Toasts.success(this, "Type enregistré");
+      dialog.dispose();
+      reload();
+      if (saved != null){
+        selectCode(saved.getCode());
+      }
+    });
+
+    cancelButton.addActionListener(e -> dialog.dispose());
+    dialog.setVisible(true);
+  }
+
+  private void selectCode(String code){
+    if (code == null){
+      return;
+    }
+    for (int i = 0; i < data.size(); i++){
+      InterventionType type = data.get(i);
+      if (type != null && code.equals(type.getCode())){
+        int viewRow = table.convertRowIndexToView(i);
+        table.setRowSelectionInterval(viewRow, viewRow);
+        table.scrollRectToVisible(table.getCellRect(viewRow, 0, true));
+        break;
+      }
+    }
+  }
+
+  private InterventionType copy(InterventionType type){
+    if (type == null){
+      return null;
+    }
+    InterventionType copy = new InterventionType();
+    copy.setCode(type.getCode());
+    copy.setLabel(type.getLabel());
+    copy.setIconKey(type.getIconKey());
+    return copy;
+  }
+
+  private String safe(String value){
+    return value == null ? "" : value;
+  }
+
+  private static class IconRenderer extends DefaultTableCellRenderer {
+    @Override
+    public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column){
+      JLabel label = (JLabel) super.getTableCellRendererComponent(table, "", isSelected, hasFocus, row, column);
+      label.setHorizontalAlignment(SwingConstants.CENTER);
+      String key = value == null ? "" : value.toString();
+      label.setIcon(IconRegistry.small(key));
+      return label;
+    }
+  }
+}

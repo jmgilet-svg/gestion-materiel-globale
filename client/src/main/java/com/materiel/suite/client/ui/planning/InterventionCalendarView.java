@@ -242,6 +242,7 @@ public class InterventionCalendarView implements InterventionView {
     panel.add(text, BorderLayout.CENTER);
 
     panel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+    JPopupMenu menu = buildContextMenu(it);
     panel.addMouseListener(new MouseAdapter(){
       @Override public void mouseClicked(MouseEvent e){
         if (e.getClickCount() == 2){
@@ -249,12 +250,23 @@ public class InterventionCalendarView implements InterventionView {
         }
       }
       @Override public void mousePressed(MouseEvent e){
+        if (e.isPopupTrigger()){
+          menu.show(panel, e.getX(), e.getY());
+          return;
+        }
+        if (SwingUtilities.isRightMouseButton(e)){
+          return;
+        }
         dragging = it;
         dragSource = panel;
         panel.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
       }
       @Override public void mouseReleased(MouseEvent e){
         panel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)){
+          menu.show(panel, e.getX(), e.getY());
+          return;
+        }
         if (dragging == it){
           dragging = null;
         }
@@ -264,6 +276,14 @@ public class InterventionCalendarView implements InterventionView {
       }
     });
     return panel;
+  }
+
+  private JPopupMenu buildContextMenu(Intervention intervention){
+    JPopupMenu menu = new JPopupMenu();
+    JMenuItem edit = new JMenuItem("Modifier…", IconRegistry.small("edit"));
+    edit.addActionListener(e -> onOpen.accept(intervention));
+    menu.add(edit);
+    return menu;
   }
 
   private void renderWeek(){
@@ -478,6 +498,7 @@ public class InterventionCalendarView implements InterventionView {
           }
           label.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
           add(label, BorderLayout.CENTER);
+          JPopupMenu menu = buildContextMenu(it);
           addMouseListener(new MouseAdapter(){
             @Override public void mouseClicked(MouseEvent e){
               if (e.getClickCount() == 2){
@@ -485,6 +506,13 @@ public class InterventionCalendarView implements InterventionView {
               }
             }
             @Override public void mousePressed(MouseEvent e){
+              if (e.isPopupTrigger()){
+                menu.show(JPanel.this, e.getX(), e.getY());
+                return;
+              }
+              if (SwingUtilities.isRightMouseButton(e)){
+                return;
+              }
               pressY = e.getYOnScreen();
               pressHeight = getHeight();
               pressBlockY = getY();
@@ -493,6 +521,10 @@ public class InterventionCalendarView implements InterventionView {
             }
             @Override public void mouseReleased(MouseEvent e){
               setCursor(Cursor.getDefaultCursor());
+              if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)){
+                menu.show(JPanel.this, e.getX(), e.getY());
+                return;
+              }
               LocalDateTime baseStart = startOfY(getY());
               if (resizing){
                 LocalDateTime newEnd = snapQuarter(baseStart.plusMinutes(heightToMinutes(getHeight())));

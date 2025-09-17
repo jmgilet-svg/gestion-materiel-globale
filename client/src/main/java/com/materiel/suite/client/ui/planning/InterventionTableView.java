@@ -48,6 +48,12 @@ public class InterventionTableView implements InterventionView {
     table.getColumnModel().getColumn(2).setCellRenderer(typeRenderer());
     table.getColumnModel().getColumn(6).setCellRenderer(resourceRenderer());
     table.addMouseListener(new MouseAdapter(){
+      @Override public void mousePressed(MouseEvent e){
+        maybeShowPopup(e);
+      }
+      @Override public void mouseReleased(MouseEvent e){
+        maybeShowPopup(e);
+      }
       @Override public void mouseClicked(MouseEvent e){
         if (e.getClickCount() == 2){
           int row = table.getSelectedRow();
@@ -94,6 +100,34 @@ public class InterventionTableView implements InterventionView {
 
   @Override public void setOnOpen(Consumer<Intervention> onOpen){
     this.onOpen = onOpen != null ? onOpen : it -> {};
+  }
+
+  private void maybeShowPopup(MouseEvent e){
+    if (!e.isPopupTrigger()){
+      return;
+    }
+    int row = table.rowAtPoint(e.getPoint());
+    if (row < 0){
+      return;
+    }
+    table.setRowSelectionInterval(row, row);
+    int modelRow = table.convertRowIndexToModel(row);
+    if (modelRow < 0 || modelRow >= current.size()){
+      return;
+    }
+    Intervention it = current.get(modelRow);
+    JPopupMenu menu = buildContextMenu(it);
+    if (menu.getComponentCount() > 0){
+      menu.show(table, e.getX(), e.getY());
+    }
+  }
+
+  private JPopupMenu buildContextMenu(Intervention it){
+    JPopupMenu menu = new JPopupMenu();
+    JMenuItem edit = new JMenuItem("Modifier…", IconRegistry.small("edit"));
+    edit.addActionListener(evt -> onOpen.accept(it));
+    menu.add(edit);
+    return menu;
   }
 
   private DefaultTableCellRenderer dateRenderer(){

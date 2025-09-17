@@ -1,7 +1,9 @@
 package com.materiel.suite.client.service;
 
+import com.materiel.suite.client.model.InterventionType;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.net.ServiceFactory;
+import com.materiel.suite.client.service.InterventionTypeService;
 
 import java.util.List;
 import java.util.UUID;
@@ -12,12 +14,17 @@ import java.util.UUID;
  */
 public final class ServiceLocator {
   private static final ResourcesGateway RESOURCES = new ResourcesGateway();
+  private static final InterventionTypesGateway INTERVENTION_TYPES = new InterventionTypesGateway();
 
   private ServiceLocator(){
   }
 
   public static ResourcesGateway resources(){
     return RESOURCES;
+  }
+
+  public static InterventionTypesGateway interventionTypes(){
+    return INTERVENTION_TYPES;
   }
 
   public static final class ResourcesGateway {
@@ -43,6 +50,31 @@ public final class ServiceLocator {
 
     public boolean isAvailable(){
       return ServiceFactory.planning() != null;
+    }
+  }
+
+  public static final class InterventionTypesGateway {
+    public List<InterventionType> list(){
+      InterventionTypeService svc = ServiceFactory.interventionTypes();
+      return svc != null ? svc.list() : List.of();
+    }
+
+    public InterventionType save(InterventionType type){
+      if (type == null){
+        return null;
+      }
+      InterventionTypeService svc = ServiceFactory.interventionTypes();
+      return svc != null ? svc.save(type) : type;
+    }
+
+    public void delete(String code){
+      if (code == null || code.isBlank()){
+        return;
+      }
+      InterventionTypeService svc = ServiceFactory.interventionTypes();
+      if (svc != null){
+        svc.delete(code);
+      }
     }
   }
 }
