@@ -11,18 +11,15 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.math.BigDecimal;
-import java.text.NumberFormat;
-import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
-/** Éditeur simple pour gérer les types de ressources (nom, icône, prix unitaire). */
+/** Éditeur simple pour gérer les types de ressources (nom et icône). */
 public class ResourceTypeEditor extends JPanel {
   private final ResourceTypeService service = ServiceFactory.resourceTypes();
-  private final DefaultTableModel model = new DefaultTableModel(new Object[]{"Icône", "Nom", "PU HT"}, 0){
+  private final DefaultTableModel model = new DefaultTableModel(new Object[]{"Icône", "Nom"}, 0){
     @Override public boolean isCellEditable(int row, int column){ return false; }
   };
   private final JTable table = new JTable(model);
@@ -88,8 +85,7 @@ public class ResourceTypeEditor extends JPanel {
       list.sort(Comparator.comparing(rt -> normalize(rt.getName()), String.CASE_INSENSITIVE_ORDER));
       current.addAll(list);
       for (ResourceType type : list){
-        BigDecimal price = type.getUnitPriceHt();
-        model.addRow(new Object[]{ type.getIconKey(), type.getName(), price });
+        model.addRow(new Object[]{ type.getIconKey(), type.getName() });
       }
     } catch (Exception ex){
       Toasts.error(this, "Chargement impossible : " + ex.getMessage());
@@ -137,14 +133,6 @@ public class ResourceTypeEditor extends JPanel {
     iconField.setEditable(false);
     JButton pickIcon = new JButton("Choisir icône", IconRegistry.small("image"));
 
-    NumberFormat numberFormat = NumberFormat.getNumberInstance(Locale.FRANCE);
-    numberFormat.setMaximumFractionDigits(2);
-    numberFormat.setMinimumFractionDigits(0);
-    numberFormat.setGroupingUsed(true);
-    JFormattedTextField priceField = new JFormattedTextField(numberFormat);
-    priceField.setColumns(10);
-    priceField.setValue(initial != null ? initial.getUnitPriceHt() : null);
-
     pickIcon.addActionListener(e -> {
       IconPickerDialog picker = new IconPickerDialog(owner);
       String chosen = picker.pick();
@@ -177,14 +165,6 @@ public class ResourceTypeEditor extends JPanel {
     gc.weightx = 0;
     form.add(pickIcon, gc);
 
-    gc.gridx = 0;
-    gc.gridy++;
-    gc.weightx = 0;
-    form.add(new JLabel("PU HT (€)"), gc);
-    gc.gridx = 1;
-    gc.weightx = 1;
-    form.add(priceField, gc);
-
     JButton saveButton = new JButton("Enregistrer", IconRegistry.small("success"));
     JButton cancelButton = new JButton("Annuler");
     JPanel south = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8));
@@ -204,12 +184,10 @@ public class ResourceTypeEditor extends JPanel {
         Toasts.error(dialog, "Le nom est requis");
         return;
       }
-      BigDecimal price = parsePrice(priceField);
       ResourceType toSave = initial != null ? copyOf(initial) : new ResourceType();
       toSave.setName(name);
       String icon = iconField.getText() != null ? iconField.getText().trim() : "";
       toSave.setIconKey(icon.isEmpty() ? "cube" : icon);
-      toSave.setUnitPriceHt(price);
       try {
         ResourceType saved = service.save(toSave);
         Toasts.success(dialog, "Type enregistré");
@@ -245,33 +223,11 @@ public class ResourceTypeEditor extends JPanel {
     copy.setId(src.getId());
     copy.setName(src.getName());
     copy.setIconKey(src.getIconKey());
-    copy.setUnitPriceHt(src.getUnitPriceHt());
     return copy;
   }
 
   private String valueOrEmpty(String value){
     return value == null ? "" : value;
-  }
-
-  private BigDecimal parsePrice(JFormattedTextField field){
-    try {
-      field.commitEdit();
-    } catch (ParseException ignore){}
-    Object value = field.getValue();
-    if (value == null){
-      return BigDecimal.ZERO;
-    }
-    if (value instanceof BigDecimal bd){
-      return bd;
-    }
-    if (value instanceof Number number){
-      return BigDecimal.valueOf(number.doubleValue());
-    }
-    try {
-      return new BigDecimal(value.toString().replace(',', '.'));
-    } catch (NumberFormatException ex){
-      return BigDecimal.ZERO;
-    }
   }
 
   private static class IconCellRenderer extends DefaultTableCellRenderer {

@@ -1,13 +1,11 @@
 package com.materiel.suite.client.model;
 
-import java.math.BigDecimal;
 import java.util.Objects;
 
 public class ResourceType {
   private String id;
   private String name;
   private String iconKey;
-  private BigDecimal unitPriceHt;
 
   public ResourceType(){}
   public ResourceType(String code, String label){ this.id = code; this.name = label; }
@@ -19,8 +17,6 @@ public class ResourceType {
   public void setName(String name){ this.name = name; }
   public String getIconKey(){ return iconKey; }
   public void setIconKey(String iconKey){ this.iconKey = iconKey; }
-  public BigDecimal getUnitPriceHt(){ return unitPriceHt; }
-  public void setUnitPriceHt(BigDecimal unitPriceHt){ this.unitPriceHt = unitPriceHt; }
 
   public String getCode(){ return id; }
   public void setCode(String code){ this.id = code; }

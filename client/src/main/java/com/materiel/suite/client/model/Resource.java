@@ -1,5 +1,6 @@
 package com.materiel.suite.client.model;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -8,6 +9,7 @@ public class Resource {
   private UUID id;
   private String name;
   private ResourceType type;
+  private BigDecimal unitPriceHt;
   private String color;
   private String notes;
   private final List<Unavailability> unavailabilities = new ArrayList<>();
@@ -25,6 +27,8 @@ public class Resource {
   public void setName(String name){ this.name=name; }
   public ResourceType getType(){ return type; }
   public void setType(ResourceType type){ this.type=type; }
+  public BigDecimal getUnitPriceHt(){ return unitPriceHt; }
+  public void setUnitPriceHt(BigDecimal unitPriceHt){ this.unitPriceHt = unitPriceHt; }
   public String getColor(){ return color; }
   public void setColor(String color){ this.color=color; }
   public String getNotes(){ return notes; }

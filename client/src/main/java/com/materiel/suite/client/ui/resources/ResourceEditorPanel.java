@@ -8,6 +8,9 @@ import com.materiel.suite.client.ui.common.DateTimeField;
 
 import javax.swing.*;
 import java.awt.*;
+import java.math.BigDecimal;
+import java.text.NumberFormat;
+import java.text.ParseException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -17,6 +20,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.Locale;
 
 /**
  * Formulaire d'édition inline d'une ressource.
@@ -30,6 +34,7 @@ public class ResourceEditorPanel extends JPanel {
   private final JTextField colorField = new JTextField(8);
   private final JTextArea notesArea = new JTextArea(5, 30);
   private final JComboBox<ResourceType> typeCombo = new JComboBox<>();
+  private final JFormattedTextField unitPriceField;
   private final JSpinner capacitySpinner = new JSpinner(new SpinnerNumberModel(1, 1, 999, 1));
   private final JTextField tagsField = new JTextField(20);
   private final JTextArea weeklyArea = new JTextArea(4, 30);
@@ -47,6 +52,13 @@ public class ResourceEditorPanel extends JPanel {
   public ResourceEditorPanel(PlanningService service) {
     super(new CardLayout());
     this.service = service;
+
+    NumberFormat priceFormat = NumberFormat.getNumberInstance(Locale.FRANCE);
+    priceFormat.setMaximumFractionDigits(2);
+    priceFormat.setMinimumFractionDigits(0);
+    priceFormat.setGroupingUsed(true);
+    unitPriceField = new JFormattedTextField(priceFormat);
+    unitPriceField.setColumns(8);
 
     JPanel empty = new JPanel(new BorderLayout());
     JLabel emptyLabel = new JLabel("Sélectionnez une ressource ou créez-en une nouvelle.", SwingConstants.CENTER);
@@ -85,6 +97,12 @@ public class ResourceEditorPanel extends JPanel {
     form.add(new JLabel("Type"), gc);
     gc.gridx = 1;
     form.add(typeCombo, gc);
+
+    gc.gridx = 0;
+    gc.gridy++;
+    form.add(new JLabel("PU HT (€)"), gc);
+    gc.gridx = 1;
+    form.add(unitPriceField, gc);
 
     gc.gridx = 0;
     gc.gridy++;
@@ -194,6 +212,8 @@ public class ResourceEditorPanel extends JPanel {
       nameField.setText("");
       colorField.setText("");
       notesArea.setText("");
+      unitPriceField.setValue(null);
+      unitPriceField.setText("");
       capacitySpinner.setValue(1);
       tagsField.setText("");
       weeklyArea.setText("");
@@ -205,6 +225,7 @@ public class ResourceEditorPanel extends JPanel {
     nameField.setText(current.getName() != null ? current.getName() : "");
     colorField.setText(current.getColor() != null ? current.getColor() : "");
     notesArea.setText(current.getNotes() != null ? current.getNotes() : "");
+    unitPriceField.setValue(current.getUnitPriceHt());
     Integer capacity = current.getCapacity();
     if (capacity == null || capacity < 1) {
       capacity = 1;
@@ -304,6 +325,7 @@ public class ResourceEditorPanel extends JPanel {
     current.setColor(colorField.getText().trim());
     current.setNotes(notesArea.getText());
     current.setType(resolveType());
+    current.setUnitPriceHt(parseUnitPrice(unitPriceField));
 
     Object capVal = capacitySpinner.getValue();
     int cap = 1;
@@ -398,6 +420,7 @@ public class ResourceEditorPanel extends JPanel {
     copy.setId(source.getId());
     copy.setName(source.getName());
     copy.setType(source.getType());
+    copy.setUnitPriceHt(source.getUnitPriceHt());
     copy.setColor(source.getColor());
     copy.setNotes(source.getNotes());
     copy.setCapacity(source.getCapacity());
@@ -424,5 +447,35 @@ public class ResourceEditorPanel extends JPanel {
 
   private void showForm() {
     ((CardLayout) getLayout()).show(this, CARD_FORM);
+  }
+
+  private BigDecimal parseUnitPrice(JFormattedTextField field) {
+    try {
+      field.commitEdit();
+    } catch (ParseException ignore) {
+    }
+    Object value = field.getValue();
+    if (value == null) {
+      String text = field.getText();
+      if (text == null || text.isBlank()) {
+        return null;
+      }
+      try {
+        return new BigDecimal(text.replace(',', '.'));
+      } catch (NumberFormatException ex) {
+        return null;
+      }
+    }
+    if (value instanceof BigDecimal bd) {
+      return bd;
+    }
+    if (value instanceof Number number) {
+      return BigDecimal.valueOf(number.doubleValue());
+    }
+    try {
+      return new BigDecimal(value.toString().replace(',', '.'));
+    } catch (NumberFormatException ex) {
+      return null;
+    }
   }
 }

@@ -1,10 +1,11 @@
 package com.materiel.suite.backend.v1.domain;
 
-import jakarta.persistence.*;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import jakarta.persistence.*;
 
-import java.util.UUID;
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 
 @Entity
 @Table(name="resource")
@@ -17,6 +18,8 @@ public class ResourceEntity {
   private String color; // hex optionnel
   @Column(length=2000)
   private String notes;
+  @Column(precision = 13, scale = 2)
+  private BigDecimal unitPriceHt;
   private Integer capacity; // nb unités (1 par défaut)
   @Column(length=1000)
   private String tags; // CSV simple "grue, lourde, 80t"
@@ -36,6 +39,8 @@ public class ResourceEntity {
   public void setColor(String color){ this.color=color; }
   public String getNotes(){ return notes; }
   public void setNotes(String notes){ this.notes=notes; }
+  public BigDecimal getUnitPriceHt(){ return unitPriceHt; }
+  public void setUnitPriceHt(BigDecimal unitPriceHt){ this.unitPriceHt = unitPriceHt; }
   public Integer getCapacity(){ return capacity; }
   public void setCapacity(Integer c){ this.capacity=c; }
   public String getTags(){ return tags; }

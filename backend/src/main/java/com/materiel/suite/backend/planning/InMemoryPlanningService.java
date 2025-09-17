@@ -2,6 +2,7 @@ package com.materiel.suite.backend.planning;
 
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -14,9 +15,9 @@ public class InMemoryPlanningService implements PlanningService {
   @jakarta.annotation.PostConstruct
   public void seed(){
     if (!resources.isEmpty()) return;
-    ResourceDto r1 = new ResourceDto(UUID.randomUUID(), "Grue A", "🏗️");
-    ResourceDto r2 = new ResourceDto(UUID.randomUUID(), "Grue B", "🏗️");
-    ResourceDto r3 = new ResourceDto(UUID.randomUUID(), "Nacelle 18m", "🛠️");
+    ResourceDto r1 = new ResourceDto(UUID.randomUUID(), "Grue A", "🏗️", new BigDecimal("130.00"));
+    ResourceDto r2 = new ResourceDto(UUID.randomUUID(), "Grue B", "🏗️", new BigDecimal("120.00"));
+    ResourceDto r3 = new ResourceDto(UUID.randomUUID(), "Nacelle 18m", "🛠️", new BigDecimal("95.00"));
     resources.put(r1.id(), r1); resources.put(r2.id(), r2); resources.put(r3.id(), r3);
 
     LocalDate base = LocalDate.now().with(java.time.DayOfWeek.MONDAY);
@@ -38,7 +39,7 @@ public class InMemoryPlanningService implements PlanningService {
   @Override public List<ResourceDto> listResources(){ return new ArrayList<>(resources.values()); }
   @Override public ResourceDto saveResource(ResourceDto r){
     UUID id = r.id()==null? UUID.randomUUID() : r.id();
-    ResourceDto s = new ResourceDto(id, r.name(), r.icon());
+    ResourceDto s = new ResourceDto(id, r.name(), r.icon(), r.unitPriceHt());
     resources.put(id, s);
     return s;
   }

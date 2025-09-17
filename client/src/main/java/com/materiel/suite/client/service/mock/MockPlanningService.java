@@ -9,9 +9,10 @@ import com.materiel.suite.client.model.Unavailability;
 import com.materiel.suite.client.service.PlanningService;
 import com.materiel.suite.client.service.PlanningValidation;
 
+import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -27,8 +28,11 @@ public class MockPlanningService implements PlanningService {
     resourceTypes.put("GENERIC", new ResourceType("GENERIC", "Ressource", "🏷️"));
     if (resources.isEmpty()){
       Resource r1 = new Resource(UUID.randomUUID(), "Grue A"); r1.setType(resourceTypes.get("CRANE"));
+      r1.setUnitPriceHt(new BigDecimal("130.00"));
       Resource r2 = new Resource(UUID.randomUUID(), "Grue B"); r2.setType(resourceTypes.get("CRANE"));
+      r2.setUnitPriceHt(new BigDecimal("120.00"));
       Resource r3 = new Resource(UUID.randomUUID(), "Nacelle 18m"); r3.setType(resourceTypes.get("PLATFORM"));
+      r3.setUnitPriceHt(new BigDecimal("95.00"));
       // === CRM-INJECT BEGIN: resource-mock-defaults ===
       r1.setCapacity(2); r1.setTags("grue,90t"); r1.setWeeklyUnavailability("MON 08:00-12:00; THU 13:00-17:00");
       r2.setCapacity(1); r2.setTags("grue,60t"); r2.setWeeklyUnavailability("TUE 08:00-12:00");
