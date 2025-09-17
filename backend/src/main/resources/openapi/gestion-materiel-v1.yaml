@@ -239,83 +239,6 @@ paths:
       responses:
         '204':
           description: Deleted
-  /api/v2/resource-types:
-    get:
-      summary: Lister les types de ressources (v2)
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ResourceTypeV2'
-    post:
-      summary: Créer un type de ressource (v2)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ResourceTypeV2'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ResourceTypeV2'
-  /api/v2/resource-types/{id}:
-    get:
-      summary: Obtenir un type de ressource (v2)
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ResourceTypeV2'
-        '404':
-          description: Not found
-    put:
-      summary: Mettre à jour un type de ressource (v2)
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ResourceTypeV2'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ResourceTypeV2'
-    delete:
-      summary: Supprimer un type de ressource (v2)
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '204':
-          description: Deleted
   /api/v2/intervention-types:
     get:
       summary: List intervention types (v2)
@@ -459,6 +382,10 @@ components:
           type: string
         type:
           $ref: '#/components/schemas/ResourceType'
+        unitPriceHt:
+          type: number
+          format: double
+          description: 'Prix unitaire HT associé à la ressource'
         color:
           type: string
         notes:
@@ -554,17 +481,6 @@ components:
           type: string
         icon:
           type: string
-    ResourceTypeV2:
-      type: object
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-        iconKey:
-          type: string
-        unitPriceHt:
-          type: number
     Unavailability:
       type: object
       required: [start, end]

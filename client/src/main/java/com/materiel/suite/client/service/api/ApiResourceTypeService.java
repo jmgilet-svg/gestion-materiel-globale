@@ -6,7 +6,6 @@ import com.materiel.suite.client.net.SimpleJson;
 import com.materiel.suite.client.service.ResourceTypeService;
 
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -80,25 +79,7 @@ public class ApiResourceTypeService implements ResourceTypeService {
     type.setId(SimpleJson.str(map.get("id")));
     type.setName(SimpleJson.str(map.get("name")));
     type.setIconKey(SimpleJson.str(map.get("iconKey")));
-    type.setUnitPriceHt(parseBigDecimal(map.get("unitPriceHt")));
     return type;
-  }
-
-  private BigDecimal parseBigDecimal(Object value){
-    if (value == null){
-      return null;
-    }
-    if (value instanceof BigDecimal bd){
-      return bd;
-    }
-    if (value instanceof Number n){
-      return BigDecimal.valueOf(n.doubleValue());
-    }
-    try {
-      return new BigDecimal(value.toString());
-    } catch (NumberFormatException ex){
-      return null;
-    }
   }
 
   private String toJson(ResourceType type){
@@ -106,7 +87,6 @@ public class ApiResourceTypeService implements ResourceTypeService {
     appendField(sb, "id", type.getId());
     appendField(sb, "name", type.getName());
     appendField(sb, "iconKey", type.getIconKey());
-    appendNumber(sb, "unitPriceHt", type.getUnitPriceHt());
     sb.append('}');
     return sb.toString();
   }
@@ -120,18 +100,6 @@ public class ApiResourceTypeService implements ResourceTypeService {
       sb.append("null");
     } else {
       sb.append('"').append(escape(value)).append('"');
-    }
-  }
-
-  private void appendNumber(StringBuilder sb, String key, BigDecimal value){
-    if (sb.length() > 1){
-      sb.append(',');
-    }
-    sb.append('"').append(key).append('"').append(':');
-    if (value == null){
-      sb.append("null");
-    } else {
-      sb.append(value.stripTrailingZeros().toPlainString());
     }
   }
 

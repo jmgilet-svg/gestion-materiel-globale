@@ -6,6 +6,7 @@ import com.materiel.suite.backend.model.ResourceRef;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -20,9 +21,9 @@ public class InMemoryStore {
   @PostConstruct
   public void seed(){
     if (!resources.isEmpty()) return;
-    Resource r1 = new Resource(UUID.randomUUID(), "Grue A"); r1.setIcon("🏗️");
-    Resource r2 = new Resource(UUID.randomUUID(), "Grue B"); r2.setIcon("🏗️");
-    Resource r3 = new Resource(UUID.randomUUID(), "Nacelle 18m"); r3.setIcon("🛠️");
+    Resource r1 = new Resource(UUID.randomUUID(), "Grue A"); r1.setIcon("🏗️"); r1.setUnitPriceHt(new BigDecimal("130.00"));
+    Resource r2 = new Resource(UUID.randomUUID(), "Grue B"); r2.setIcon("🏗️"); r2.setUnitPriceHt(new BigDecimal("120.00"));
+    Resource r3 = new Resource(UUID.randomUUID(), "Nacelle 18m"); r3.setIcon("🛠️"); r3.setUnitPriceHt(new BigDecimal("95.00"));
     resources.put(r1.getId(), r1);
     resources.put(r2.getId(), r2);
     resources.put(r3.getId(), r3);

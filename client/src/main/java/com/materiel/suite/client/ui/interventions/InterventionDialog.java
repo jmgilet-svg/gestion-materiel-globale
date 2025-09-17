@@ -680,7 +680,8 @@ public class InterventionDialog extends JDialog {
           DocumentLine line = new DocumentLine();
           line.setDesignation(resource.getName());
           line.setQuantite(1d);
-          line.setPrixUnitaireHT(0d);
+          java.math.BigDecimal price = resource.getUnitPriceHt();
+          line.setPrixUnitaireHT(price != null ? price.doubleValue() : 0d);
           rows.add(line);
         }
       }

@@ -11,6 +11,7 @@ import com.materiel.suite.client.net.SimpleJson;
 import com.materiel.suite.client.service.PlanningService;
 import com.materiel.suite.client.service.PlanningValidation;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -43,6 +44,7 @@ public class ApiPlanningService implements PlanningService {
         r.setId(UUID.fromString(SimpleJson.str(m.get("id"))));
         r.setName(SimpleJson.str(m.getOrDefault("name","")));
         r.setType(parseResourceType(m.get("type")));
+        r.setUnitPriceHt(parseBigDecimal(m.get("unitPriceHt")));
         r.setColor(SimpleJson.str(m.get("color")));
         r.setNotes(SimpleJson.str(m.get("notes")));
         // === CRM-INJECT BEGIN: resource-api-read ===
@@ -82,6 +84,7 @@ public class ApiPlanningService implements PlanningService {
         Map<String,Object> tm = toMap(type);
         if (!tm.isEmpty()) m.put("type", tm);
       }
+      m.put("unitPriceHt", r.getUnitPriceHt());
       m.put("color", r.getColor());
       m.put("notes", r.getNotes());
       // === CRM-INJECT BEGIN: resource-api-write ===
@@ -102,6 +105,7 @@ public class ApiPlanningService implements PlanningService {
       r.setId(UUID.fromString(SimpleJson.str(map.get("id"))));
       r.setName(SimpleJson.str(map.getOrDefault("name","")));
       r.setType(parseResourceType(map.get("type")));
+      r.setUnitPriceHt(parseBigDecimal(map.get("unitPriceHt")));
       r.setColor(SimpleJson.str(map.get("color")));
       r.setNotes(SimpleJson.str(map.get("notes")));
       mergeType(r, fetchResourceTypeCatalog());
@@ -535,6 +539,23 @@ public class ApiPlanningService implements PlanningService {
     String code = SimpleJson.str(value);
     if (code==null || code.isBlank()) return null;
     return new ResourceType(code, code);
+  }
+
+  private BigDecimal parseBigDecimal(Object value){
+    if (value == null){
+      return null;
+    }
+    if (value instanceof BigDecimal bd){
+      return bd;
+    }
+    if (value instanceof Number number){
+      return BigDecimal.valueOf(number.doubleValue());
+    }
+    try {
+      return new BigDecimal(value.toString());
+    } catch (NumberFormatException ex){
+      return null;
+    }
   }
 
   private List<Unavailability> parseUnavailabilityList(Object value){

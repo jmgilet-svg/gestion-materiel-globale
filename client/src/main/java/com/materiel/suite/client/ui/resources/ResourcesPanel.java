@@ -252,6 +252,7 @@ public class ResourcesPanel extends JPanel {
     copy.setId(source.getId());
     copy.setName(source.getName());
     copy.setType(source.getType());
+    copy.setUnitPriceHt(source.getUnitPriceHt());
     copy.setColor(source.getColor());
     copy.setNotes(source.getNotes());
     copy.setCapacity(source.getCapacity());
@@ -295,7 +296,7 @@ public class ResourcesPanel extends JPanel {
 
   private static class ResourceModel extends AbstractTableModel {
     private final List<Resource> items = new ArrayList<>();
-    private final String[] cols = {"Icône", "Nom", "Type", "Couleur", "Notes"
+    private final String[] cols = {"Icône", "Nom", "Type", "PU HT", "Couleur", "Notes"
         // === CRM-INJECT BEGIN: resource-table-advanced-cols ===
         , "Capacité", "Tags", "Indispos hebdo"
         // === CRM-INJECT END ===
@@ -309,15 +310,23 @@ public class ResourcesPanel extends JPanel {
         case 0 -> typeIcon(x);
         case 1 -> x.getName();
         case 2 -> typeLabel(x);
-        case 3 -> x.getColor();
-        case 4 -> x.getNotes();
+        case 3 -> x.getUnitPriceHt();
+        case 4 -> x.getColor();
+        case 5 -> x.getNotes();
         // === CRM-INJECT BEGIN: resource-table-advanced-values ===
-        case 5 -> x.getCapacity();
-        case 6 -> x.getTags();
-        case 7 -> x.getWeeklyUnavailability();
+        case 6 -> x.getCapacity();
+        case 7 -> x.getTags();
+        case 8 -> x.getWeeklyUnavailability();
         // === CRM-INJECT END ===
         default -> "";
       };
+    }
+
+    @Override public Class<?> getColumnClass(int columnIndex){
+      if (columnIndex == 3){
+        return java.math.BigDecimal.class;
+      }
+      return Object.class;
     }
 
     void setItems(List<Resource> resources){

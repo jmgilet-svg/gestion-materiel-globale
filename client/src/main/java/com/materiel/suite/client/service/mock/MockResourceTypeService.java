@@ -3,7 +3,6 @@ package com.materiel.suite.client.service.mock;
 import com.materiel.suite.client.model.ResourceType;
 import com.materiel.suite.client.service.ResourceTypeService;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -50,22 +49,21 @@ public class MockResourceTypeService implements ResourceTypeService {
     if (!store.isEmpty()){
       return;
     }
-    put(create("CRANE", "Grue", "crane", new BigDecimal("120.00")));
-    put(create("TRUCK", "Camion", "truck", new BigDecimal("85.00")));
-    put(create("FORKLIFT", "Chariot", "forklift", new BigDecimal("55.00")));
-    put(create("CONTAINER", "Nacelle", "container", new BigDecimal("95.00")));
+    put(create("CRANE", "Grue", "crane"));
+    put(create("TRUCK", "Camion", "truck"));
+    put(create("FORKLIFT", "Chariot", "forklift"));
+    put(create("CONTAINER", "Nacelle", "container"));
   }
 
   private void put(ResourceType type){
     store.put(type.getId(), copyOf(type));
   }
 
-  private ResourceType create(String id, String name, String icon, BigDecimal price){
+  private ResourceType create(String id, String name, String icon){
     ResourceType type = new ResourceType();
     type.setId(id);
     type.setName(name);
     type.setIconKey(icon);
-    type.setUnitPriceHt(price);
     return type;
   }
 
@@ -77,7 +75,6 @@ public class MockResourceTypeService implements ResourceTypeService {
     copy.setId(src.getId());
     copy.setName(src.getName());
     copy.setIconKey(src.getIconKey());
-    copy.setUnitPriceHt(src.getUnitPriceHt());
     return copy;
   }
 }

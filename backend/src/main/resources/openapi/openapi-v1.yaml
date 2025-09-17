@@ -358,6 +358,7 @@ components:
         id: { type: string, format: uuid }
         name: { type: string }
         type: { type: string }
+        unitPriceHt: { type: number, description: 'Prix unitaire HT de la ressource' }
         color: { type: string }
         notes: { type: string }
         capacity: { type: integer, minimum: 1 }
