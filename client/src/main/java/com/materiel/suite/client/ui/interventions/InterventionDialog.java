@@ -15,11 +15,15 @@ import com.materiel.suite.client.ui.icons.IconRegistry;
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
 import java.awt.*;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Date;
 import java.util.List;
 import java.util.Objects;
@@ -40,6 +44,9 @@ public class InterventionDialog extends JDialog {
   private final JTextArea descriptionArea = new JTextArea(4, 30);
   private final JTextArea internalNoteArea = new JTextArea(3, 30);
   private final JTextArea closingNoteArea = new JTextArea(3, 30);
+  private final JTextField signatureByField = new JTextField(18);
+  private final JSpinner signatureAtSpinner = new JSpinner(new SpinnerDateModel());
+  private final JLabel signaturePreview = new JLabel();
   private final ResourceMultiPicker resourcePicker = new ResourceMultiPicker();
   private final ContactMultiPicker contactPicker = new ContactMultiPicker();
   private final QuoteTableModel quoteModel = new QuoteTableModel();
@@ -47,6 +54,7 @@ public class InterventionDialog extends JDialog {
 
   private Intervention current;
   private boolean saved;
+  private String signatureBase64;
 
   public InterventionDialog(Window owner, PlanningService planningService, ClientService clientService, List<InterventionType> types){
     super(owner, "Intervention", ModalityType.APPLICATION_MODAL);
@@ -74,6 +82,7 @@ public class InterventionDialog extends JDialog {
   private void configureSpinners(){
     startSpinner.setEditor(new JSpinner.DateEditor(startSpinner, "dd/MM/yyyy HH:mm"));
     endSpinner.setEditor(new JSpinner.DateEditor(endSpinner, "dd/MM/yyyy HH:mm"));
+    signatureAtSpinner.setEditor(new JSpinner.DateEditor(signatureAtSpinner, "dd/MM/yyyy HH:mm"));
   }
 
   private void configureQuoteTable(){
@@ -120,10 +129,11 @@ public class InterventionDialog extends JDialog {
     leftTabs.addTab("Contacts client", IconRegistry.small("user"), contactPicker);
 
     JPanel right = new JPanel(new BorderLayout(8, 8));
-    JPanel notes = new JPanel(new GridLayout(3, 1, 6, 6));
+    JPanel notes = new JPanel(new GridLayout(4, 1, 6, 6));
     notes.add(panelWithLabel("Description", new JScrollPane(descriptionArea)));
     notes.add(panelWithLabel("Note interne", new JScrollPane(internalNoteArea)));
     notes.add(panelWithLabel("Note de fin", new JScrollPane(closingNoteArea)));
+    notes.add(buildSignaturePanel());
     right.add(notes, BorderLayout.NORTH);
     right.add(panelWithLabel("Pré-devis", new JScrollPane(quoteTable)), BorderLayout.CENTER);
 
@@ -139,6 +149,43 @@ public class InterventionDialog extends JDialog {
     return panel;
   }
 
+  private JComponent buildSignaturePanel(){
+    JPanel panel = new JPanel(new GridBagLayout());
+    GridBagConstraints gc = new GridBagConstraints();
+    gc.insets = new Insets(4, 4, 4, 4);
+    gc.anchor = GridBagConstraints.WEST;
+    gc.fill = GridBagConstraints.NONE;
+    gc.weightx = 0;
+    int y = 0;
+
+    gc.gridx = 0; gc.gridy = y; panel.add(new JLabel(IconRegistry.small("signature")), gc);
+    gc.gridx = 1; panel.add(new JLabel("Signé par"), gc);
+    gc.gridx = 2; gc.weightx = 1; gc.fill = GridBagConstraints.HORIZONTAL;
+    panel.add(signatureByField, gc); gc.weightx = 0; gc.fill = GridBagConstraints.NONE;
+    gc.gridx = 3; panel.add(new JLabel("Le"), gc);
+    gc.gridx = 4; panel.add(signatureAtSpinner, gc);
+    y++;
+
+    JButton importButton = new JButton("Importer PNG…");
+    importButton.addActionListener(e -> importSignature());
+    JButton clearButton = new JButton("Effacer");
+    clearButton.addActionListener(e -> clearSignature());
+
+    signaturePreview.setPreferredSize(new Dimension(200, 80));
+    signaturePreview.setBorder(BorderFactory.createLineBorder(new Color(0xDDDDDD)));
+    signaturePreview.setHorizontalAlignment(SwingConstants.CENTER);
+    signaturePreview.setOpaque(true);
+    signaturePreview.setBackground(Color.WHITE);
+    signaturePreview.setText("Aucune signature");
+
+    gc.gridx = 2; gc.gridy = y; panel.add(importButton, gc);
+    gc.gridx = 3; panel.add(clearButton, gc);
+    gc.gridx = 4; gc.fill = GridBagConstraints.BOTH; gc.weightx = 1;
+    panel.add(signaturePreview, gc);
+
+    return panel;
+  }
+
   private JComponent buildFooter(){
     JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
     JButton generate = new JButton("Générer depuis ressources", IconRegistry.small("file"));
@@ -151,6 +198,69 @@ public class InterventionDialog extends JDialog {
     panel.add(save);
     panel.add(cancel);
     return panel;
+  }
+
+  private void importSignature(){
+    JFileChooser chooser = new JFileChooser();
+    int result = chooser.showOpenDialog(this);
+    if (result != JFileChooser.APPROVE_OPTION){
+      return;
+    }
+    File file = chooser.getSelectedFile();
+    try {
+      byte[] data = Files.readAllBytes(file.toPath());
+      signatureBase64 = Base64.getEncoder().encodeToString(data);
+      signatureAtSpinner.setValue(new Date());
+      Toasts.success(this, "Signature importée");
+    } catch (IOException ex){
+      signatureBase64 = null;
+      Toasts.error(this, "Impossible de lire le fichier sélectionné");
+    }
+    updateSignaturePreview();
+  }
+
+  private void clearSignature(){
+    signatureBase64 = null;
+    updateSignaturePreview();
+  }
+
+  private void updateSignaturePreview(){
+    if (signatureBase64 != null && !signatureBase64.isBlank()){
+      try {
+        byte[] bytes = Base64.getDecoder().decode(signatureBase64);
+        ImageIcon icon = createSignatureIcon(bytes);
+        signaturePreview.setIcon(icon);
+        signaturePreview.setText(icon == null ? "Aperçu indisponible" : "");
+      } catch (IllegalArgumentException ex){
+        signaturePreview.setIcon(null);
+        signaturePreview.setText("Aperçu indisponible");
+      }
+    } else {
+      signaturePreview.setIcon(null);
+      signaturePreview.setText("Aucune signature");
+    }
+  }
+
+  private ImageIcon createSignatureIcon(byte[] bytes){
+    if (bytes == null || bytes.length == 0){
+      return null;
+    }
+    ImageIcon icon = new ImageIcon(bytes);
+    int w = icon.getIconWidth();
+    int h = icon.getIconHeight();
+    if (w <= 0 || h <= 0){
+      return null;
+    }
+    int boxW = 200;
+    int boxH = 80;
+    double scale = Math.min((double) boxW / w, (double) boxH / h);
+    if (scale > 1d){
+      scale = 1d;
+    }
+    int newW = Math.max(1, (int) Math.round(w * scale));
+    int newH = Math.max(1, (int) Math.round(h * scale));
+    Image scaled = icon.getImage().getScaledInstance(newW, newH, Image.SCALE_SMOOTH);
+    return new ImageIcon(scaled);
   }
 
   private void onSave(){
@@ -182,6 +292,14 @@ public class InterventionDialog extends JDialog {
     descriptionArea.setText(s(current.getDescription()));
     internalNoteArea.setText(s(current.getInternalNote()));
     closingNoteArea.setText(s(current.getClosingNote()));
+    signatureByField.setText(s(current.getSignatureBy()));
+    if (current.getSignatureAt() != null){
+      signatureAtSpinner.setValue(toDate(current.getSignatureAt()));
+    } else {
+      signatureAtSpinner.setValue(new Date());
+    }
+    signatureBase64 = current.getSignaturePngBase64();
+    updateSignaturePreview();
 
     LocalDateTime start = current.getDateHeureDebut();
     LocalDateTime end = current.getDateHeureFin();
@@ -350,6 +468,24 @@ public class InterventionDialog extends JDialog {
 
     current.setContacts(contactPicker.getSelectedContacts());
     current.setQuoteDraft(quoteModel.getLines());
+    String signer = signatureByField.getText();
+    if (signer != null){
+      signer = signer.trim();
+    }
+    current.setSignatureBy(signer == null || signer.isBlank() ? null : signer);
+    current.setSignaturePngBase64(signatureBase64 != null && !signatureBase64.isBlank() ? signatureBase64 : null);
+    LocalDateTime sigAt = null;
+    Object rawSignatureAt = signatureAtSpinner.getValue();
+    if (rawSignatureAt instanceof Date date){
+      sigAt = LocalDateTime.ofInstant(date.toInstant(), ZoneId.systemDefault());
+    } else if (rawSignatureAt instanceof LocalDateTime ldt){
+      sigAt = ldt;
+    }
+    if (current.getSignaturePngBase64() != null || (current.getSignatureBy() != null && !current.getSignatureBy().isBlank())){
+      current.setSignatureAt(sigAt);
+    } else {
+      current.setSignatureAt(null);
+    }
     return current;
   }
 

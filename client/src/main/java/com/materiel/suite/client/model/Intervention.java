@@ -22,6 +22,9 @@ public class Intervention {
   private String description;
   private String internalNote;
   private String closingNote;
+  private String signatureBy;
+  private LocalDateTime signatureAt;
+  private String signaturePngBase64;
   private LocalDateTime actualStart;
   private LocalDateTime actualEnd;
   private final List<Contact> contacts = new ArrayList<>();
@@ -125,6 +128,15 @@ public class Intervention {
 
   public String getClosingNote(){ return closingNote; }
   public void setClosingNote(String closingNote){ this.closingNote = closingNote; }
+
+  public String getSignatureBy(){ return signatureBy; }
+  public void setSignatureBy(String signatureBy){ this.signatureBy = signatureBy; }
+
+  public LocalDateTime getSignatureAt(){ return signatureAt; }
+  public void setSignatureAt(LocalDateTime signatureAt){ this.signatureAt = signatureAt; }
+
+  public String getSignaturePngBase64(){ return signaturePngBase64; }
+  public void setSignaturePngBase64(String signaturePngBase64){ this.signaturePngBase64 = signaturePngBase64; }
 
   public LocalDateTime getActualStart(){ return actualStart; }
   public void setActualStart(LocalDateTime actualStart){ this.actualStart = actualStart; }

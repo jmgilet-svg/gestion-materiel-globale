@@ -359,6 +359,20 @@ components:
           type: string
         color:
           type: string
+        description:
+          type: string
+        internalNote:
+          type: string
+        closingNote:
+          type: string
+        signatureBy:
+          type: string
+        signatureAt:
+          type: string
+          format: date-time
+        signaturePngBase64:
+          type: string
+          description: "Signature client encodée en base64 (PNG sans préfixe data:)"
         locked:
           type: boolean
         dateHeureDebut:
