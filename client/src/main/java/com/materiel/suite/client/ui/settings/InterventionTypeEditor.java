@@ -7,12 +7,20 @@ import com.materiel.suite.client.ui.icons.IconPickerDialog;
 import com.materiel.suite.client.ui.icons.IconRegistry;
 
 import javax.swing.*;
+import javax.swing.event.TableModelEvent;
+import javax.swing.event.TableModelListener;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.Transferable;
+import java.awt.datatransfer.UnsupportedFlavorException;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -20,9 +28,9 @@ import java.util.Set;
 
 /** Éditeur simple pour les types d'intervention (nom + icône). */
 public class InterventionTypeEditor extends JPanel {
-  private final DefaultTableModel model = new DefaultTableModel(new Object[]{"Icône", "Nom", "Ordre"}, 0){
+  private final DefaultTableModel model = new DefaultTableModel(new Object[]{"Icône", "Nom", "Ordre", "__Code"}, 0){
     @Override public boolean isCellEditable(int row, int column){
-      return false;
+      return column == 1;
     }
   };
   private final JTable table = new JTable(model);
@@ -34,6 +42,7 @@ public class InterventionTypeEditor extends JPanel {
   private final JButton moveUpButton = new JButton("Monter", IconRegistry.small("maximize"));
   private final JButton moveDownButton = new JButton("Descendre", IconRegistry.small("minimize"));
   private final List<InterventionType> data = new ArrayList<>();
+  private boolean updatingModel;
 
   public InterventionTypeEditor(){
     super(new BorderLayout(8, 8));
@@ -46,6 +55,30 @@ public class InterventionTypeEditor extends JPanel {
     orderRenderer.setHorizontalAlignment(SwingConstants.CENTER);
     table.getColumnModel().getColumn(2).setMaxWidth(80);
     table.getColumnModel().getColumn(2).setCellRenderer(orderRenderer);
+    table.getColumnModel().getColumn(3).setMinWidth(0);
+    table.getColumnModel().getColumn(3).setMaxWidth(0);
+    table.getColumnModel().getColumn(3).setPreferredWidth(0);
+
+    table.setDragEnabled(true);
+    table.setDropMode(DropMode.INSERT_ROWS);
+    table.setTransferHandler(new RowReorderHandler());
+
+    table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+        .put(KeyStroke.getKeyStroke(KeyEvent.VK_F2, 0), "editName");
+    table.getActionMap().put("editName", new AbstractAction(){
+      @Override public void actionPerformed(java.awt.event.ActionEvent e){
+        int viewRow = table.getSelectedRow();
+        if (viewRow < 0){
+          return;
+        }
+        if (table.editCellAt(viewRow, 1)){
+          Component editor = table.getEditorComponent();
+          if (editor != null){
+            editor.requestFocus();
+          }
+        }
+      }
+    });
 
     JScrollPane scrollPane = new JScrollPane(table);
     scrollPane.setBorder(BorderFactory.createEmptyBorder());
@@ -94,18 +127,25 @@ public class InterventionTypeEditor extends JPanel {
       }
     });
 
+    model.addTableModelListener(new InlineRenameListener());
+
     reload();
   }
 
   private void reload(){
-    List<InterventionType> list = ServiceLocator.interventionTypes().list();
-    data.clear();
-    if (list != null){
-      data.addAll(list);
-    }
-    model.setRowCount(0);
-    for (InterventionType type : data){
-      model.addRow(new Object[]{type.getIconKey(), type.getLabel(), type.getOrderIndex()});
+    updatingModel = true;
+    try {
+      List<InterventionType> list = ServiceLocator.interventionTypes().list();
+      data.clear();
+      if (list != null){
+        data.addAll(list);
+      }
+      model.setRowCount(0);
+      for (InterventionType type : data){
+        model.addRow(new Object[]{type.getIconKey(), type.getLabel(), type.getOrderIndex(), type.getCode()});
+      }
+    } finally {
+      updatingModel = false;
     }
     updateButtonStates();
   }
@@ -211,6 +251,30 @@ public class InterventionTypeEditor extends JPanel {
       InterventionType type = copy(ordered.get(i));
       type.setOrderIndex(i);
       ServiceLocator.interventionTypes().save(type);
+    }
+  }
+
+  private InterventionType findByCode(String code){
+    if (code == null){
+      return null;
+    }
+    for (InterventionType type : data){
+      if (type != null && code.equals(type.getCode())){
+        return type;
+      }
+    }
+    return null;
+  }
+
+  private void updateCellSilently(int row, int column, Object value){
+    if (row < 0 || row >= model.getRowCount()){
+      return;
+    }
+    updatingModel = true;
+    try {
+      model.setValueAt(value, row, column);
+    } finally {
+      updatingModel = false;
     }
   }
 
@@ -338,6 +402,139 @@ public class InterventionTypeEditor extends JPanel {
       String key = value == null ? "" : value.toString();
       label.setIcon(IconRegistry.small(key));
       return label;
+    }
+  }
+
+  private final class InlineRenameListener implements TableModelListener {
+    @Override public void tableChanged(TableModelEvent event){
+      if (updatingModel){
+        return;
+      }
+      if (event.getType() != TableModelEvent.UPDATE){
+        return;
+      }
+      int column = event.getColumn();
+      if (column != 1){
+        return;
+      }
+      int row = event.getFirstRow();
+      if (row < 0 || row >= data.size()){
+        return;
+      }
+      Object raw = model.getValueAt(row, column);
+      String newName = raw == null ? "" : raw.toString().trim();
+      Object codeValue = model.getValueAt(row, 3);
+      String code = codeValue == null ? null : codeValue.toString();
+      InterventionType current = findByCode(code);
+      if (current == null){
+        reload();
+        return;
+      }
+      String original = safe(current.getLabel()).trim();
+      if (newName.isEmpty()){
+        Toasts.error(InterventionTypeEditor.this, "Le nom est requis");
+        updateCellSilently(row, column, original);
+        return;
+      }
+      if (newName.equals(original)){
+        String rawText = raw == null ? "" : raw.toString();
+        if (!newName.equals(rawText)){
+          updateCellSilently(row, column, original);
+        }
+        return;
+      }
+      try {
+        InterventionType toSave = copy(current);
+        toSave.setLabel(newName);
+        InterventionType saved = ServiceLocator.interventionTypes().save(toSave);
+        if (saved != null){
+          current.setLabel(saved.getLabel());
+          current.setIconKey(saved.getIconKey());
+          current.setOrderIndex(saved.getOrderIndex());
+          updateCellSilently(row, column, saved.getLabel());
+          Toasts.success(InterventionTypeEditor.this, "Nom mis à jour");
+        } else {
+          updateCellSilently(row, column, original);
+        }
+      } catch (RuntimeException ex){
+        updateCellSilently(row, column, original);
+        Toasts.error(InterventionTypeEditor.this, "Échec de la mise à jour : " + ex.getMessage());
+      }
+    }
+  }
+
+  private final class RowReorderHandler extends TransferHandler {
+    private final DataFlavor rowsFlavor = new DataFlavor(int[].class, "application/x-java-int-array");
+
+    @Override public int getSourceActions(JComponent c){
+      return MOVE;
+    }
+
+    @Override protected Transferable createTransferable(JComponent c){
+      int[] selected = table.getSelectedRows();
+      final int[] rows = Arrays.stream(selected).map(table::convertRowIndexToModel).toArray();
+      return new Transferable(){
+        @Override public DataFlavor[] getTransferDataFlavors(){
+          return new DataFlavor[]{rowsFlavor};
+        }
+
+        @Override public boolean isDataFlavorSupported(DataFlavor flavor){
+          return rowsFlavor.equals(flavor);
+        }
+
+        @Override public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException, IOException {
+          if (!isDataFlavorSupported(flavor)){
+            throw new UnsupportedFlavorException(flavor);
+          }
+          return rows;
+        }
+      };
+    }
+
+    @Override public boolean canImport(TransferSupport support){
+      return support.isDrop() && support.isDataFlavorSupported(rowsFlavor);
+    }
+
+    @Override public boolean importData(TransferSupport support){
+      if (!canImport(support)){
+        return false;
+      }
+      JTable.DropLocation dropLocation = (JTable.DropLocation) support.getDropLocation();
+      int dropRow = dropLocation.getRow();
+      int dropModelIndex = dropRow < 0 ? model.getRowCount() : table.convertRowIndexToModel(dropRow);
+      try {
+        int[] dragged = (int[]) support.getTransferable().getTransferData(rowsFlavor);
+        if (dragged.length == 0){
+          return false;
+        }
+        List<InterventionType> reordered = new ArrayList<>(data);
+        List<InterventionType> moving = new ArrayList<>();
+        Arrays.sort(dragged);
+        int insertIndex = dropModelIndex;
+        for (int i = dragged.length - 1; i >= 0; i--){
+          int index = dragged[i];
+          if (index < 0 || index >= reordered.size()){
+            continue;
+          }
+          moving.add(0, reordered.remove(index));
+          if (index < insertIndex){
+            insertIndex--;
+          }
+        }
+        if (moving.isEmpty()){
+          return false;
+        }
+        insertIndex = Math.max(0, Math.min(insertIndex, reordered.size()));
+        reordered.addAll(insertIndex, moving);
+        String codeToSelect = moving.get(0).getCode();
+        renumberAndPersist(reordered);
+        reload();
+        selectCode(codeToSelect);
+        return true;
+      } catch (UnsupportedFlavorException | IOException ex){
+        Toasts.error(InterventionTypeEditor.this, "Réorganisation impossible : " + ex.getMessage());
+        return false;
+      }
     }
   }
 }
