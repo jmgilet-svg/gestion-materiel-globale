@@ -1,5 +1,7 @@
 package com.materiel.suite.backend.v1.domain;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -40,7 +42,9 @@ public class DeliveryNoteEntity {
   public void setTotalHt(BigDecimal totalHt) { this.totalHt = totalHt; }
   public BigDecimal getTotalVat() { return totalVat; }
   public void setTotalVat(BigDecimal totalVat) { this.totalVat = totalVat; }
+  @JsonProperty("totalTTC")
   public BigDecimal getTotalTtc() { return totalTtc; }
+  @JsonProperty("totalTTC")
   public void setTotalTtc(BigDecimal totalTtc) { this.totalTtc = totalTtc; }
   public long getVersion() { return version; }
   public void setVersion(long version) { this.version = version; }
