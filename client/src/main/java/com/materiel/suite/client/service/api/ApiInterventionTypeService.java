@@ -87,6 +87,15 @@ public class ApiInterventionTypeService implements InterventionTypeService {
     String code = SimpleJson.str(map.get("id"));
     String label = SimpleJson.str(map.get("name"));
     String icon = SimpleJson.str(map.get("iconKey"));
+    Integer orderIndex = null;
+    Object orderValue = map.get("orderIndex");
+    if (orderValue instanceof Number number){
+      orderIndex = number.intValue();
+    } else if (orderValue != null){
+      try {
+        orderIndex = Integer.parseInt(orderValue.toString());
+      } catch (NumberFormatException ignore){}
+    }
     if (code == null || code.isBlank()){
       return null;
     }
@@ -94,6 +103,7 @@ public class ApiInterventionTypeService implements InterventionTypeService {
     type.setCode(code);
     type.setLabel(label != null && !label.isBlank() ? label : code);
     type.setIconKey(icon);
+    type.setOrderIndex(orderIndex);
     return type;
   }
 
@@ -106,19 +116,22 @@ public class ApiInterventionTypeService implements InterventionTypeService {
     }
     appendField(sb, "name", name);
     appendField(sb, "iconKey", type.getIconKey());
+    appendField(sb, "orderIndex", type.getOrderIndex());
     sb.append('}');
     return sb.toString();
   }
 
-  private void appendField(StringBuilder sb, String key, String value){
+  private void appendField(StringBuilder sb, String key, Object value){
     if (sb.length() > 1){
       sb.append(',');
     }
     sb.append('"').append(key).append('"').append(':');
     if (value == null){
       sb.append("null");
+    } else if (value instanceof Number || value instanceof Boolean){
+      sb.append(value);
     } else {
-      sb.append('"').append(escape(value)).append('"');
+      sb.append('"').append(escape(value.toString())).append('"');
     }
   }
 

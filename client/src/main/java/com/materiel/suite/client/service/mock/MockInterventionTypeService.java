@@ -7,6 +7,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** Fournit un catalogue statique pour l'utilisation hors-ligne. */
@@ -21,7 +22,9 @@ public class MockInterventionTypeService implements InterventionTypeService {
   public List<InterventionType> list(){
     return store.values().stream()
         .map(this::copy)
-        .sorted(Comparator.comparing(type -> type.getLabel() == null ? "" : type.getLabel(), String.CASE_INSENSITIVE_ORDER))
+        .sorted(Comparator
+            .comparing((InterventionType type) -> type.getOrderIndex() == null ? Integer.MAX_VALUE : type.getOrderIndex())
+            .thenComparing(type -> type.getLabel() == null ? "" : type.getLabel(), String.CASE_INSENSITIVE_ORDER))
         .toList();
   }
 
@@ -33,6 +36,14 @@ public class MockInterventionTypeService implements InterventionTypeService {
     InterventionType copy = copy(type);
     if (copy.getCode() == null || copy.getCode().isBlank()){
       copy.setCode(generateCode(copy.getLabel()));
+    }
+    InterventionType existing = store.get(copy.getCode());
+    if (copy.getOrderIndex() == null){
+      if (existing != null && existing.getOrderIndex() != null){
+        copy.setOrderIndex(existing.getOrderIndex());
+      } else {
+        copy.setOrderIndex(nextOrderIndex());
+      }
     }
     store.put(copy.getCode(), copy(copy));
     return copy(copy);
@@ -50,9 +61,9 @@ public class MockInterventionTypeService implements InterventionTypeService {
     if (!store.isEmpty()){
       return;
     }
-    put(new InterventionType("LIFT", "Levage", "crane"));
-    put(new InterventionType("TRANSPORT", "Transport", "truck"));
-    put(new InterventionType("MANUT", "Manutention", "forklift"));
+    put(new InterventionType("LIFT", "Levage", "crane", 0));
+    put(new InterventionType("TRANSPORT", "Transport", "truck", 1));
+    put(new InterventionType("MANUT", "Manutention", "forklift", 2));
   }
 
   private void put(InterventionType type){
@@ -70,7 +81,16 @@ public class MockInterventionTypeService implements InterventionTypeService {
     copy.setCode(type.getCode());
     copy.setLabel(type.getLabel());
     copy.setIconKey(type.getIconKey());
+    copy.setOrderIndex(type.getOrderIndex());
     return copy;
+  }
+
+  private int nextOrderIndex(){
+    return store.values().stream()
+        .map(InterventionType::getOrderIndex)
+        .filter(Objects::nonNull)
+        .max(Integer::compareTo)
+        .orElse(-1) + 1;
   }
 
   private String generateCode(String label){

@@ -409,6 +409,9 @@ components:
           type: string
         iconKey:
           type: string
+        orderIndex:
+          type: integer
+          description: "Ordre d'affichage (0 = premier)"
     Intervention:
       type: object
       properties:

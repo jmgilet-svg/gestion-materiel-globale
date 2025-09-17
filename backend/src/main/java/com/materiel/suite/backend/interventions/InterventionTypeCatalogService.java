@@ -4,9 +4,10 @@ import com.materiel.suite.backend.interventions.dto.InterventionTypeV2Dto;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -19,22 +20,28 @@ public class InterventionTypeCatalogService {
   @PostConstruct
   public void seed(){
     if (store.isEmpty()){
-      put("levage", "Levage", "crane");
-      put("transport", "Transport", "truck");
-      put("manutention", "Manutention", "forklift");
+      put("levage", "Levage", "crane", 0);
+      put("transport", "Transport", "truck", 1);
+      put("manutention", "Manutention", "forklift", 2);
     }
   }
 
-  private void put(String id, String name, String icon){
+  private void put(String id, String name, String icon, Integer order){
     InterventionTypeV2Dto dto = new InterventionTypeV2Dto();
     dto.setId(id);
     dto.setName(name);
     dto.setIconKey(icon);
+    dto.setOrderIndex(order);
     store.put(id, dto);
   }
 
   public List<InterventionTypeV2Dto> list(){
-    return new ArrayList<>(store.values());
+    return store.values().stream()
+        .map(this::copy)
+        .sorted(Comparator
+            .comparing((InterventionTypeV2Dto dto) -> dto.getOrderIndex() == null ? Integer.MAX_VALUE : dto.getOrderIndex())
+            .thenComparing(dto -> dto.getName() == null ? "" : dto.getName(), String.CASE_INSENSITIVE_ORDER))
+        .toList();
   }
 
   public Optional<InterventionTypeV2Dto> get(String id){
@@ -48,11 +55,15 @@ public class InterventionTypeCatalogService {
     if (dto == null){
       return null;
     }
-    if (dto.getId() == null || dto.getId().isBlank()){
-      dto.setId(UUID.randomUUID().toString());
+    InterventionTypeV2Dto copy = copy(dto);
+    if (copy.getId() == null || copy.getId().isBlank()){
+      copy.setId(UUID.randomUUID().toString());
     }
-    store.put(dto.getId(), copy(dto));
-    return store.get(dto.getId());
+    if (copy.getOrderIndex() == null){
+      copy.setOrderIndex(nextOrderIndex());
+    }
+    store.put(copy.getId(), copy(copy));
+    return store.get(copy.getId());
   }
 
   public InterventionTypeV2Dto update(String id, InterventionTypeV2Dto dto){
@@ -61,8 +72,16 @@ public class InterventionTypeCatalogService {
     }
     InterventionTypeV2Dto copy = copy(dto);
     copy.setId(id);
-    store.put(id, copy);
-    return copy;
+    if (copy.getOrderIndex() == null){
+      InterventionTypeV2Dto existing = store.get(id);
+      if (existing != null && existing.getOrderIndex() != null){
+        copy.setOrderIndex(existing.getOrderIndex());
+      } else {
+        copy.setOrderIndex(nextOrderIndex());
+      }
+    }
+    store.put(id, copy(copy));
+    return store.get(id);
   }
 
   public void delete(String id){
@@ -80,6 +99,15 @@ public class InterventionTypeCatalogService {
     copy.setId(dto.getId());
     copy.setName(dto.getName());
     copy.setIconKey(dto.getIconKey());
+    copy.setOrderIndex(dto.getOrderIndex());
     return copy;
+  }
+
+  private int nextOrderIndex(){
+    return store.values().stream()
+        .map(InterventionTypeV2Dto::getOrderIndex)
+        .filter(Objects::nonNull)
+        .max(Integer::compareTo)
+        .orElse(-1) + 1;
   }
 }

@@ -13,11 +13,14 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /** Éditeur simple pour les types d'intervention (nom + icône). */
 public class InterventionTypeEditor extends JPanel {
-  private final DefaultTableModel model = new DefaultTableModel(new Object[]{"Icône", "Nom"}, 0){
+  private final DefaultTableModel model = new DefaultTableModel(new Object[]{"Icône", "Nom", "Ordre"}, 0){
     @Override public boolean isCellEditable(int row, int column){
       return false;
     }
@@ -27,6 +30,9 @@ public class InterventionTypeEditor extends JPanel {
   private final JButton editButton = new JButton("Modifier", IconRegistry.small("edit"));
   private final JButton deleteButton = new JButton("Supprimer", IconRegistry.small("trash"));
   private final JButton refreshButton = new JButton("Recharger", IconRegistry.small("refresh"));
+  private final JButton duplicateButton = new JButton("Dupliquer", IconRegistry.small("file"));
+  private final JButton moveUpButton = new JButton("Monter", IconRegistry.small("maximize"));
+  private final JButton moveDownButton = new JButton("Descendre", IconRegistry.small("minimize"));
   private final List<InterventionType> data = new ArrayList<>();
 
   public InterventionTypeEditor(){
@@ -34,9 +40,12 @@ public class InterventionTypeEditor extends JPanel {
     table.setRowHeight(28);
     table.setFillsViewportHeight(true);
     table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-    table.setAutoCreateRowSorter(true);
     table.getColumnModel().getColumn(0).setMaxWidth(60);
     table.getColumnModel().getColumn(0).setCellRenderer(new IconRenderer());
+    DefaultTableCellRenderer orderRenderer = new DefaultTableCellRenderer();
+    orderRenderer.setHorizontalAlignment(SwingConstants.CENTER);
+    table.getColumnModel().getColumn(2).setMaxWidth(80);
+    table.getColumnModel().getColumn(2).setCellRenderer(orderRenderer);
 
     JScrollPane scrollPane = new JScrollPane(table);
     scrollPane.setBorder(BorderFactory.createEmptyBorder());
@@ -46,7 +55,11 @@ public class InterventionTypeEditor extends JPanel {
     toolbar.setFloatable(false);
     toolbar.add(addButton);
     toolbar.add(editButton);
+    toolbar.add(duplicateButton);
     toolbar.add(deleteButton);
+    toolbar.addSeparator();
+    toolbar.add(moveUpButton);
+    toolbar.add(moveDownButton);
     toolbar.addSeparator();
     toolbar.add(refreshButton);
     add(toolbar, BorderLayout.NORTH);
@@ -60,6 +73,9 @@ public class InterventionTypeEditor extends JPanel {
     });
     deleteButton.addActionListener(e -> deleteSelected());
     refreshButton.addActionListener(e -> reload());
+    duplicateButton.addActionListener(e -> duplicateSelected());
+    moveUpButton.addActionListener(e -> moveSelected(-1));
+    moveDownButton.addActionListener(e -> moveSelected(1));
 
     table.addMouseListener(new MouseAdapter(){
       @Override public void mouseClicked(MouseEvent e){
@@ -69,6 +85,12 @@ public class InterventionTypeEditor extends JPanel {
             openEditor(type);
           }
         }
+      }
+    });
+
+    table.getSelectionModel().addListSelectionListener(e -> {
+      if (!e.getValueIsAdjusting()){
+        updateButtonStates();
       }
     });
 
@@ -83,8 +105,9 @@ public class InterventionTypeEditor extends JPanel {
     }
     model.setRowCount(0);
     for (InterventionType type : data){
-      model.addRow(new Object[]{type.getIconKey(), type.getLabel()});
+      model.addRow(new Object[]{type.getIconKey(), type.getLabel(), type.getOrderIndex()});
     }
+    updateButtonStates();
   }
 
   private InterventionType selectedType(){
@@ -113,6 +136,82 @@ public class InterventionTypeEditor extends JPanel {
     ServiceLocator.interventionTypes().delete(type.getCode());
     Toasts.success(this, "Type supprimé");
     reload();
+  }
+
+  private void moveSelected(int delta){
+    if (delta == 0){
+      return;
+    }
+    int viewRow = table.getSelectedRow();
+    if (viewRow < 0){
+      return;
+    }
+    int modelRow = table.convertRowIndexToModel(viewRow);
+    if (modelRow < 0 || modelRow >= data.size()){
+      return;
+    }
+    int target = modelRow + delta;
+    if (target < 0 || target >= data.size()){
+      return;
+    }
+    List<InterventionType> reordered = new ArrayList<>(data);
+    Collections.swap(reordered, modelRow, target);
+    String codeToSelect = reordered.get(target).getCode();
+    renumberAndPersist(reordered);
+    reload();
+    selectCode(codeToSelect);
+  }
+
+  private void duplicateSelected(){
+    InterventionType source = selectedType();
+    if (source == null){
+      return;
+    }
+    List<InterventionType> reordered = new ArrayList<>(data);
+    int index = reordered.indexOf(source);
+    if (index < 0){
+      index = reordered.size() - 1;
+    }
+    InterventionType duplicate = new InterventionType();
+    duplicate.setLabel(suggestDuplicateName(source.getLabel(), reordered));
+    duplicate.setIconKey(source.getIconKey());
+    InterventionType saved = ServiceLocator.interventionTypes().save(duplicate);
+    if (saved == null){
+      return;
+    }
+    reordered.add(index + 1, saved);
+    renumberAndPersist(reordered);
+    reload();
+    selectCode(saved.getCode());
+    Toasts.success(this, "Type dupliqué");
+  }
+
+  private String suggestDuplicateName(String base, List<InterventionType> list){
+    String cleaned = safe(base).trim();
+    if (cleaned.isEmpty()){
+      cleaned = "Type";
+    }
+    Set<String> names = new HashSet<>();
+    for (InterventionType type : list){
+      names.add(safe(type.getLabel()).trim());
+    }
+    String candidate = cleaned + " (copie)";
+    if (!names.contains(candidate)){
+      return candidate;
+    }
+    int counter = 2;
+    while (names.contains(cleaned + " (copie " + counter + ")")){
+      counter++;
+    }
+    return cleaned + " (copie " + counter + ")";
+  }
+
+  private void renumberAndPersist(List<InterventionType> ordered){
+    for (int i = 0; i < ordered.size(); i++){
+      InterventionType type = copy(ordered.get(i));
+      type.setOrderIndex(i);
+      ServiceLocator.interventionTypes().save(type);
+    }
   }
 
   private void openEditor(InterventionType existing){
@@ -198,6 +297,7 @@ public class InterventionTypeEditor extends JPanel {
         int viewRow = table.convertRowIndexToView(i);
         table.setRowSelectionInterval(viewRow, viewRow);
         table.scrollRectToVisible(table.getCellRect(viewRow, 0, true));
+        updateButtonStates();
         break;
       }
     }
@@ -211,11 +311,23 @@ public class InterventionTypeEditor extends JPanel {
     copy.setCode(type.getCode());
     copy.setLabel(type.getLabel());
     copy.setIconKey(type.getIconKey());
+    copy.setOrderIndex(type.getOrderIndex());
     return copy;
   }
 
   private String safe(String value){
     return value == null ? "" : value;
+  }
+
+  private void updateButtonStates(){
+    int viewRow = table.getSelectedRow();
+    int modelRow = viewRow < 0 ? -1 : table.convertRowIndexToModel(viewRow);
+    boolean hasSelection = modelRow >= 0 && modelRow < data.size();
+    editButton.setEnabled(hasSelection);
+    deleteButton.setEnabled(hasSelection);
+    duplicateButton.setEnabled(hasSelection);
+    moveUpButton.setEnabled(hasSelection && modelRow > 0);
+    moveDownButton.setEnabled(hasSelection && modelRow >= 0 && modelRow < data.size() - 1);
   }
 
   private static class IconRenderer extends DefaultTableCellRenderer {

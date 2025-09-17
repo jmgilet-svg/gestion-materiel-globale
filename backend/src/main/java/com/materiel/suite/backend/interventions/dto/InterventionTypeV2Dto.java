@@ -5,6 +5,7 @@ public class InterventionTypeV2Dto {
   private String id;
   private String name;
   private String iconKey;
+  private Integer orderIndex;
 
   public String getId(){
     return id;
@@ -28,5 +29,13 @@ public class InterventionTypeV2Dto {
 
   public void setIconKey(String iconKey){
     this.iconKey = iconKey;
+  }
+
+  public Integer getOrderIndex(){
+    return orderIndex;
+  }
+
+  public void setOrderIndex(Integer orderIndex){
+    this.orderIndex = orderIndex;
   }
 }
