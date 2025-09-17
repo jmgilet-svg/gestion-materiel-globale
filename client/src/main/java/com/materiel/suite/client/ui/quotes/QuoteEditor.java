@@ -10,6 +10,8 @@ import com.materiel.suite.client.ui.doc.DocumentTotalsPanel;
 import com.materiel.suite.client.ui.doc.ClientContactBinding;
 // === CRM-INJECT END ===
 
+import com.materiel.suite.client.ui.common.Toasts;
+
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
@@ -100,7 +102,13 @@ public class QuoteEditor extends JDialog {
     JButton save = new JButton("Enregistrer");
     JButton toOrder = new JButton("Créer BC…");
     cancel.addActionListener(e -> dispose());
-    save.addActionListener(e -> { flushToBean(); ServiceFactory.quotes().save(bean); dispose(); });
+    save.addActionListener(e -> {
+      flushToBean();
+      ServiceFactory.quotes().save(bean);
+      Window anchor = getOwner() != null ? getOwner() : this;
+      Toasts.success(anchor, "Devis enregistré");
+      dispose();
+    });
     toOrder.addActionListener(e -> {
       flushToBean(); ServiceFactory.quotes().save(bean);
       var o = ServiceFactory.orders().createFromQuote(bean.getId());

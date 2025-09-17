@@ -1,5 +1,7 @@
 package com.materiel.suite.client.ui.shell;
 
+import com.materiel.suite.client.ui.common.Toasts;
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
@@ -12,24 +14,26 @@ public class SidebarButton extends JPanel {
   private static final Color PRESSED_COLOR = new Color(210, 230, 255);
   private static final Color ACTIVE_COLOR = new Color(212, 232, 255);
   private final JLabel icon = new JLabel();
+  private final Component spacer = Box.createHorizontalStrut(10);
   private final JLabel text = new JLabel();
   private final Runnable action;
+  private final String iconKey;
   private boolean hovered = false;
   private boolean pressed = false;
   private boolean active = false;
 
-  public SidebarButton(String iconText, String label, Runnable action) {
+  public SidebarButton(String iconKey, Icon iconSvg, String label, Runnable action) {
     super(new BorderLayout());
     this.action = action;
+    this.iconKey = iconKey;
     setOpaque(true);
     setBackground(BASE_COLOR);
     setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
     setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
-    icon.setText(iconText);
     icon.setHorizontalAlignment(SwingConstants.CENTER);
-    icon.setFont(icon.getFont().deriveFont(14f));
-    icon.setPreferredSize(new Dimension(24, 20));
+    icon.setPreferredSize(new Dimension(28, 24));
+    icon.setIcon(iconSvg);
 
     text.setText(label);
     text.setFont(text.getFont().deriveFont(Font.PLAIN, 12f));
@@ -38,7 +42,7 @@ public class SidebarButton extends JPanel {
     line.setOpaque(false);
     line.setLayout(new BoxLayout(line, BoxLayout.X_AXIS));
     line.add(icon);
-    line.add(Box.createHorizontalStrut(10));
+    line.add(spacer);
     line.add(text);
     line.add(Box.createHorizontalGlue());
     add(line, BorderLayout.CENTER);
@@ -66,13 +70,18 @@ public class SidebarButton extends JPanel {
 
       @Override
       public void mouseReleased(MouseEvent e) {
-        if (pressed && contains(e.getPoint())) {
-          if (action != null) {
-            action.run();
-          }
+        boolean inside = contains(e.getPoint());
+        if (inside && action != null) {
+          action.run();
         }
         pressed = false;
         refreshBackground();
+        if (inside) {
+          Window w = SwingUtilities.getWindowAncestor(SidebarButton.this);
+          Component anchor = w != null ? w : SidebarButton.this;
+          String key = iconKey != null && !iconKey.isBlank() ? iconKey : "info";
+          Toasts.show(anchor, "Ouverture : " + text.getText(), key);
+        }
       }
     };
     addMouseListener(ma);
@@ -85,6 +94,7 @@ public class SidebarButton extends JPanel {
 
   public void setExpanded(boolean expanded) {
     text.setVisible(expanded);
+    spacer.setVisible(expanded);
     revalidate();
     repaint();
   }

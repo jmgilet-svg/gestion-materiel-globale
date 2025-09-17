@@ -95,19 +95,19 @@ public class MainFrame extends JFrame {
 
   private JComponent buildSidebar() {
     CollapsibleSidebar side = new CollapsibleSidebar();
-    addSidebarItem(side, "planning", "🗓", "Planning");
-    addSidebarItem(side, "agenda", "📒", "Agenda");
-    addSidebarItem(side, "quotes", "🧾", "Devis");
-    addSidebarItem(side, "orders", "📦", "Commandes");
-    addSidebarItem(side, "delivery", "🚚", "Bons de livraison");
-    addSidebarItem(side, "invoices", "💶", "Factures");
-    addSidebarItem(side, "clients", "👥", "Clients");
-    addSidebarItem(side, "resources", "🏷️", "Ressources");
+    addSidebarItem(side, "planning", "calendar", "Planning");
+    addSidebarItem(side, "agenda", "calendar", "Agenda");
+    addSidebarItem(side, "quotes", "file", "Devis");
+    addSidebarItem(side, "orders", "pallet", "Commandes");
+    addSidebarItem(side, "delivery", "truck", "Bons de livraison");
+    addSidebarItem(side, "invoices", "invoice", "Factures");
+    addSidebarItem(side, "clients", "user", "Clients");
+    addSidebarItem(side, "resources", "wrench", "Ressources");
     return side;
   }
 
-  private void addSidebarItem(CollapsibleSidebar side, String card, String icon, String label) {
-    SidebarButton button = side.addItem(icon, label, () -> openCard(card));
+  private void addSidebarItem(CollapsibleSidebar side, String card, String iconKey, String label) {
+    SidebarButton button = side.addItemSvg(iconKey, label, () -> openCard(card));
     navButtons.put(card, button);
   }
 
