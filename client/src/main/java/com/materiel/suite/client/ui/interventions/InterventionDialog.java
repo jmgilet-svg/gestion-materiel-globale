@@ -23,10 +23,12 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -50,10 +52,12 @@ public class InterventionDialog extends JDialog {
   private final JTextField signatureByField = new JTextField(18);
   private final JSpinner signatureAtSpinner = new JSpinner(new SpinnerDateModel());
   private final JLabel signaturePreview = new JLabel();
-  private final ResourceMultiPicker resourcePicker = new ResourceMultiPicker();
-  private final ContactMultiPicker contactPicker = new ContactMultiPicker();
+  private final ResourcePickerPanel resourcePicker = new ResourcePickerPanel();
+  private final ContactPickerPanel contactPicker = new ContactPickerPanel();
   private final QuoteTableModel quoteModel = new QuoteTableModel();
   private final JTable quoteTable = new JTable(quoteModel);
+  private final JLabel totalHtLabel = new JLabel();
+  private final NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(Locale.FRANCE);
 
   private Intervention current;
   private boolean saved;
@@ -73,11 +77,12 @@ public class InterventionDialog extends JDialog {
 
   private void buildUI(){
     setLayout(new BorderLayout(8, 8));
-    add(buildHeader(), BorderLayout.NORTH);
-    add(buildCenter(), BorderLayout.CENTER);
+    add(buildTabs(), BorderLayout.CENTER);
     add(buildFooter(), BorderLayout.SOUTH);
     configureSpinners();
     configureQuoteTable();
+    quoteModel.addTableModelListener(e -> computeTotals());
+    totalHtLabel.setText("Total HT : " + currencyFormat.format(0d));
   }
 
   private void configureSpinners(){
@@ -121,26 +126,50 @@ public class InterventionDialog extends JDialog {
     return panel;
   }
 
-  private JComponent buildCenter(){
-    JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-    split.setResizeWeight(0.55);
+  private JComponent buildTabs(){
+    JTabbedPane tabs = new JTabbedPane();
+    tabs.addTab("Général", IconRegistry.small("info"), buildGeneralTab());
+    tabs.addTab("Intervention", IconRegistry.small("task"), buildInterventionTab());
+    tabs.addTab("Facturation", IconRegistry.small("invoice"), buildFacturationTab());
+    return tabs;
+  }
 
+  private JComponent buildGeneralTab(){
+    JPanel panel = new JPanel(new BorderLayout(8, 8));
+    panel.add(buildHeader(), BorderLayout.NORTH);
+    panel.add(panelWithLabel("Description", new JScrollPane(descriptionArea)), BorderLayout.CENTER);
+    return panel;
+  }
+
+  private JComponent buildInterventionTab(){
+    JPanel panel = new JPanel(new BorderLayout(8, 8));
     JTabbedPane leftTabs = new JTabbedPane();
     leftTabs.addTab("Ressources", IconRegistry.small("wrench"), resourcePicker);
     leftTabs.addTab("Contacts client", IconRegistry.small("user"), contactPicker);
 
-    JPanel right = new JPanel(new BorderLayout(8, 8));
-    JPanel notes = new JPanel(new GridLayout(4, 1, 6, 6));
-    notes.add(panelWithLabel("Description", new JScrollPane(descriptionArea)));
-    notes.add(panelWithLabel("Note interne", new JScrollPane(internalNoteArea)));
-    notes.add(panelWithLabel("Note de fin", new JScrollPane(closingNoteArea)));
-    notes.add(buildSignaturePanel());
-    right.add(notes, BorderLayout.NORTH);
-    right.add(panelWithLabel("Pré-devis", new JScrollPane(quoteTable)), BorderLayout.CENTER);
+    JPanel right = new JPanel(new GridLayout(3, 1, 6, 6));
+    right.add(panelWithLabel("Note interne", new JScrollPane(internalNoteArea)));
+    right.add(panelWithLabel("Note de fin", new JScrollPane(closingNoteArea)));
+    right.add(buildSignaturePanel());
 
-    split.setLeftComponent(leftTabs);
-    split.setRightComponent(right);
-    return split;
+    JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftTabs, right);
+    split.setResizeWeight(0.55);
+    panel.add(split, BorderLayout.CENTER);
+    return panel;
+  }
+
+  private JComponent buildFacturationTab(){
+    JPanel panel = new JPanel(new BorderLayout(8, 8));
+    JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+    JButton generate = new JButton("Générer depuis ressources", IconRegistry.small("file"));
+    generate.addActionListener(e -> generateQuoteDraft());
+    actions.add(generate);
+    actions.add(Box.createHorizontalStrut(12));
+    actions.add(totalHtLabel);
+
+    panel.add(actions, BorderLayout.NORTH);
+    panel.add(panelWithLabel("Pré-devis", new JScrollPane(quoteTable)), BorderLayout.CENTER);
+    return panel;
   }
 
   private JPanel panelWithLabel(String title, JComponent component){
@@ -189,13 +218,10 @@ public class InterventionDialog extends JDialog {
 
   private JComponent buildFooter(){
     JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-    JButton generate = new JButton("Générer depuis ressources", IconRegistry.small("file"));
     JButton save = new JButton("Enregistrer", IconRegistry.small("success"));
     JButton cancel = new JButton("Fermer");
-    generate.addActionListener(e -> generateQuoteDraft());
     save.addActionListener(e -> onSave());
     cancel.addActionListener(e -> dispose());
-    panel.add(generate);
     panel.add(save);
     panel.add(cancel);
     return panel;
@@ -287,6 +313,7 @@ public class InterventionDialog extends JDialog {
   private void generateQuoteDraft(){
     List<Resource> selected = resourcePicker.getSelectedResources();
     quoteModel.generateFromResources(selected);
+    computeTotals();
   }
 
   public void edit(Intervention intervention){
@@ -326,6 +353,7 @@ public class InterventionDialog extends JDialog {
     resourcePicker.setSelectedResources(current.getResources());
 
     quoteModel.setLines(current.getQuoteDraft());
+    computeTotals();
   }
 
   private void populateTypes(){
@@ -441,6 +469,11 @@ public class InterventionDialog extends JDialog {
     }
     List<Resource> resources = planningService.listResources();
     resourcePicker.setResources(resources);
+  }
+
+  private void computeTotals(){
+    double total = quoteModel.totalHT();
+    totalHtLabel.setText("Total HT : " + currencyFormat.format(total));
   }
 
   public Intervention collect(){
@@ -652,6 +685,16 @@ public class InterventionDialog extends JDialog {
         }
       }
       fireTableDataChanged();
+    }
+
+    public double totalHT(){
+      double sum = 0d;
+      for (DocumentLine line : rows){
+        if (line != null){
+          sum += line.lineHT();
+        }
+      }
+      return sum;
     }
   }
 }
