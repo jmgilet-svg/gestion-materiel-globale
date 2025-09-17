@@ -501,7 +501,11 @@ public class AgendaBoard extends JComponent {
     if (planning == null || it == null){
       return;
     }
-    InterventionDialog dialog = new InterventionDialog(SwingUtilities.getWindowAncestor(this), planning, ServiceFactory.clients(), null);
+    InterventionDialog dialog = new InterventionDialog(
+        SwingUtilities.getWindowAncestor(this),
+        planning,
+        ServiceFactory.clients(),
+        ServiceFactory.interventionTypes());
     dialog.edit(it);
     dialog.setVisible(true);
     if (dialog.isSaved()){

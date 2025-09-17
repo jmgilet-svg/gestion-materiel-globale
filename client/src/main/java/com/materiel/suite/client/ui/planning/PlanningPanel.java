@@ -240,7 +240,11 @@ public class PlanningPanel extends JPanel {
       JOptionPane.showMessageDialog(this, "Service planning indisponible", "Erreur", JOptionPane.ERROR_MESSAGE);
       return;
     }
-    InterventionDialog dialog = new InterventionDialog(SwingUtilities.getWindowAncestor(this), planning, ServiceFactory.clients(), null);
+    InterventionDialog dialog = new InterventionDialog(
+        SwingUtilities.getWindowAncestor(this),
+        planning,
+        ServiceFactory.clients(),
+        ServiceFactory.interventionTypes());
     dialog.edit(new Intervention());
     dialog.setVisible(true);
     if (dialog.isSaved()){
