@@ -13,6 +13,12 @@ public class Intervention {
   private LocalDateTime dateHeureDebut;
   private LocalDateTime dateHeureFin;
   private String color;
+  private String description;
+  private String internalNote;
+  private String closingNote;
+  private String signatureBy;
+  private LocalDateTime signatureAt;
+  private String signaturePngBase64;
 
   public UUID getId(){ return id; }
   public void setId(UUID id){ this.id=id; }
@@ -75,4 +81,16 @@ public class Intervention {
   public void setDateHeureFin(LocalDateTime v){ this.dateHeureFin=v; }
   public String getColor(){ return color; }
   public void setColor(String color){ this.color=color; }
+  public String getDescription(){ return description; }
+  public void setDescription(String description){ this.description=description; }
+  public String getInternalNote(){ return internalNote; }
+  public void setInternalNote(String internalNote){ this.internalNote=internalNote; }
+  public String getClosingNote(){ return closingNote; }
+  public void setClosingNote(String closingNote){ this.closingNote=closingNote; }
+  public String getSignatureBy(){ return signatureBy; }
+  public void setSignatureBy(String signatureBy){ this.signatureBy=signatureBy; }
+  public LocalDateTime getSignatureAt(){ return signatureAt; }
+  public void setSignatureAt(LocalDateTime signatureAt){ this.signatureAt=signatureAt; }
+  public String getSignaturePngBase64(){ return signaturePngBase64; }
+  public void setSignaturePngBase64(String signaturePngBase64){ this.signaturePngBase64=signaturePngBase64; }
 }

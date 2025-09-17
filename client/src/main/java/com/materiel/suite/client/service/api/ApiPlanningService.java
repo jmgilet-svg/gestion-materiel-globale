@@ -326,6 +326,12 @@ public class ApiPlanningService implements PlanningService {
     // === CRM-INJECT END ===
     m.put("label", it.getLabel());
     m.put("color", it.getColor());
+    m.put("description", it.getDescription());
+    m.put("internalNote", it.getInternalNote());
+    m.put("closingNote", it.getClosingNote());
+    m.put("signatureBy", it.getSignatureBy());
+    m.put("signatureAt", it.getSignatureAt()!=null? it.getSignatureAt().format(DTF) : null);
+    m.put("signaturePngBase64", it.getSignaturePngBase64());
     if (it.getDateDebut()!=null) m.put("dateDebut", it.getDateDebut().toString());
     if (it.getDateFin()!=null) m.put("dateFin", it.getDateFin().toString());
     if (it.getStartDateTime()!=null) m.put("startDateTime", it.getStartDateTime().format(DTF));
@@ -381,6 +387,17 @@ public class ApiPlanningService implements PlanningService {
     // === CRM-INJECT END ===
     it.setLabel(SimpleJson.str(m.get("label")));
     it.setColor(SimpleJson.str(m.get("color")));
+    it.setDescription(SimpleJson.str(m.get("description")));
+    it.setInternalNote(SimpleJson.str(m.get("internalNote")));
+    it.setClosingNote(SimpleJson.str(m.get("closingNote")));
+    it.setSignatureBy(SimpleJson.str(m.get("signatureBy")));
+    String sigAt = SimpleJson.str(m.get("signatureAt"));
+    if (sigAt!=null && !sigAt.isBlank()){
+      try { it.setSignatureAt(LocalDateTime.parse(sigAt)); } catch(Exception ignore){ it.setSignatureAt(null); }
+    } else {
+      it.setSignatureAt(null);
+    }
+    it.setSignaturePngBase64(SimpleJson.str(m.get("signaturePngBase64")));
     String d1 = SimpleJson.str(m.get("dateDebut"));
     String d2 = SimpleJson.str(m.get("dateFin"));
     if (d1!=null && !d1.isBlank()) it.setDateDebut(LocalDate.parse(d1));
