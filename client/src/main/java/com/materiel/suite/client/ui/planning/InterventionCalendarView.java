@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /** Regroupement par journée pour une lecture "agenda" rapide. */
@@ -26,12 +27,26 @@ public class InterventionCalendarView implements InterventionView {
   private final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
   private final DateTimeFormatter dayFormatter = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.FRENCH);
   private Consumer<Intervention> onOpen = it -> {};
+  private BiConsumer<Intervention, LocalDate> onMove = (it, day) -> {};
+  private Intervention dragging;
+  private JComponent dragSource;
+  private static final Color HEADER_BG = new Color(245, 245, 245);
+  private static final Color DROP_TARGET_BG = new Color(232, 245, 233);
 
   public InterventionCalendarView(){
     days.setLayout(new BoxLayout(days, BoxLayout.Y_AXIS));
     days.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
     scroller.setBorder(BorderFactory.createEmptyBorder());
     scroller.getVerticalScrollBar().setUnitIncrement(18);
+    days.addMouseListener(new MouseAdapter(){
+      @Override public void mouseReleased(MouseEvent e){
+        dragging = null;
+        if (dragSource != null){
+          dragSource.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+          dragSource = null;
+        }
+      }
+    });
   }
 
   @Override public JComponent getComponent(){
@@ -40,6 +55,8 @@ public class InterventionCalendarView implements InterventionView {
 
   @Override public void setData(List<Intervention> list){
     days.removeAll();
+    dragging = null;
+    dragSource = null;
     List<Intervention> data = new ArrayList<>();
     if (list != null){
       for (Intervention it : list){
@@ -72,6 +89,10 @@ public class InterventionCalendarView implements InterventionView {
     this.onOpen = onOpen != null ? onOpen : it -> {};
   }
 
+  @Override public void setOnMove(BiConsumer<Intervention, LocalDate> onMove){
+    this.onMove = onMove != null ? onMove : (it, day) -> {};
+  }
+
   private void refresh(){
     days.revalidate();
     days.repaint();
@@ -88,13 +109,37 @@ public class InterventionCalendarView implements InterventionView {
     String text = dayFormatter.format(day);
     JLabel label = new JLabel(capitalize(text), IconRegistry.small("calendar"), JLabel.LEFT);
     label.setOpaque(true);
-    label.setBackground(new Color(245, 245, 245));
+    label.setBackground(HEADER_BG);
     label.setBorder(BorderFactory.createCompoundBorder(
         BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(230, 230, 230)),
         BorderFactory.createEmptyBorder(6, 8, 4, 8)
     ));
     label.setAlignmentX(Component.LEFT_ALIGNMENT);
     label.setFont(label.getFont().deriveFont(Font.BOLD));
+    label.addMouseListener(new MouseAdapter(){
+      @Override public void mouseEntered(MouseEvent e){
+        if (dragging != null){
+          label.setBackground(DROP_TARGET_BG);
+        }
+      }
+      @Override public void mouseExited(MouseEvent e){
+        label.setBackground(HEADER_BG);
+      }
+      @Override public void mouseReleased(MouseEvent e){
+        if (dragging != null){
+          try {
+            onMove.accept(dragging, day);
+          } finally {
+            dragging = null;
+          }
+        }
+        if (dragSource != null){
+          dragSource.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+          dragSource = null;
+        }
+        label.setBackground(HEADER_BG);
+      }
+    });
     return label;
   }
 
@@ -139,6 +184,20 @@ public class InterventionCalendarView implements InterventionView {
       @Override public void mouseClicked(MouseEvent e){
         if (e.getClickCount() == 2){
           onOpen.accept(it);
+        }
+      }
+      @Override public void mousePressed(MouseEvent e){
+        dragging = it;
+        dragSource = panel;
+        panel.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+      }
+      @Override public void mouseReleased(MouseEvent e){
+        panel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        if (dragging == it){
+          dragging = null;
+        }
+        if (dragSource == panel){
+          dragSource = null;
         }
       }
     });
