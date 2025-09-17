@@ -10,6 +10,8 @@ import com.materiel.suite.client.ui.doc.DocumentTotalsPanel;
 import com.materiel.suite.client.ui.doc.ClientContactBinding;
 // === CRM-INJECT END ===
 
+import com.materiel.suite.client.ui.common.Toasts;
+
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
@@ -99,7 +101,13 @@ public class OrderEditor extends JDialog {
     JButton save = new JButton("Enregistrer");
     JButton toDN = new JButton("Générer BL…");
     cancel.addActionListener(e -> dispose());
-    save.addActionListener(e -> { flushToBean(); ServiceFactory.orders().save(bean); dispose(); });
+    save.addActionListener(e -> {
+      flushToBean();
+      ServiceFactory.orders().save(bean);
+      Window anchor = getOwner() != null ? getOwner() : this;
+      Toasts.success(anchor, "Commande enregistrée");
+      dispose();
+    });
     toDN.addActionListener(e -> {
       flushToBean(); ServiceFactory.orders().save(bean);
       var d = ServiceFactory.deliveryNotes().createFromOrder(bean.getId());

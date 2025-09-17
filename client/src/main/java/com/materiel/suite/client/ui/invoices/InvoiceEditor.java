@@ -10,6 +10,8 @@ import com.materiel.suite.client.ui.doc.DocumentTotalsPanel;
 import com.materiel.suite.client.ui.doc.ClientContactBinding;
 // === CRM-INJECT END ===
 
+import com.materiel.suite.client.ui.common.Toasts;
+
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
@@ -98,7 +100,13 @@ public class InvoiceEditor extends JDialog {
     JButton cancel = new JButton("Annuler");
     JButton save = new JButton("Enregistrer");
     cancel.addActionListener(e -> dispose());
-    save.addActionListener(e -> { flushToBean(); ServiceFactory.invoices().save(bean); dispose(); });
+    save.addActionListener(e -> {
+      flushToBean();
+      ServiceFactory.invoices().save(bean);
+      Window anchor = getOwner() != null ? getOwner() : this;
+      Toasts.success(anchor, "Facture enregistrée");
+      dispose();
+    });
     buttons.add(cancel); buttons.add(save);
     south.add(buttons, BorderLayout.SOUTH);
     return south;

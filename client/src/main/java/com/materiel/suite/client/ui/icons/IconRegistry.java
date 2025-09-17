@@ -13,7 +13,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class IconRegistry {
   private static final List<String> ICON_KEYS = List.of(
       "crane", "truck", "forklift", "excavator", "generator", "container",
-      "hook", "helmet", "wrench", "pallet", "calendar", "user"
+      "hook", "helmet", "wrench", "pallet", "calendar", "user",
+      "file", "invoice", "search", "success", "error", "info"
   );
   private static final Set<String> ICON_SET = Set.copyOf(ICON_KEYS);
   private static final Map<Integer, Icon> PLACEHOLDER_CACHE = new ConcurrentHashMap<>();

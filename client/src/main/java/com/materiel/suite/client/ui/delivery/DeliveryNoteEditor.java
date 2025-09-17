@@ -10,6 +10,8 @@ import com.materiel.suite.client.ui.doc.DocumentTotalsPanel;
 import com.materiel.suite.client.ui.doc.ClientContactBinding;
 // === CRM-INJECT END ===
 
+import com.materiel.suite.client.ui.common.Toasts;
+
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
@@ -99,7 +101,13 @@ public class DeliveryNoteEditor extends JDialog {
     JButton save = new JButton("Enregistrer");
     JButton toInv = new JButton("Créer facture…");
     cancel.addActionListener(e -> dispose());
-    save.addActionListener(e -> { flushToBean(); ServiceFactory.deliveryNotes().save(bean); dispose(); });
+    save.addActionListener(e -> {
+      flushToBean();
+      ServiceFactory.deliveryNotes().save(bean);
+      Window anchor = getOwner() != null ? getOwner() : this;
+      Toasts.success(anchor, "Bon de livraison enregistré");
+      dispose();
+    });
     toInv.addActionListener(e -> {
       flushToBean(); ServiceFactory.deliveryNotes().save(bean);
       var inv = ServiceFactory.invoices().createFromDeliveryNotes(java.util.List.of(bean.getId()));

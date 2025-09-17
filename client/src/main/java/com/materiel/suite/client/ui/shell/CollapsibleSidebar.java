@@ -1,7 +1,12 @@
 package com.materiel.suite.client.ui.shell;
 
+import com.materiel.suite.client.ui.common.Toasts;
+import com.materiel.suite.client.ui.icons.IconRegistry;
+import com.materiel.suite.client.ui.search.GlobalSearchDialog;
+
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
@@ -75,6 +80,22 @@ public class CollapsibleSidebar extends JPanel {
     });
     collapseTimer.setRepeats(false);
     setPinMode(PinMode.AUTO);
+
+    InputMap im = getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+    ActionMap am = getActionMap();
+    im.put(KeyStroke.getKeyStroke("control K"), "open-global-search");
+    am.put("open-global-search", new AbstractAction() {
+      @Override
+      public void actionPerformed(ActionEvent e) {
+        Window owner = SwingUtilities.getWindowAncestor(CollapsibleSidebar.this);
+        try {
+          GlobalSearchDialog dialog = new GlobalSearchDialog(owner);
+          dialog.setVisible(true);
+        } catch (Exception ex) {
+          Toasts.info(CollapsibleSidebar.this, "Recherche globale indisponible");
+        }
+      }
+    });
   }
 
   private void buildHeader() {
@@ -126,9 +147,13 @@ public class CollapsibleSidebar extends JPanel {
     repaint();
   }
 
-  /** Ajoute un bouton avec une icône (emoji/char) et un libellé. */
-  public SidebarButton addItem(String iconText, String label, Runnable action) {
-    SidebarButton button = new SidebarButton(iconText, label, action);
+  /** Ajoute un bouton avec une icône et un libellé. */
+  public SidebarButton addItem(String iconKey, Icon icon, String label, Runnable action) {
+    Icon resolved = icon;
+    if (resolved == null) {
+      resolved = iconKey != null ? IconRegistry.loadOrPlaceholder(iconKey, 20) : null;
+    }
+    SidebarButton button = new SidebarButton(iconKey, resolved, label, action);
     buttons.add(button);
     itemsPanel.add(button);
     itemsPanel.add(Box.createVerticalStrut(2));
@@ -150,6 +175,11 @@ public class CollapsibleSidebar extends JPanel {
     button.addMouseListener(hover);
     button.addMouseMotionListener(hover);
     return button;
+  }
+
+  /** Ajoute un bouton en utilisant une icône du registre SVG. */
+  public SidebarButton addItemSvg(String iconKey, String label, Runnable action) {
+    return addItem(iconKey, IconRegistry.medium(iconKey), label, action);
   }
 
   private void onExpandPinToggled(){
