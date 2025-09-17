@@ -5,11 +5,13 @@ import com.materiel.suite.client.model.ResourceType;
 import com.materiel.suite.client.model.Unavailability;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.PlanningService;
+import com.materiel.suite.client.ui.icons.IconRegistry;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.util.ArrayList;
@@ -37,6 +39,13 @@ public class ResourcesPanel extends JPanel {
     table.setFillsViewportHeight(true);
     table.setRowSorter(sorter);
     configureSorters();
+    table.setRowHeight(32);
+    if (table.getColumnModel().getColumnCount() > 0){
+      table.getColumnModel().getColumn(0).setMinWidth(42);
+      table.getColumnModel().getColumn(0).setMaxWidth(48);
+      table.getColumnModel().getColumn(0).setPreferredWidth(44);
+      table.getColumnModel().getColumn(0).setCellRenderer(new TypeIconRenderer());
+    }
 
     JScrollPane tableScroll = new JScrollPane(table);
     JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tableScroll, editor);
@@ -74,7 +83,7 @@ public class ResourcesPanel extends JPanel {
 
   private void configureSorters(){
     Comparator<String> stringComparator = Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER);
-    sorter.setComparator(0, stringComparator);
+    sorter.setComparator(1, stringComparator);
     sorter.setComparator(2, stringComparator);
   }
 
@@ -266,9 +275,27 @@ public class ResourcesPanel extends JPanel {
     return icon!=null? icon : "";
   }
 
+  private static class TypeIconRenderer extends DefaultTableCellRenderer {
+    @Override
+    public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column){
+      JLabel label = (JLabel) super.getTableCellRendererComponent(table, "", isSelected, hasFocus, row, column);
+      label.setHorizontalAlignment(SwingConstants.CENTER);
+      label.setIcon(null);
+      label.setText("");
+      String iconKey = value != null ? value.toString() : null;
+      Icon icon = IconRegistry.medium(iconKey);
+      if (icon != null){
+        label.setIcon(icon);
+      } else if (iconKey != null && !iconKey.isBlank()){
+        label.setText(iconKey);
+      }
+      return label;
+    }
+  }
+
   private static class ResourceModel extends AbstractTableModel {
     private final List<Resource> items = new ArrayList<>();
-    private final String[] cols = {"Nom", "Icône (type)", "Type", "Couleur", "Notes"
+    private final String[] cols = {"Icône", "Nom", "Type", "Couleur", "Notes"
         // === CRM-INJECT BEGIN: resource-table-advanced-cols ===
         , "Capacité", "Tags", "Indispos hebdo"
         // === CRM-INJECT END ===
@@ -279,8 +306,8 @@ public class ResourcesPanel extends JPanel {
     @Override public Object getValueAt(int r, int c){
       Resource x = items.get(r);
       return switch(c){
-        case 0 -> x.getName();
-        case 1 -> typeIcon(x);
+        case 0 -> typeIcon(x);
+        case 1 -> x.getName();
         case 2 -> typeLabel(x);
         case 3 -> x.getColor();
         case 4 -> x.getNotes();
