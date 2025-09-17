@@ -6,6 +6,7 @@ import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.model.ResourceRef;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.PlanningValidation;
+import com.materiel.suite.client.ui.interventions.InterventionDialog;
 
 import javax.swing.*;
 import java.awt.*;
@@ -132,6 +133,13 @@ public class PlanningBoard extends JComponent {
     copy.setResourceId(selected.getResourceId());
     copy.setLabel(selected.getLabel() + " (copie)");
     copy.setColor(selected.getColor());
+    copy.setType(selected.getType());
+    copy.setAddress(selected.getAddress());
+    copy.setDescription(selected.getDescription());
+    copy.setInternalNote(selected.getInternalNote());
+    copy.setClosingNote(selected.getClosingNote());
+    copy.setContacts(selected.getContacts());
+    copy.setQuoteDraft(selected.getQuoteDraft());
     if (selected.getDateHeureDebut()!=null) copy.setDateHeureDebut(selected.getDateHeureDebut().plusDays(days));
     if (selected.getDateHeureFin()!=null) copy.setDateHeureFin(selected.getDateHeureFin().plusDays(days));
     if (selected.getDateDebut()!=null) copy.setDateDebut(selected.getDateDebut().plusDays(days));
@@ -149,43 +157,18 @@ public class PlanningBoard extends JComponent {
 
   // === CRM-INJECT BEGIN: planning-board-edit-dialog ===
   private void openInterventionEditDialog(Intervention it){
-    JTextField tfLabel = new JTextField(it.getLabel()==null? "" : it.getLabel(), 24);
-    java.util.List<Client> clients = new java.util.ArrayList<>();
-    var clientService = ServiceFactory.clients();
-    if (clientService!=null){
-      try { clients.addAll(clientService.list()); } catch(Exception ignore){}
+    var planning = ServiceFactory.planning();
+    if (planning == null || it == null){
+      return;
     }
-    String[] names = new String[clients.size()+1];
-    names[0] = "(Aucun)";
-    int selectedIdx = 0;
-    java.util.UUID existingId = it.getClientId();
-    String existingName = it.getClientName();
-    for (int i=0;i<clients.size();i++){
-      Client c = clients.get(i);
-      names[i+1] = c.getName();
-      if (existingId!=null && existingId.equals(c.getId())) selectedIdx = i+1;
-      else if (selectedIdx==0 && existingId==null && existingName!=null
-          && existingName.equalsIgnoreCase(c.getName())) selectedIdx = i+1;
-    }
-    JComboBox<String> cbClient = new JComboBox<>(names);
-    cbClient.setSelectedIndex(selectedIdx);
-    Object[] msg = {"Libellé :", tfLabel, "Client :", cbClient};
-    int ok = JOptionPane.showConfirmDialog(this, msg, "Modifier l'intervention", JOptionPane.OK_CANCEL_OPTION);
-    if (ok==JOptionPane.OK_OPTION){
-      String label = tfLabel.getText()==null? "" : tfLabel.getText().trim();
-      if (!label.isEmpty()) it.setLabel(label);
-      if (it.getId()!=null) labelCache.put(it.getId(), it.getLabel());
-      int idx = cbClient.getSelectedIndex();
-      if (idx>0 && idx-1 < clients.size()){
-        Client c = clients.get(idx-1);
-        it.setClientId(c.getId());
-        it.setClientName(c.getName());
-      } else {
-        it.setClientId(null);
-        it.setClientName(null);
-      }
-      ServiceFactory.planning().saveIntervention(it);
-      repaint();
+    InterventionDialog dialog = new InterventionDialog(SwingUtilities.getWindowAncestor(this), planning, ServiceFactory.clients(), null);
+    dialog.edit(it);
+    dialog.setVisible(true);
+    if (dialog.isSaved()){
+      Intervention updated = dialog.getIntervention();
+      planning.saveIntervention(updated);
+      selected = updated;
+      reload();
     }
   }
   // === CRM-INJECT END ===

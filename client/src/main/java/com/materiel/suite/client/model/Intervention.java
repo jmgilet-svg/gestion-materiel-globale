@@ -17,6 +17,15 @@ public class Intervention {
   private LocalDateTime dateHeureDebut;
   private LocalDateTime dateHeureFin;
   private String color; // hex
+  private InterventionType type;
+  private String address;
+  private String description;
+  private String internalNote;
+  private String closingNote;
+  private LocalDateTime actualStart;
+  private LocalDateTime actualEnd;
+  private final List<Contact> contacts = new ArrayList<>();
+  private final List<DocumentLine> quoteDraft = new ArrayList<>();
 
   // Champs enrichis pour rendu "carte"
   private String clientName;
@@ -97,6 +106,100 @@ public class Intervention {
   public String getLabel(){ return label; }
   public void setLabel(String label){ this.label = label; }
 
+  public InterventionType getType(){
+    return type == null ? null : copy(type);
+  }
+
+  public void setType(InterventionType type){
+    this.type = type == null ? null : copy(type);
+  }
+
+  public String getAddress(){ return address; }
+  public void setAddress(String address){ this.address = address; }
+
+  public String getDescription(){ return description; }
+  public void setDescription(String description){ this.description = description; }
+
+  public String getInternalNote(){ return internalNote; }
+  public void setInternalNote(String internalNote){ this.internalNote = internalNote; }
+
+  public String getClosingNote(){ return closingNote; }
+  public void setClosingNote(String closingNote){ this.closingNote = closingNote; }
+
+  public LocalDateTime getActualStart(){ return actualStart; }
+  public void setActualStart(LocalDateTime actualStart){ this.actualStart = actualStart; }
+
+  public LocalDateTime getActualEnd(){ return actualEnd; }
+  public void setActualEnd(LocalDateTime actualEnd){ this.actualEnd = actualEnd; }
+
+  public List<Contact> getContacts(){
+    List<Contact> list = new ArrayList<>();
+    for (Contact c : contacts){
+      Contact copy = copy(c);
+      if (copy != null){
+        list.add(copy);
+      }
+    }
+    return list;
+  }
+
+  public void setContacts(List<Contact> list){
+    contacts.clear();
+    if (list == null){
+      return;
+    }
+    for (Contact c : list){
+      Contact copy = copy(c);
+      if (copy != null){
+        contacts.add(copy);
+      }
+    }
+  }
+
+  public Intervention addContact(Contact contact){
+    if (contact != null){
+      Contact copy = copy(contact);
+      if (copy != null){
+        contacts.add(copy);
+      }
+    }
+    return this;
+  }
+
+  public List<DocumentLine> getQuoteDraft(){
+    List<DocumentLine> list = new ArrayList<>();
+    for (DocumentLine line : quoteDraft){
+      DocumentLine copy = copy(line);
+      if (copy != null){
+        list.add(copy);
+      }
+    }
+    return list;
+  }
+
+  public void setQuoteDraft(List<DocumentLine> lines){
+    quoteDraft.clear();
+    if (lines == null){
+      return;
+    }
+    for (DocumentLine line : lines){
+      DocumentLine copy = copy(line);
+      if (copy != null){
+        quoteDraft.add(copy);
+      }
+    }
+  }
+
+  public Intervention addQuoteLine(DocumentLine line){
+    if (line != null){
+      DocumentLine copy = copy(line);
+      if (copy != null){
+        quoteDraft.add(copy);
+      }
+    }
+    return this;
+  }
+
   // API horaire
   public LocalDateTime getDateHeureDebut(){ return dateHeureDebut; }
   public void setDateHeureDebut(LocalDateTime v){ this.dateHeureDebut = v; }
@@ -158,6 +261,47 @@ public class Intervention {
   public void setDeliveryNumber(String deliveryNumber){ this.deliveryNumber = deliveryNumber; }
   public String getInvoiceNumber(){ return invoiceNumber; }
   public void setInvoiceNumber(String invoiceNumber){ this.invoiceNumber = invoiceNumber; }
+
+  private InterventionType copy(InterventionType src){
+    if (src == null){
+      return null;
+    }
+    InterventionType copy = new InterventionType();
+    copy.setCode(src.getCode());
+    copy.setLabel(src.getLabel());
+    copy.setIconKey(src.getIconKey());
+    return copy;
+  }
+
+  private Contact copy(Contact src){
+    if (src == null){
+      return null;
+    }
+    Contact copy = new Contact();
+    copy.setId(src.getId());
+    copy.setClientId(src.getClientId());
+    copy.setFirstName(src.getFirstName());
+    copy.setLastName(src.getLastName());
+    copy.setEmail(src.getEmail());
+    copy.setPhone(src.getPhone());
+    copy.setRole(src.getRole());
+    copy.setArchived(src.isArchived());
+    return copy;
+  }
+
+  private DocumentLine copy(DocumentLine src){
+    if (src == null){
+      return null;
+    }
+    DocumentLine copy = new DocumentLine();
+    copy.setDesignation(src.getDesignation());
+    copy.setQuantite(src.getQuantite());
+    copy.setUnite(src.getUnite());
+    copy.setPrixUnitaireHT(src.getPrixUnitaireHT());
+    copy.setRemisePct(src.getRemisePct());
+    copy.setTvaPct(src.getTvaPct());
+    return copy;
+  }
 
   /** Libellé heure pour rendu. */
   public String prettyTimeRange(){
