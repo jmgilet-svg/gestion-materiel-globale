@@ -239,6 +239,83 @@ paths:
       responses:
         '204':
           description: Deleted
+  /api/v2/intervention-types:
+    get:
+      summary: List intervention types (v2)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InterventionTypeV2'
+    post:
+      summary: Create intervention type (v2)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InterventionTypeV2'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InterventionTypeV2'
+  /api/v2/intervention-types/{id}:
+    get:
+      summary: Get intervention type (v2)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InterventionTypeV2'
+        '404':
+          description: Not found
+    put:
+      summary: Update intervention type (v2)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InterventionTypeV2'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InterventionTypeV2'
+    delete:
+      summary: Delete intervention type (v2)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
 components:
   schemas:
     DocumentLine:
@@ -319,6 +396,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Unavailability'
+    InterventionTypeV2:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        iconKey:
+          type: string
     Intervention:
       type: object
       properties:

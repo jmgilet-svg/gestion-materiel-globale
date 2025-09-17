@@ -8,6 +8,7 @@ import com.materiel.suite.client.model.InterventionType;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.model.ResourceRef;
 import com.materiel.suite.client.service.ClientService;
+import com.materiel.suite.client.service.InterventionTypeService;
 import com.materiel.suite.client.service.PlanningService;
 import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.icons.IconRegistry;
@@ -33,6 +34,7 @@ import java.util.UUID;
 public class InterventionDialog extends JDialog {
   private final PlanningService planningService;
   private final ClientService clientService;
+  private final InterventionTypeService typeService;
   private final List<InterventionType> availableTypes = new ArrayList<>();
 
   private final JTextField titleField = new JTextField();
@@ -56,15 +58,12 @@ public class InterventionDialog extends JDialog {
   private boolean saved;
   private String signatureBase64;
 
-  public InterventionDialog(Window owner, PlanningService planningService, ClientService clientService, List<InterventionType> types){
+  public InterventionDialog(Window owner, PlanningService planningService, ClientService clientService, InterventionTypeService typeService){
     super(owner, "Intervention", ModalityType.APPLICATION_MODAL);
     this.planningService = planningService;
     this.clientService = clientService;
-    if (types != null){
-      availableTypes.addAll(types);
-    } else {
-      availableTypes.addAll(defaultTypes());
-    }
+    this.typeService = typeService;
+    reloadAvailableTypes();
     buildUI();
     setMinimumSize(new Dimension(980, 680));
     setLocationRelativeTo(owner);
@@ -283,6 +282,7 @@ public class InterventionDialog extends JDialog {
     this.current = intervention == null ? new Intervention() : intervention;
     this.saved = false;
 
+    reloadAvailableTypes();
     populateTypes();
     populateClients();
     loadResources();
@@ -522,6 +522,21 @@ public class InterventionDialog extends JDialog {
     types.add(new InterventionType("TRANSPORT", "Transport", "truck"));
     types.add(new InterventionType("MANUT", "Manutention", "forklift"));
     return types;
+  }
+
+  private void reloadAvailableTypes(){
+    availableTypes.clear();
+    List<InterventionType> types = null;
+    if (typeService != null){
+      try {
+        types = typeService.list();
+      } catch (Exception ignore){}
+    }
+    if (types == null || types.isEmpty()){
+      availableTypes.addAll(defaultTypes());
+    } else {
+      availableTypes.addAll(types);
+    }
   }
 
   private static class QuoteTableModel extends AbstractTableModel {
