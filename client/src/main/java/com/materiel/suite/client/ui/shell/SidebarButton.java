@@ -8,7 +8,7 @@ import java.awt.event.MouseEvent;
 /** Élément cliquable de la barre latérale, rend icône + texte quand expanded=true. */
 public class SidebarButton extends JPanel {
   private static final Color BASE_COLOR = new Color(245, 245, 245);
-  private static final Color HOVER_COLOR = new Color(230, 240, 255);
+  private static final Color HOVER_COLOR = new Color(234, 242, 255);
   private static final Color PRESSED_COLOR = new Color(210, 230, 255);
   private static final Color ACTIVE_COLOR = new Color(212, 232, 255);
   private final JLabel icon = new JLabel();
@@ -23,16 +23,16 @@ public class SidebarButton extends JPanel {
     this.action = action;
     setOpaque(true);
     setBackground(BASE_COLOR);
-    setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
+    setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
     setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
     icon.setText(iconText);
     icon.setHorizontalAlignment(SwingConstants.CENTER);
-    icon.setFont(icon.getFont().deriveFont(16f));
-    icon.setPreferredSize(new Dimension(28, 24));
+    icon.setFont(icon.getFont().deriveFont(14f));
+    icon.setPreferredSize(new Dimension(24, 20));
 
     text.setText(label);
-    text.setFont(text.getFont().deriveFont(Font.PLAIN, 13f));
+    text.setFont(text.getFont().deriveFont(Font.PLAIN, 12f));
 
     JPanel line = new JPanel();
     line.setOpaque(false);
