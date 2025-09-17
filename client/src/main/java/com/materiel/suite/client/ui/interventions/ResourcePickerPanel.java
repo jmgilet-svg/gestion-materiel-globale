@@ -5,6 +5,7 @@ import com.materiel.suite.client.model.ResourceRef;
 import com.materiel.suite.client.model.ResourceType;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.PlanningService;
+import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.ui.icons.IconRegistry;
 import com.materiel.suite.client.ui.resources.ResourcePriceEditorDialog;
 
@@ -324,11 +325,11 @@ public class ResourcePickerPanel extends JPanel {
 
   private void openPriceDialog(){
     Resource resource = selectedResource();
-    if (resource == null || planningService == null){
+    if (resource == null){
       return;
     }
     Window owner = SwingUtilities.getWindowAncestor(this);
-    ResourcePriceEditorDialog dialog = new ResourcePriceEditorDialog(owner, planningService, resource);
+    ResourcePriceEditorDialog dialog = new ResourcePriceEditorDialog(owner, resource);
     dialog.setVisible(true);
     if (resource.getId() != null){
       resourceIndex.put(resource.getId(), resource);
@@ -339,7 +340,7 @@ public class ResourcePickerPanel extends JPanel {
 
   private void updateEditPriceButtonState(){
     boolean hasSelection = table.getSelectedRow() >= 0;
-    editPriceButton.setEnabled(planningService != null && hasSelection);
+    editPriceButton.setEnabled(hasSelection && ServiceLocator.resources().isAvailable());
   }
 
   private static String typeLabel(Resource resource){

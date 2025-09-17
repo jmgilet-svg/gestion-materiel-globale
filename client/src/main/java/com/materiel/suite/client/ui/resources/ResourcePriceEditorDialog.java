@@ -1,7 +1,7 @@
 package com.materiel.suite.client.ui.resources;
 
 import com.materiel.suite.client.model.Resource;
-import com.materiel.suite.client.service.PlanningService;
+import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.icons.IconRegistry;
 
@@ -15,16 +15,14 @@ import java.util.Locale;
  * Boîte de dialogue légère pour modifier le prix unitaire HT d'une ressource.
  */
 public class ResourcePriceEditorDialog extends JDialog {
-  private final PlanningService planningService;
   private final Resource resource;
   private final JFormattedTextField priceField;
 
-  public ResourcePriceEditorDialog(Window owner, PlanningService planningService, Resource resource){
+  public ResourcePriceEditorDialog(Window owner, Resource resource){
     super(owner, "Tarif ressource", ModalityType.APPLICATION_MODAL);
     if (resource == null){
       throw new IllegalArgumentException("resource is required");
     }
-    this.planningService = planningService;
     this.resource = resource;
 
     setLayout(new BorderLayout(8, 8));
@@ -98,7 +96,7 @@ public class ResourcePriceEditorDialog extends JDialog {
     BigDecimal previous = resource.getUnitPriceHt();
     resource.setUnitPriceHt(value);
     try {
-      Resource saved = planningService != null ? planningService.saveResource(resource) : resource;
+      Resource saved = ServiceLocator.resources().save(resource);
       if (saved != null){
         applyFrom(saved);
       }
@@ -143,6 +141,7 @@ public class ResourcePriceEditorDialog extends JDialog {
     resource.setUnitPriceHt(source.getUnitPriceHt());
     resource.setColor(source.getColor());
     resource.setNotes(source.getNotes());
+    resource.setState(source.getState());
     resource.setCapacity(source.getCapacity());
     resource.setTags(source.getTags());
     resource.setWeeklyUnavailability(source.getWeeklyUnavailability());

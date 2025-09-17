@@ -12,6 +12,7 @@ public class Resource {
   private BigDecimal unitPriceHt;
   private String color;
   private String notes;
+  private String state;
   private final List<Unavailability> unavailabilities = new ArrayList<>();
   // === CRM-INJECT BEGIN: resource-advanced-fields ===
   private Integer capacity = 1;
@@ -33,6 +34,8 @@ public class Resource {
   public void setColor(String color){ this.color=color; }
   public String getNotes(){ return notes; }
   public void setNotes(String notes){ this.notes=notes; }
+  public String getState(){ return state; }
+  public void setState(String state){ this.state=state; }
   public List<Unavailability> getUnavailabilities(){ return unavailabilities; }
   public void setUnavailabilities(List<Unavailability> list){
     unavailabilities.clear();
