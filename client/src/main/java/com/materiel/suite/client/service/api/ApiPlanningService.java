@@ -47,6 +47,7 @@ public class ApiPlanningService implements PlanningService {
         r.setUnitPriceHt(parseBigDecimal(m.get("unitPriceHt")));
         r.setColor(SimpleJson.str(m.get("color")));
         r.setNotes(SimpleJson.str(m.get("notes")));
+        r.setState(SimpleJson.str(m.get("state")));
         // === CRM-INJECT BEGIN: resource-api-read ===
         Object cap = m.get("capacity");
         if (cap instanceof Number n) r.setCapacity((int) Math.max(1, n.intValue()));
@@ -108,6 +109,7 @@ public class ApiPlanningService implements PlanningService {
       r.setUnitPriceHt(parseBigDecimal(map.get("unitPriceHt")));
       r.setColor(SimpleJson.str(map.get("color")));
       r.setNotes(SimpleJson.str(map.get("notes")));
+      r.setState(SimpleJson.str(map.get("state")));
       mergeType(r, fetchResourceTypeCatalog());
       // === CRM-INJECT BEGIN: resource-api-after-save ===
       Object cap = map.get("capacity");

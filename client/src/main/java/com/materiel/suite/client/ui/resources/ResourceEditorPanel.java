@@ -423,6 +423,7 @@ public class ResourceEditorPanel extends JPanel {
     copy.setUnitPriceHt(source.getUnitPriceHt());
     copy.setColor(source.getColor());
     copy.setNotes(source.getNotes());
+    copy.setState(source.getState());
     copy.setCapacity(source.getCapacity());
     copy.setTags(source.getTags());
     copy.setWeeklyUnavailability(source.getWeeklyUnavailability());
