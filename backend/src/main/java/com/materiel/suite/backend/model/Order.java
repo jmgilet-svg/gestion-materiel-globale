@@ -1,5 +1,7 @@
 package com.materiel.suite.backend.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -39,7 +41,9 @@ public class Order {
     public void setTotalHT(BigDecimal totalHT) { this.totalHT = totalHT; }
     public BigDecimal getTotalTVA() { return totalTVA; }
     public void setTotalTVA(BigDecimal totalTVA) { this.totalTVA = totalTVA; }
+    @JsonProperty("totalTTC")
     public BigDecimal getTotalTtc() { return totalTtc; }
+    @JsonProperty("totalTTC")
     public void setTotalTtc(BigDecimal totalTtc) { this.totalTtc = totalTtc; }
 }
 
