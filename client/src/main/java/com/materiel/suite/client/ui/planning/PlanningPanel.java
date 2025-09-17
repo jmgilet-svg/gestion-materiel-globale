@@ -9,11 +9,17 @@ import java.awt.FlowLayout;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.FontMetrics;
+import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAdjusters;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
-import java.util.UUID;
 
 import javax.swing.AbstractAction;
 import javax.swing.Box;
@@ -28,8 +34,10 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSlider;
+import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JToggleButton;
+import javax.swing.SpinnerDateModel;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
@@ -46,6 +54,7 @@ import com.materiel.suite.client.ui.commands.CommandBus;
 import com.materiel.suite.client.ui.MainFrame;
 
 public class PlanningPanel extends JPanel {
+  private static final DateTimeFormatter SIMPLE_DAY_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
   private final PlanningBoard board = new PlanningBoard();
   private final AgendaBoard agenda = new AgendaBoard();
   private JButton conflictsBtn;
@@ -56,6 +65,9 @@ public class PlanningPanel extends JPanel {
   private JToggleButton modeToggle;
   private boolean agendaMode;
   private boolean updatingModeToggle;
+  private JComboBox<String> simplePeriod;
+  private JSpinner simpleRefDate;
+  private boolean updatingSimpleRange;
 
   public PlanningPanel(){
     super(new BorderLayout());
@@ -107,6 +119,7 @@ public class PlanningPanel extends JPanel {
     });
 
     calendarView.setOnOpen(this::openInterventionEditor);
+    calendarView.setOnMove(this::moveIntervention);
     tableView.setOnOpen(this::openInterventionEditor);
 
     ganttContainer = center;
@@ -140,6 +153,16 @@ public class PlanningPanel extends JPanel {
     conflictsBtn = new JButton("Conflits (0)");
     JButton toAgenda = new JButton("↔ Agenda");
     JButton addI = new JButton("+ Intervention", IconRegistry.small("task"));
+    simplePeriod = new JComboBox<>(new String[]{"Semaine","Mois"});
+    LocalDate initialRef = board.getStartDate();
+    if (initialRef == null){
+      initialRef = LocalDate.now().with(DayOfWeek.MONDAY);
+    }
+    simpleRefDate = new JSpinner(new SpinnerDateModel(toDate(initialRef), null, null, Calendar.DAY_OF_MONTH));
+    simpleRefDate.setEditor(new JSpinner.DateEditor(simpleRefDate, "dd/MM/yyyy"));
+    JButton simplePrev = new JButton("◀");
+    JButton simpleToday = new JButton("Aujourd'hui");
+    JButton simpleNext = new JButton("▶");
 
     modeToggle.addActionListener(e -> {
       if (updatingModeToggle) return;
@@ -152,9 +175,32 @@ public class PlanningPanel extends JPanel {
       revalidate(); repaint();
     });
 
-    prev.addActionListener(e -> { board.setStartDate(board.getStartDate().minusDays(7)); agenda.setStartDate(board.getStartDate()); });
-    next.addActionListener(e -> { board.setStartDate(board.getStartDate().plusDays(7)); agenda.setStartDate(board.getStartDate()); });
-    today.addActionListener(e -> { board.setStartDate(LocalDate.now().with(java.time.DayOfWeek.MONDAY)); agenda.setStartDate(board.getStartDate()); });
+    prev.addActionListener(e -> {
+      LocalDate start = board.getStartDate();
+      if (start == null){
+        start = LocalDate.now().with(DayOfWeek.MONDAY);
+      }
+      LocalDate newStart = start.minusDays(7);
+      board.setStartDate(newStart);
+      agenda.setStartDate(board.getStartDate());
+      updateSimpleReference(board.getStartDate());
+    });
+    next.addActionListener(e -> {
+      LocalDate start = board.getStartDate();
+      if (start == null){
+        start = LocalDate.now().with(DayOfWeek.MONDAY);
+      }
+      LocalDate newStart = start.plusDays(7);
+      board.setStartDate(newStart);
+      agenda.setStartDate(board.getStartDate());
+      updateSimpleReference(board.getStartDate());
+    });
+    today.addActionListener(e -> {
+      LocalDate monday = LocalDate.now().with(DayOfWeek.MONDAY);
+      board.setStartDate(monday);
+      agenda.setStartDate(board.getStartDate());
+      updateSimpleReference(monday);
+    });
     zoom.addChangeListener(e -> {
       int w = zoom.getValue();
       board.setZoom(w);
@@ -170,6 +216,11 @@ public class PlanningPanel extends JPanel {
     });
     addI.addActionListener(e -> addInterventionDialog());
     toAgenda.addActionListener(e -> navigate("agenda"));
+    simplePeriod.addActionListener(e -> onSimpleRangeChanged());
+    simpleRefDate.addChangeListener(e -> onSimpleRangeChanged());
+    simplePrev.addActionListener(e -> shiftSimpleRange(-1));
+    simpleNext.addActionListener(e -> shiftSimpleRange(1));
+    simpleToday.addActionListener(e -> updateSimpleReference(LocalDate.now()));
 
     bar.add(prev); bar.add(next); bar.add(today); bar.add(modeToggle);
     bar.add(Box.createHorizontalStrut(16)); bar.add(zoomL); bar.add(zoom);
@@ -177,6 +228,9 @@ public class PlanningPanel extends JPanel {
     bar.add(Box.createHorizontalStrut(12)); bar.add(densL); bar.add(density);
     bar.add(Box.createHorizontalStrut(8)); bar.add(conflictsBtn);
     bar.add(Box.createHorizontalStrut(12)); bar.add(toAgenda);
+    JLabel simpleLabel = new JLabel("Période calendrier:");
+    bar.add(Box.createHorizontalStrut(16)); bar.add(simpleLabel); bar.add(simplePeriod); bar.add(simpleRefDate);
+    bar.add(simplePrev); bar.add(simpleToday); bar.add(simpleNext);
     bar.add(Box.createHorizontalStrut(16)); bar.add(addI);
     return bar;
   }
@@ -289,14 +343,88 @@ public class PlanningPanel extends JPanel {
     refreshSimpleViews(planning);
   }
 
+  private void reloadSimpleViews(){
+    PlanningService planning = ServiceFactory.planning();
+    if (planning == null){
+      calendarView.setData(List.of());
+      tableView.setData(List.of());
+      return;
+    }
+    refreshSimpleViews(planning);
+  }
+
+  private LocalDate[] currentSimpleRange(){
+    LocalDate reference = null;
+    if (simpleRefDate != null){
+      Object value = simpleRefDate.getValue();
+      if (value instanceof Date date){
+        reference = toLocalDate(date);
+      }
+    }
+    if (reference == null){
+      reference = board.getStartDate();
+    }
+    if (reference == null){
+      reference = LocalDate.now();
+    }
+    if (isMonthSelected()){
+      LocalDate start = reference.withDayOfMonth(1);
+      LocalDate end = start.plusMonths(1).minusDays(1);
+      return new LocalDate[]{start, end};
+    }
+    LocalDate start = reference.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+    LocalDate end = start.plusDays(6);
+    return new LocalDate[]{start, end};
+  }
+
+  private boolean isMonthSelected(){
+    return simplePeriod != null && "Mois".equals(String.valueOf(simplePeriod.getSelectedItem()));
+  }
+
+  private void onSimpleRangeChanged(){
+    if (updatingSimpleRange){
+      return;
+    }
+    reloadSimpleViews();
+  }
+
+  private void shiftSimpleRange(int direction){
+    LocalDate[] range = currentSimpleRange();
+    LocalDate target = isMonthSelected() ? range[0].plusMonths(direction) : range[0].plusWeeks(direction);
+    updateSimpleReference(target);
+  }
+
+  private void updateSimpleReference(LocalDate date){
+    if (simpleRefDate == null || date == null){
+      return;
+    }
+    updatingSimpleRange = true;
+    try {
+      simpleRefDate.setValue(toDate(date));
+    } finally {
+      updatingSimpleRange = false;
+    }
+    reloadSimpleViews();
+  }
+
+  private Date toDate(LocalDate date){
+    LocalDate effective = date != null ? date : LocalDate.now();
+    return Date.from(effective.atStartOfDay(ZoneId.systemDefault()).toInstant());
+  }
+
+  private LocalDate toLocalDate(Date date){
+    if (date == null){
+      return LocalDate.now();
+    }
+    return date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+  }
+
   private void refreshSimpleViews(PlanningService planning){
     List<Intervention> list = List.of();
     boolean success = true;
-    LocalDate from = board.getStartDate();
-    if (from == null){
-      from = LocalDate.now().with(java.time.DayOfWeek.MONDAY);
-    }
-    LocalDate to = from.plusDays(6);
+    LocalDate[] range = currentSimpleRange();
+    LocalDate from = range[0];
+    LocalDate to = range[1];
     try {
       List<Intervention> fetched = planning.listInterventions(from, to);
       if (fetched != null){
@@ -312,6 +440,37 @@ public class PlanningPanel extends JPanel {
     if (success){
       Toasts.info(this, list.size() + " intervention(s) chargée(s)");
     }
+  }
+
+  private void moveIntervention(Intervention it, LocalDate targetDay){
+    if (it == null || targetDay == null){
+      return;
+    }
+    PlanningService planning = ServiceFactory.planning();
+    if (planning == null){
+      Toasts.error(this, "Service planning indisponible");
+      return;
+    }
+    LocalDateTime originalStart = it.getDateHeureDebut();
+    LocalDateTime originalEnd = it.getDateHeureFin();
+    try {
+      LocalTime startTime = originalStart != null ? originalStart.toLocalTime() : LocalTime.of(8, 0);
+      LocalDateTime newStart = targetDay.atTime(startTime);
+      it.setDateHeureDebut(newStart);
+      if (originalStart != null && originalEnd != null){
+        long minutes = Math.max(0, Duration.between(originalStart, originalEnd).toMinutes());
+        it.setDateHeureFin(newStart.plusMinutes(minutes));
+      } else if (originalEnd != null){
+        it.setDateHeureFin(targetDay.atTime(originalEnd.toLocalTime()));
+      }
+      planning.saveIntervention(it);
+      Toasts.success(this, "Intervention déplacée au " + targetDay.format(SIMPLE_DAY_FORMAT));
+    } catch (Exception ex){
+      it.setDateHeureDebut(originalStart);
+      it.setDateHeureFin(originalEnd);
+      Toasts.error(this, "Impossible de déplacer l'intervention");
+    }
+    refreshPlanning();
   }
 
   private void addInterventionDialog(){
