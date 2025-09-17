@@ -52,7 +52,7 @@ public class InterventionDialog extends JDialog {
   private final JTextField signatureByField = new JTextField(18);
   private final JSpinner signatureAtSpinner = new JSpinner(new SpinnerDateModel());
   private final JLabel signaturePreview = new JLabel();
-  private final ResourcePickerPanel resourcePicker = new ResourcePickerPanel();
+  private final ResourcePickerPanel resourcePicker;
   private final ContactPickerPanel contactPicker = new ContactPickerPanel();
   private final QuoteTableModel quoteModel = new QuoteTableModel();
   private final JTable quoteTable = new JTable(quoteModel);
@@ -69,6 +69,7 @@ public class InterventionDialog extends JDialog {
     this.planningService = planningService;
     this.clientService = clientService;
     this.typeService = typeService;
+    this.resourcePicker = new ResourcePickerPanel(planningService);
     reloadAvailableTypes();
     buildUI();
     setMinimumSize(new Dimension(980, 680));
