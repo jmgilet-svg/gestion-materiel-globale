@@ -149,12 +149,12 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
 
   /** Navigation inter-panneaux depuis menus contextuels */
   public void openCard(String key){
-    SidebarButton button = navButtons.get(key);
-    if (button != null && !button.isVisible()){
+    SidebarButton targetBtn = navButtons.get(key);
+    if (targetBtn != null && !targetBtn.isVisible()){
       return;
     }
     cards.show(center, key);
-    navButtons.forEach((card, button) -> button.setActive(card.equals(key)));
+    navButtons.forEach((card, btn) -> btn.setActive(card.equals(key)));
     currentCard = key;
   }
 
