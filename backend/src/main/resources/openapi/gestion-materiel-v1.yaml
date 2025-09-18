@@ -3,6 +3,36 @@ info:
   title: Gestion Materiel API
   version: '1.0'
 paths:
+  /api/v2/agencies:
+    get:
+      summary: Lister les agences (v2)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AgencyV2'
+  /api/v2/auth/login:
+    post:
+      summary: Connexion (v2)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginV2Request'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserV2'
+        '401':
+          description: Unauthorized
   /api/v1/quotes:
     get:
       summary: List quotes
@@ -400,6 +430,37 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Unavailability'
+    AgencyV2:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    UserV2:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        displayName:
+          type: string
+        role:
+          type: string
+          enum: [ADMIN, SALES, CONFIG]
+        agency:
+          $ref: '#/components/schemas/AgencyV2'
+    LoginV2Request:
+      type: object
+      required: [agencyId, username, password]
+      properties:
+        agencyId:
+          type: string
+        username:
+          type: string
+        password:
+          type: string
     InterventionTypeV2:
       type: object
       properties:

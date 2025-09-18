@@ -1,5 +1,6 @@
 package com.materiel.suite.client.ui.interventions;
 
+import com.materiel.suite.client.auth.AccessControl;
 import com.materiel.suite.client.model.Client;
 import com.materiel.suite.client.model.Contact;
 import com.materiel.suite.client.model.DocumentLine;
@@ -58,6 +59,11 @@ public class InterventionDialog extends JDialog {
   private final JTable quoteTable = new JTable(quoteModel);
   private final JLabel totalHtLabel = new JLabel();
   private final NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(Locale.FRANCE);
+  private final JButton saveButton = new JButton("Enregistrer", IconRegistry.small("success"));
+  private final JButton generateQuoteButton = new JButton("Générer depuis ressources", IconRegistry.small("file"));
+  private final JButton importSignatureButton = new JButton("Importer PNG…");
+  private final JButton clearSignatureButton = new JButton("Effacer");
+  private final boolean readOnly;
 
   private Intervention current;
   private boolean saved;
@@ -70,10 +76,16 @@ public class InterventionDialog extends JDialog {
     this.clientService = clientService;
     this.typeService = typeService;
     this.resourcePicker = new ResourcePickerPanel(planningService);
+    this.readOnly = !AccessControl.canEditInterventions();
+    saveButton.addActionListener(e -> onSave());
+    generateQuoteButton.addActionListener(e -> generateQuoteDraft());
+    importSignatureButton.addActionListener(e -> importSignature());
+    clearSignatureButton.addActionListener(e -> clearSignature());
     reloadAvailableTypes();
     buildUI();
     setMinimumSize(new Dimension(980, 680));
     setLocationRelativeTo(owner);
+    applyReadOnly();
   }
 
   private void buildUI(){
@@ -84,6 +96,31 @@ public class InterventionDialog extends JDialog {
     configureQuoteTable();
     quoteModel.addTableModelListener(e -> computeTotals());
     totalHtLabel.setText("Total HT : " + currencyFormat.format(0d));
+  }
+
+  private void applyReadOnly(){
+    if (!readOnly){
+      return;
+    }
+    titleField.setEditable(false);
+    typeCombo.setEnabled(false);
+    clientCombo.setEnabled(false);
+    addressField.setEditable(false);
+    startSpinner.setEnabled(false);
+    endSpinner.setEnabled(false);
+    descriptionArea.setEditable(false);
+    internalNoteArea.setEditable(false);
+    closingNoteArea.setEditable(false);
+    resourcePicker.setReadOnly(true);
+    contactPicker.setReadOnly(true);
+    signatureByField.setEditable(false);
+    signatureAtSpinner.setEnabled(false);
+    importSignatureButton.setEnabled(false);
+    clearSignatureButton.setEnabled(false);
+    generateQuoteButton.setEnabled(false);
+    saveButton.setEnabled(false);
+    quoteTable.setEnabled(false);
+    quoteTable.setRowSelectionAllowed(false);
   }
 
   private void configureSpinners(){
@@ -162,9 +199,7 @@ public class InterventionDialog extends JDialog {
   private JComponent buildFacturationTab(){
     JPanel panel = new JPanel(new BorderLayout(8, 8));
     JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
-    JButton generate = new JButton("Générer depuis ressources", IconRegistry.small("file"));
-    generate.addActionListener(e -> generateQuoteDraft());
-    actions.add(generate);
+    actions.add(generateQuoteButton);
     actions.add(Box.createHorizontalStrut(12));
     actions.add(totalHtLabel);
 
@@ -197,11 +232,6 @@ public class InterventionDialog extends JDialog {
     gc.gridx = 4; panel.add(signatureAtSpinner, gc);
     y++;
 
-    JButton importButton = new JButton("Importer PNG…");
-    importButton.addActionListener(e -> importSignature());
-    JButton clearButton = new JButton("Effacer");
-    clearButton.addActionListener(e -> clearSignature());
-
     signaturePreview.setPreferredSize(new Dimension(200, 80));
     signaturePreview.setBorder(BorderFactory.createLineBorder(new Color(0xDDDDDD)));
     signaturePreview.setHorizontalAlignment(SwingConstants.CENTER);
@@ -209,8 +239,8 @@ public class InterventionDialog extends JDialog {
     signaturePreview.setBackground(Color.WHITE);
     signaturePreview.setText("Aucune signature");
 
-    gc.gridx = 2; gc.gridy = y; panel.add(importButton, gc);
-    gc.gridx = 3; panel.add(clearButton, gc);
+    gc.gridx = 2; gc.gridy = y; panel.add(importSignatureButton, gc);
+    gc.gridx = 3; panel.add(clearSignatureButton, gc);
     gc.gridx = 4; gc.fill = GridBagConstraints.BOTH; gc.weightx = 1;
     panel.add(signaturePreview, gc);
 
@@ -219,11 +249,9 @@ public class InterventionDialog extends JDialog {
 
   private JComponent buildFooter(){
     JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-    JButton save = new JButton("Enregistrer", IconRegistry.small("success"));
     JButton cancel = new JButton("Fermer");
-    save.addActionListener(e -> onSave());
     cancel.addActionListener(e -> dispose());
-    panel.add(save);
+    panel.add(saveButton);
     panel.add(cancel);
     return panel;
   }
@@ -604,6 +632,9 @@ public class InterventionDialog extends JDialog {
     }
 
     @Override public boolean isCellEditable(int rowIndex, int columnIndex){
+      if (!AccessControl.canEditInterventions()){
+        return false;
+      }
       return columnIndex == 0 || columnIndex == 1 || columnIndex == 2;
     }
 

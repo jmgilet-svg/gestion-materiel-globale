@@ -26,6 +26,7 @@ public class ContactPickerPanel extends JPanel {
 
   private final List<Contact> allContacts = new ArrayList<>();
   private final Map<String, Contact> selectedContacts = new LinkedHashMap<>();
+  private boolean readOnly;
 
   public ContactPickerPanel(){
     super(new BorderLayout(8, 8));
@@ -68,6 +69,9 @@ public class ContactPickerPanel extends JPanel {
   }
 
   private void selectFiltered(boolean select){
+    if (readOnly){
+      return;
+    }
     List<Contact> rows = model.rows();
     if (rows.isEmpty()){
       return;
@@ -123,6 +127,19 @@ public class ContactPickerPanel extends JPanel {
       }
     }
     return list;
+  }
+
+  public void setReadOnly(boolean readOnly){
+    this.readOnly = readOnly;
+    searchField.setEditable(!readOnly);
+    searchField.setEnabled(!readOnly);
+    selectAllButton.setEnabled(!readOnly);
+    clearAllButton.setEnabled(!readOnly);
+    table.setEnabled(!readOnly);
+    table.setRowSelectionAllowed(!readOnly);
+    if (readOnly){
+      table.clearSelection();
+    }
   }
 
   private void ensureSelectedContactsPresent(){
@@ -245,7 +262,7 @@ public class ContactPickerPanel extends JPanel {
     }
 
     @Override public boolean isCellEditable(int rowIndex, int columnIndex){
-      return columnIndex == 0;
+      return !readOnly && columnIndex == 0;
     }
 
     @Override public Object getValueAt(int rowIndex, int columnIndex){

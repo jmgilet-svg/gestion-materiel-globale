@@ -1,10 +1,12 @@
 package com.materiel.suite.client.ui.settings;
 
+import com.materiel.suite.client.auth.AccessControl;
 import com.materiel.suite.client.ui.icons.IconPickerDialog;
 import com.materiel.suite.client.ui.icons.IconRegistry;
 import com.materiel.suite.client.ui.resources.ResourceTypeEditor;
 
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.*;
@@ -17,6 +19,13 @@ public class SettingsPanel extends JPanel {
 
   public SettingsPanel(){
     super(new BorderLayout());
+
+    if (!AccessControl.canViewSettings()){
+      JLabel label = new JLabel("Vous n'avez pas accès aux paramètres.", JLabel.CENTER);
+      label.setBorder(new EmptyBorder(24, 16, 24, 16));
+      add(label, BorderLayout.CENTER);
+      return;
+    }
 
     JTabbedPane tabs = new JTabbedPane();
     tabs.addTab("Types de ressources", IconRegistry.small("wrench"), new ResourceTypeEditor());

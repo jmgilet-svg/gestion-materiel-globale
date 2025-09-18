@@ -1,5 +1,6 @@
 package com.materiel.suite.client.ui.resources;
 
+import com.materiel.suite.client.auth.AccessControl;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.ui.common.Toasts;
@@ -22,6 +23,9 @@ public class ResourcePriceEditorDialog extends JDialog {
     super(owner, "Tarif ressource", ModalityType.APPLICATION_MODAL);
     if (resource == null){
       throw new IllegalArgumentException("resource is required");
+    }
+    if (!AccessControl.canEditResources()){
+      throw new IllegalStateException("Accès refusé : édition des ressources");
     }
     this.resource = resource;
 

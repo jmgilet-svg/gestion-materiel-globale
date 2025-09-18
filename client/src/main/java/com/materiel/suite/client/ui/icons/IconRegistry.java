@@ -17,7 +17,7 @@ public final class IconRegistry {
   private static final List<String> ICON_KEYS = List.of(
       "search", "success", "error", "info", "settings", "signature", "task", "invoice",
       "maximize", "minimize", "plus", "edit", "trash", "refresh", "image", "cube", "file",
-      "calendar", "user", "wrench",
+      "calendar", "user", "wrench", "lock", "building",
       "crane", "truck", "forklift", "container", "excavator", "generator", "hook", "helmet", "pallet"
   );
   private static final Set<String> ICON_SET = Set.copyOf(ICON_KEYS);
