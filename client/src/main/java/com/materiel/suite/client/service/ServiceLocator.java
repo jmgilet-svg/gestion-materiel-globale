@@ -4,6 +4,7 @@ import com.materiel.suite.client.auth.AuthService;
 import com.materiel.suite.client.model.InterventionType;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.net.ServiceFactory;
+import com.materiel.suite.client.users.UserService;
 
 import java.util.List;
 import java.util.UUID;
@@ -29,6 +30,10 @@ public final class ServiceLocator {
 
   public static AuthService auth(){
     return ServiceFactory.auth();
+  }
+
+  public static UserService users(){
+    return ServiceFactory.users();
   }
 
   public static final class ResourcesGateway {

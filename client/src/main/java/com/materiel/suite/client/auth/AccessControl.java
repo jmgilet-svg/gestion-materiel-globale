@@ -50,4 +50,12 @@ public final class AccessControl {
     Role role = currentRole();
     return role == Role.ADMIN || role == Role.CONFIG;
   }
+
+  public static boolean canManageUsers(){
+    return currentRole() == Role.ADMIN;
+  }
+
+  public static boolean canChangeOwnPassword(){
+    return currentRole() != null;
+  }
 }

@@ -4,6 +4,7 @@ import com.materiel.suite.client.auth.AccessControl;
 import com.materiel.suite.client.ui.icons.IconPickerDialog;
 import com.materiel.suite.client.ui.icons.IconRegistry;
 import com.materiel.suite.client.ui.resources.ResourceTypeEditor;
+import com.materiel.suite.client.ui.users.UserAdminPanel;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -32,6 +33,9 @@ public class SettingsPanel extends JPanel {
     tabs.addTab("Types de ressources", IconRegistry.small("wrench"), new ResourceTypeEditor());
     tabs.addTab("Types d'intervention", IconRegistry.small("task"), new InterventionTypeEditor());
     tabs.addTab("Bibliothèque d'icônes", IconRegistry.small("settings"), buildIconLibraryPanel());
+    if (AccessControl.canManageUsers()){
+      tabs.addTab("Comptes utilisateurs", IconRegistry.small("user"), new UserAdminPanel());
+    }
     add(tabs, BorderLayout.CENTER);
   }
 

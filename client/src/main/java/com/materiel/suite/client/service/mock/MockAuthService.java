@@ -3,13 +3,11 @@ package com.materiel.suite.client.service.mock;
 import com.materiel.suite.client.auth.Agency;
 import com.materiel.suite.client.auth.AuthContext;
 import com.materiel.suite.client.auth.AuthService;
-import com.materiel.suite.client.auth.Role;
 import com.materiel.suite.client.auth.User;
+import com.materiel.suite.client.users.UserAccount;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 /** Jeu de données local pour le mode mock. */
@@ -18,12 +16,14 @@ public class MockAuthService implements AuthService {
       agency("A1", "Agence Lyon"),
       agency("A2", "Agence Paris")
   );
-  private final Map<String, User> users = new HashMap<>();
+  private final MockUserService users;
 
   public MockAuthService(){
-    users.put("admin", user("1", "admin", "Administrateur", Role.ADMIN, "A1"));
-    users.put("sales", user("2", "sales", "Commercial", Role.SALES, "A1"));
-    users.put("config", user("3", "config", "Configurateur", Role.CONFIG, "A2"));
+    this(new MockUserService());
+  }
+
+  public MockAuthService(MockUserService users){
+    this.users = users;
   }
 
   @Override
@@ -33,15 +33,18 @@ public class MockAuthService implements AuthService {
 
   @Override
   public User login(String agencyId, String username, String password){
-    User base = users.get(username);
-    if (base == null || password == null || !Objects.equals(password.trim(), username)){ // simple mot de passe = identifiant
+    UserAccount account = users.findByUsername(username);
+    if (account == null || password == null || password.isBlank()){ // simple validation basique
+      throw new RuntimeException("Identifiants invalides");
+    }
+    if (!users.matchesPassword(account.getId(), password.trim())){
       throw new RuntimeException("Identifiants invalides");
     }
     Agency selected = agencies.stream()
         .filter(agency -> Objects.equals(agency.getId(), agencyId))
         .findFirst()
         .orElse(agencies.get(0));
-    User copy = clone(base);
+    User copy = toUser(account);
     copy.setAgency(clone(selected));
     AuthContext.set(copy);
     return copy;
@@ -74,26 +77,18 @@ public class MockAuthService implements AuthService {
     return copy;
   }
 
-  private User user(String id, String username, String displayName, Role role, String agencyId){
-    User user = new User();
-    user.setId(id);
-    user.setUsername(username);
-    user.setDisplayName(displayName);
-    user.setRole(role);
-    user.setAgency(agency(agencyId, ""));
-    return user;
-  }
-
-  private User clone(User source){
-    if (source == null){
+  private User toUser(UserAccount account){
+    if (account == null){
       return null;
     }
-    User copy = new User();
-    copy.setId(source.getId());
-    copy.setUsername(source.getUsername());
-    copy.setDisplayName(source.getDisplayName());
-    copy.setRole(source.getRole());
-    copy.setAgency(clone(source.getAgency()));
-    return copy;
+    User user = new User();
+    user.setId(account.getId());
+    user.setUsername(account.getUsername());
+    user.setDisplayName(account.getDisplayName());
+    user.setRole(account.getRole());
+    if (account.getAgency() != null){
+      user.setAgency(clone(account.getAgency()));
+    }
+    return user;
   }
 }

@@ -2,6 +2,7 @@ package com.materiel.suite.backend.auth;
 
 import com.materiel.suite.backend.auth.dto.AgencyV2Dto;
 import com.materiel.suite.backend.auth.dto.LoginV2Request;
+import com.materiel.suite.backend.auth.dto.UserCreateRequest;
 import com.materiel.suite.backend.auth.dto.UserV2Dto;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
@@ -11,12 +12,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class AuthCatalogService {
   private final Map<String, UserV2Dto> users = new ConcurrentHashMap<>();
   private final Map<String, AgencyV2Dto> agencies = new ConcurrentHashMap<>();
+  private final Map<String, String> passwords = new ConcurrentHashMap<>();
 
   @PostConstruct
   public void seed(){
@@ -25,9 +28,12 @@ public class AuthCatalogService {
       agencies.put("A2", agency("A2", "Agence Paris"));
     }
     if (users.isEmpty()){
-      users.put("admin", user("1", "admin", "Administrateur", "ADMIN", "A1"));
-      users.put("sales", user("2", "sales", "Commercial", "SALES", "A1"));
-      users.put("config", user("3", "config", "Configurateur", "CONFIG", "A2"));
+      UserV2Dto admin = user("1", "admin", "Administrateur", "ADMIN", "A1");
+      UserV2Dto sales = user("2", "sales", "Commercial", "SALES", "A1");
+      UserV2Dto config = user("3", "config", "Configurateur", "CONFIG", "A2");
+      users.put(admin.getUsername(), admin); passwords.put(admin.getId(), "admin");
+      users.put(sales.getUsername(), sales); passwords.put(sales.getId(), "sales");
+      users.put(config.getUsername(), config); passwords.put(config.getId(), "config");
     }
   }
 
@@ -35,6 +41,13 @@ public class AuthCatalogService {
     return agencies.values().stream()
         .map(this::copy)
         .sorted(Comparator.comparing(AgencyV2Dto::getName, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)))
+        .toList();
+  }
+
+  public List<UserV2Dto> listUsers(){
+    return users.values().stream()
+        .map(this::copy)
+        .sorted(Comparator.comparing(UserV2Dto::getUsername, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)))
         .toList();
   }
 
@@ -47,7 +60,8 @@ public class AuthCatalogService {
       return Optional.empty();
     }
     String password = request.getPassword();
-    if (password == null || !Objects.equals(password.trim(), request.getUsername())){
+    String storedPassword = passwords.get(base.getId());
+    if (password == null || storedPassword == null || !Objects.equals(password.trim(), storedPassword)){
       return Optional.empty();
     }
     AgencyV2Dto selected = agencies.get(request.getAgencyId());
@@ -59,7 +73,57 @@ public class AuthCatalogService {
     }
     UserV2Dto copy = copy(base);
     copy.setAgency(copy(selected));
+    copy.setToken("dev-" + UUID.randomUUID());
     return Optional.of(copy);
+  }
+
+  public UserV2Dto createUser(UserCreateRequest request){
+    if (request == null || request.getUser() == null){
+      throw new IllegalArgumentException("Utilisateur requis");
+    }
+    UserV2Dto incoming = copy(request.getUser());
+    if (incoming.getUsername() == null || incoming.getUsername().isBlank()){
+      throw new IllegalArgumentException("Identifiant requis");
+    }
+    if (incoming.getId() == null || incoming.getId().isBlank()){
+      incoming.setId(UUID.randomUUID().toString());
+    }
+    normalizeAgency(incoming);
+    users.entrySet().removeIf(entry -> Objects.equals(entry.getValue().getId(), incoming.getId()));
+    users.put(incoming.getUsername(), incoming);
+    String pwd = request.getPassword();
+    passwords.put(incoming.getId(), pwd == null || pwd.isBlank() ? "changeme" : pwd);
+    return copy(incoming);
+  }
+
+  public UserV2Dto updateUser(String id, UserV2Dto body){
+    if (id == null || body == null){
+      throw new IllegalArgumentException("Paramètres requis");
+    }
+    UserV2Dto incoming = copy(body);
+    if (incoming.getUsername() == null || incoming.getUsername().isBlank()){
+      throw new IllegalArgumentException("Identifiant requis");
+    }
+    incoming.setId(id);
+    normalizeAgency(incoming);
+    users.entrySet().removeIf(entry -> Objects.equals(entry.getValue().getId(), id));
+    users.put(incoming.getUsername(), incoming);
+    return copy(incoming);
+  }
+
+  public void deleteUser(String id){
+    if (id == null){
+      return;
+    }
+    users.entrySet().removeIf(entry -> Objects.equals(entry.getValue().getId(), id));
+    passwords.remove(id);
+  }
+
+  public void updatePassword(String id, String newPassword){
+    if (id == null){
+      return;
+    }
+    passwords.put(id, newPassword == null || newPassword.isBlank() ? "changeme" : newPassword);
   }
 
   private AgencyV2Dto agency(String id, String name){
@@ -99,6 +163,17 @@ public class AuthCatalogService {
     copy.setDisplayName(source.getDisplayName());
     copy.setRole(source.getRole());
     copy.setAgency(copy(source.getAgency()));
+    copy.setToken(source.getToken());
     return copy;
+  }
+
+  private void normalizeAgency(UserV2Dto user){
+    if (user == null || user.getAgency() == null || user.getAgency().getId() == null){
+      return;
+    }
+    AgencyV2Dto known = agencies.get(user.getAgency().getId());
+    if (known != null){
+      user.setAgency(copy(known));
+    }
   }
 }

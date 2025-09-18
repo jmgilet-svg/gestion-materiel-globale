@@ -1,13 +1,15 @@
-package com.materiel.suite.backend.auth.dto;
+package com.materiel.suite.client.users;
 
-public class UserV2Dto {
+import com.materiel.suite.client.auth.Agency;
+import com.materiel.suite.client.auth.Role;
+
+/** Représente un compte utilisateur administrable. */
+public class UserAccount {
   private String id;
   private String username;
   private String displayName;
-  private String role;
-  private AgencyV2Dto agency;
-  /** Jeton optionnel pour préparer un passage ultérieur à JWT. */
-  private String token;
+  private Role role;
+  private Agency agency;
 
   public String getId(){
     return id;
@@ -33,27 +35,19 @@ public class UserV2Dto {
     this.displayName = displayName;
   }
 
-  public String getRole(){
+  public Role getRole(){
     return role;
   }
 
-  public void setRole(String role){
+  public void setRole(Role role){
     this.role = role;
   }
 
-  public AgencyV2Dto getAgency(){
+  public Agency getAgency(){
     return agency;
   }
 
-  public void setAgency(AgencyV2Dto agency){
+  public void setAgency(Agency agency){
     this.agency = agency;
-  }
-
-  public String getToken(){
-    return token;
-  }
-
-  public void setToken(String token){
-    this.token = token;
   }
 }
