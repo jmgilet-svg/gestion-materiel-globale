@@ -16,8 +16,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class IconRegistry {
   private static final List<String> ICON_KEYS = List.of(
       "search", "success", "error", "info", "settings", "signature", "task", "invoice",
-      "maximize", "minimize", "plus", "edit", "trash", "refresh", "image", "cube", "file",
-      "calendar", "user", "wrench", "lock", "building",
+      "maximize", "minimize", "plus", "edit", "trash", "refresh", "image", "cube", "file", "file-plus",
+      "calendar", "user", "wrench", "lock", "building", "filter",
       "crane", "truck", "forklift", "container", "excavator", "generator", "hook", "helmet", "pallet",
       "badge"
   );
