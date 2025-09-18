@@ -4,13 +4,13 @@ import com.materiel.suite.client.model.Contact;
 import com.materiel.suite.client.model.DocumentLine;
 import com.materiel.suite.client.model.DeliveryNote;
 import com.materiel.suite.client.net.ServiceFactory;
+import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.doc.DocumentLineTableModel;
 import com.materiel.suite.client.ui.doc.DocumentTotalsPanel;
+import com.materiel.suite.client.ui.sales.BaseSalesDialog;
 // === CRM-INJECT BEGIN: delivery-client-binding-import ===
 import com.materiel.suite.client.ui.doc.ClientContactBinding;
 // === CRM-INJECT END ===
-
-import com.materiel.suite.client.ui.common.Toasts;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -18,7 +18,7 @@ import java.awt.*;
 import java.time.LocalDate;
 import java.util.UUID;
 
-public class DeliveryNoteEditor extends JDialog {
+public class DeliveryNoteEditor extends BaseSalesDialog {
   private final JTextField tfNumber = new JTextField(12);
   private final JTextField tfCustomer = new JTextField(24);
   private final JTextField tfDate = new JTextField(10);
@@ -32,7 +32,7 @@ public class DeliveryNoteEditor extends JDialog {
   private DeliveryNote bean;
 
   public DeliveryNoteEditor(Window owner, UUID id){
-    super(owner, "Édition BL", ModalityType.APPLICATION_MODAL);
+    super(owner, "Édition BL");
     setSize(900, 560);
     setLocationRelativeTo(owner);
     setLayout(new BorderLayout());
@@ -53,6 +53,9 @@ public class DeliveryNoteEditor extends JDialog {
     add(buildCenter(), BorderLayout.CENTER);
     add(buildSouth(), BorderLayout.SOUTH);
     refreshFromBean();
+    if (getContentPane() instanceof JComponent root){
+      enforceSalesPolicy(root);
+    }
   }
   private JComponent buildHeader(){
     JPanel p = new JPanel(new GridBagLayout());
@@ -98,22 +101,22 @@ public class DeliveryNoteEditor extends JDialog {
     south.add(totalsPanel, BorderLayout.CENTER);
     JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
     JButton cancel = new JButton("Annuler");
-    JButton save = new JButton("Enregistrer");
-    JButton toInv = new JButton("Créer facture…");
+    saveButton = new JButton("Enregistrer");
+    JButton toInvoiceButton = new JButton("Créer facture…");
     cancel.addActionListener(e -> dispose());
-    save.addActionListener(e -> {
+    saveButton.addActionListener(e -> {
       flushToBean();
       ServiceFactory.deliveryNotes().save(bean);
       Window anchor = getOwner() != null ? getOwner() : this;
       Toasts.success(anchor, "Bon de livraison enregistré");
       dispose();
     });
-    toInv.addActionListener(e -> {
+    toInvoiceButton.addActionListener(e -> {
       flushToBean(); ServiceFactory.deliveryNotes().save(bean);
       var inv = ServiceFactory.invoices().createFromDeliveryNotes(java.util.List.of(bean.getId()));
       JOptionPane.showMessageDialog(this, "Facture créée : "+inv.getNumber());
     });
-    buttons.add(toInv); buttons.add(cancel); buttons.add(save);
+    buttons.add(toInvoiceButton); buttons.add(cancel); buttons.add(saveButton);
     south.add(buttons, BorderLayout.SOUTH);
     return south;
   }

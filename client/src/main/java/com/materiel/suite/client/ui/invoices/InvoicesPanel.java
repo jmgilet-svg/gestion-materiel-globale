@@ -1,5 +1,6 @@
 package com.materiel.suite.client.ui.invoices;
 
+import com.materiel.suite.client.auth.AccessControl;
 import com.materiel.suite.client.model.Invoice;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.ui.StatusBadgeRenderer;
@@ -24,6 +25,12 @@ public class InvoicesPanel extends JPanel {
     JButton bDel = new JButton("Supprimer");
     JButton bFromQuote = new JButton("Depuis devis…");
     toolbar.add(bNew); toolbar.add(bEdit); toolbar.add(bDel); toolbar.add(Box.createHorizontalStrut(12)); toolbar.add(bFromQuote);
+    boolean canView = AccessControl.canViewSales();
+    boolean canEdit = AccessControl.canEditSales();
+    bEdit.setEnabled(canView);
+    bNew.setEnabled(canEdit);
+    bDel.setEnabled(canEdit);
+    bFromQuote.setEnabled(canEdit);
     add(toolbar, BorderLayout.NORTH);
 
     model = new DefaultTableModel(new Object[]{"Numéro","Date","Client","Statut","HT","TVA","TTC","ID"}, 0){

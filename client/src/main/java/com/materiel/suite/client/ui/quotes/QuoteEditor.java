@@ -4,13 +4,13 @@ import com.materiel.suite.client.model.Contact;
 import com.materiel.suite.client.model.DocumentLine;
 import com.materiel.suite.client.model.Quote;
 import com.materiel.suite.client.net.ServiceFactory;
+import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.doc.DocumentLineTableModel;
 import com.materiel.suite.client.ui.doc.DocumentTotalsPanel;
+import com.materiel.suite.client.ui.sales.BaseSalesDialog;
 // === CRM-INJECT BEGIN: quote-client-binding-import ===
 import com.materiel.suite.client.ui.doc.ClientContactBinding;
 // === CRM-INJECT END ===
-
-import com.materiel.suite.client.ui.common.Toasts;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -18,7 +18,7 @@ import java.awt.*;
 import java.time.LocalDate;
 import java.util.UUID;
 
-public class QuoteEditor extends JDialog {
+public class QuoteEditor extends BaseSalesDialog {
   private final JTextField tfNumber = new JTextField(12);
   private final JTextField tfCustomer = new JTextField(24);
   private final JTextField tfDate = new JTextField(10);
@@ -32,7 +32,7 @@ public class QuoteEditor extends JDialog {
   private Quote bean;
 
   public QuoteEditor(Window owner, UUID id){
-    super(owner, "Édition devis", ModalityType.APPLICATION_MODAL);
+    super(owner, "Édition devis");
     setSize(900, 560);
     setLocationRelativeTo(owner);
     setLayout(new BorderLayout());
@@ -51,6 +51,9 @@ public class QuoteEditor extends JDialog {
     add(buildSouth(), BorderLayout.SOUTH);
 
     refreshFromBean();
+    if (getContentPane() instanceof JComponent root){
+      enforceSalesPolicy(root);
+    }
   }
 
   private JComponent buildHeader(){
@@ -99,24 +102,24 @@ public class QuoteEditor extends JDialog {
     south.add(totalsPanel, BorderLayout.CENTER);
     JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
     JButton cancel = new JButton("Annuler");
-    JButton save = new JButton("Enregistrer");
-    JButton toOrder = new JButton("Créer BC…");
+    saveButton = new JButton("Enregistrer");
+    JButton toOrderButton = new JButton("Créer BC…");
     cancel.addActionListener(e -> dispose());
-    save.addActionListener(e -> {
+    saveButton.addActionListener(e -> {
       flushToBean();
       ServiceFactory.quotes().save(bean);
       Window anchor = getOwner() != null ? getOwner() : this;
       Toasts.success(anchor, "Devis enregistré");
       dispose();
     });
-    toOrder.addActionListener(e -> {
+    toOrderButton.addActionListener(e -> {
       flushToBean(); ServiceFactory.quotes().save(bean);
       var o = ServiceFactory.orders().createFromQuote(bean.getId());
       JOptionPane.showMessageDialog(this, "BC créé : "+o.getNumber());
     });
-    buttons.add(toOrder);
+    buttons.add(toOrderButton);
     buttons.add(cancel);
-    buttons.add(save);
+    buttons.add(saveButton);
     south.add(buttons, BorderLayout.SOUTH);
     return south;
   }

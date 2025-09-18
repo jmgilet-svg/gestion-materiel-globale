@@ -4,13 +4,13 @@ import com.materiel.suite.client.model.Contact;
 import com.materiel.suite.client.model.DocumentLine;
 import com.materiel.suite.client.model.Order;
 import com.materiel.suite.client.net.ServiceFactory;
+import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.doc.DocumentLineTableModel;
 import com.materiel.suite.client.ui.doc.DocumentTotalsPanel;
+import com.materiel.suite.client.ui.sales.BaseSalesDialog;
 // === CRM-INJECT BEGIN: order-client-binding-import ===
 import com.materiel.suite.client.ui.doc.ClientContactBinding;
 // === CRM-INJECT END ===
-
-import com.materiel.suite.client.ui.common.Toasts;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -18,7 +18,7 @@ import java.awt.*;
 import java.time.LocalDate;
 import java.util.UUID;
 
-public class OrderEditor extends JDialog {
+public class OrderEditor extends BaseSalesDialog {
   private final JTextField tfNumber = new JTextField(12);
   private final JTextField tfCustomer = new JTextField(24);
   private final JTextField tfDate = new JTextField(10);
@@ -32,7 +32,7 @@ public class OrderEditor extends JDialog {
   private Order bean;
 
   public OrderEditor(Window owner, UUID id){
-    super(owner, "Édition commande", ModalityType.APPLICATION_MODAL);
+    super(owner, "Édition commande");
     setSize(900, 560);
     setLocationRelativeTo(owner);
     setLayout(new BorderLayout());
@@ -53,6 +53,9 @@ public class OrderEditor extends JDialog {
     add(buildCenter(), BorderLayout.CENTER);
     add(buildSouth(), BorderLayout.SOUTH);
     refreshFromBean();
+    if (getContentPane() instanceof JComponent root){
+      enforceSalesPolicy(root);
+    }
   }
   private JComponent buildHeader(){
     JPanel p = new JPanel(new GridBagLayout());
@@ -98,22 +101,22 @@ public class OrderEditor extends JDialog {
     south.add(totalsPanel, BorderLayout.CENTER);
     JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
     JButton cancel = new JButton("Annuler");
-    JButton save = new JButton("Enregistrer");
-    JButton toDN = new JButton("Générer BL…");
+    saveButton = new JButton("Enregistrer");
+    JButton toDeliveryButton = new JButton("Générer BL…");
     cancel.addActionListener(e -> dispose());
-    save.addActionListener(e -> {
+    saveButton.addActionListener(e -> {
       flushToBean();
       ServiceFactory.orders().save(bean);
       Window anchor = getOwner() != null ? getOwner() : this;
       Toasts.success(anchor, "Commande enregistrée");
       dispose();
     });
-    toDN.addActionListener(e -> {
+    toDeliveryButton.addActionListener(e -> {
       flushToBean(); ServiceFactory.orders().save(bean);
       var d = ServiceFactory.deliveryNotes().createFromOrder(bean.getId());
       JOptionPane.showMessageDialog(this, "BL créé : "+d.getNumber());
     });
-    buttons.add(toDN); buttons.add(cancel); buttons.add(save);
+    buttons.add(toDeliveryButton); buttons.add(cancel); buttons.add(saveButton);
     south.add(buttons, BorderLayout.SOUTH);
     return south;
   }
