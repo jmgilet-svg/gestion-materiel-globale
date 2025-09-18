@@ -33,6 +33,84 @@ paths:
                 $ref: '#/components/schemas/UserV2'
         '401':
           description: Unauthorized
+  /api/v2/users:
+    get:
+      summary: Lister les utilisateurs (v2)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserV2'
+    post:
+      summary: Créer un utilisateur (v2)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreateRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserV2'
+  /api/v2/users/{id}:
+    put:
+      summary: Mettre à jour un utilisateur (v2)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserV2'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserV2'
+    delete:
+      summary: Supprimer un utilisateur (v2)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+  /api/v2/users/{id}/password:
+    post:
+      summary: Définir le mot de passe d'un utilisateur (v2)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordUpdateRequest'
+      responses:
+        '204':
+          description: Updated
   /api/v1/quotes:
     get:
       summary: List quotes
@@ -451,6 +529,22 @@ components:
           enum: [ADMIN, SALES, CONFIG]
         agency:
           $ref: '#/components/schemas/AgencyV2'
+        token:
+          type: string
+          description: "Jeton optionnel (mock) — support pour JWT ultérieur"
+    UserCreateRequest:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/UserV2'
+        password:
+          type: string
+    PasswordUpdateRequest:
+      type: object
+      required: [newPassword]
+      properties:
+        newPassword:
+          type: string
     LoginV2Request:
       type: object
       required: [agencyId, username, password]

@@ -1,14 +1,19 @@
 package com.materiel.suite.client.ui;
 
 import com.materiel.suite.client.auth.AccessControl;
+import com.materiel.suite.client.auth.AuthContext;
 import com.materiel.suite.client.auth.SessionManager;
+import com.materiel.suite.client.auth.User;
 import com.materiel.suite.client.config.AppConfig;
 import com.materiel.suite.client.net.ServiceFactory;
+import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.service.SyncService;
 import com.materiel.suite.client.ui.commands.CommandBus;
 import com.materiel.suite.client.ui.crm.ClientsPanel;
 import com.materiel.suite.client.ui.delivery.DeliveryNotesPanel;
 import com.materiel.suite.client.ui.invoices.InvoicesPanel;
+import com.materiel.suite.client.ui.auth.LoginDialog;
+import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.orders.OrdersPanel;
 import com.materiel.suite.client.ui.planning.PlanningPanel;
 import com.materiel.suite.client.ui.planning.agenda.AgendaPanel;
@@ -17,6 +22,8 @@ import com.materiel.suite.client.ui.resources.ResourcesPanel;
 import com.materiel.suite.client.ui.settings.SettingsPanel;
 import com.materiel.suite.client.ui.shell.CollapsibleSidebar;
 import com.materiel.suite.client.ui.shell.SidebarButton;
+import com.materiel.suite.client.ui.icons.IconRegistry;
+import com.materiel.suite.client.ui.users.ChangePasswordDialog;
 import com.materiel.suite.client.ui.theme.ThemeManager;
 
 import javax.swing.*;
@@ -33,6 +40,9 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
   private final Map<String, SidebarButton> navButtons = new LinkedHashMap<>();
   private CollapsibleSidebar sidebar;
   private String currentCard;
+  private JLabel userLabel;
+  private JButton changePasswordButton;
+  private JButton logoutButton;
 
   public MainFrame(AppConfig cfg) {
     super("Gestion Matériel — Suite");
@@ -71,6 +81,7 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
     }
 
     SessionManager.install(this);
+    updateSessionInfo();
   }
 
   private JMenuBar buildMenuBar(){
@@ -93,12 +104,28 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
   }
 
   private JComponent buildHeader(AppConfig cfg) {
-    JPanel p = new JPanel(new BorderLayout());
-    p.setBorder(new EmptyBorder(8,8,8,8));
+    JPanel panel = new JPanel(new BorderLayout());
+    panel.setBorder(new EmptyBorder(8,8,8,8));
     JLabel title = new JLabel("Gestion Matériel — Mode " + (cfg.getMode()==null?"(non défini)":cfg.getMode()));
     title.setFont(title.getFont().deriveFont(Font.BOLD, 16f));
-    p.add(title, BorderLayout.WEST);
-    return p;
+    panel.add(title, BorderLayout.WEST);
+
+    JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+    userLabel = new JLabel();
+    userLabel.setIcon(IconRegistry.small("user"));
+    changePasswordButton = new JButton("Mot de passe…", IconRegistry.small("lock"));
+    changePasswordButton.addActionListener(e -> {
+      if (AccessControl.canChangeOwnPassword()){
+        new ChangePasswordDialog(this).setVisible(true);
+      }
+    });
+    logoutButton = new JButton("Déconnexion", IconRegistry.small("lock"));
+    logoutButton.addActionListener(e -> doLogout());
+    right.add(userLabel);
+    right.add(changePasswordButton);
+    right.add(logoutButton);
+    panel.add(right, BorderLayout.EAST);
+    return panel;
   }
 
   private JComponent buildSidebar() {
@@ -149,6 +176,41 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
     ensureActiveCardVisible();
   }
 
+  private void updateSessionInfo(){
+    if (userLabel == null || changePasswordButton == null || logoutButton == null){
+      return;
+    }
+    User current = AuthContext.get();
+    if (current == null){
+      userLabel.setText("Non connecté");
+      changePasswordButton.setVisible(false);
+      changePasswordButton.setEnabled(false);
+      logoutButton.setEnabled(false);
+    } else {
+      String role = current.getRole() != null ? current.getRole().name() : "";
+      String display = current.getDisplayName() != null ? current.getDisplayName() : current.getUsername();
+      userLabel.setText(display + (role.isBlank() ? "" : " (" + role + ")"));
+      changePasswordButton.setVisible(AccessControl.canChangeOwnPassword());
+      changePasswordButton.setEnabled(AccessControl.canChangeOwnPassword());
+      logoutButton.setEnabled(true);
+    }
+    userLabel.setVisible(true);
+  }
+
+  private void doLogout(){
+    try {
+      if (ServiceLocator.auth() != null){
+        ServiceLocator.auth().logout();
+      }
+    } catch (Exception ignore){
+    }
+    Toasts.info(this, "Déconnecté");
+    LoginDialog.require(this);
+    SessionManager.install(this);
+    applyNavigationPolicy();
+    updateSessionInfo();
+  }
+
   private void setNavVisible(String key, boolean visible){
     SidebarButton button = navButtons.get(key);
     if (button != null){
@@ -174,6 +236,7 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
   @Override
   public void onSessionRefreshed(){
     applyNavigationPolicy();
+    updateSessionInfo();
   }
 }
 
