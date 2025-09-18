@@ -1,5 +1,6 @@
 package com.materiel.suite.client.ui.delivery;
 
+import com.materiel.suite.client.auth.AccessControl;
 import com.materiel.suite.client.model.DeliveryNote;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.ui.StatusBadgeRenderer;
@@ -24,6 +25,12 @@ public class DeliveryNotesPanel extends JPanel {
     JButton bDel = new JButton("Supprimer");
     JButton bToInvoice = new JButton("Créer facture…");
     toolbar.add(bNew); toolbar.add(bEdit); toolbar.add(bDel); toolbar.add(Box.createHorizontalStrut(12)); toolbar.add(bToInvoice);
+    boolean canView = AccessControl.canViewSales();
+    boolean canEdit = AccessControl.canEditSales();
+    bEdit.setEnabled(canView);
+    bNew.setEnabled(canEdit);
+    bDel.setEnabled(canEdit);
+    bToInvoice.setEnabled(canEdit);
     add(toolbar, BorderLayout.NORTH);
 
     model = new DefaultTableModel(new Object[]{"Numéro","Date","Client","Statut","HT","TVA","TTC","ID"}, 0){

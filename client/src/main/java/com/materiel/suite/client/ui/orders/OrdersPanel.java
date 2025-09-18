@@ -1,5 +1,6 @@
 package com.materiel.suite.client.ui.orders;
 
+import com.materiel.suite.client.auth.AccessControl;
 import com.materiel.suite.client.model.Order;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.ui.StatusBadgeRenderer;
@@ -30,6 +31,15 @@ public class OrdersPanel extends JPanel {
     toolbar.add(bToDN);
     toolbar.add(Box.createHorizontalStrut(12));
     toolbar.add(bConfirm); toolbar.add(bLock); toolbar.add(bCancel);
+    boolean canView = AccessControl.canViewSales();
+    boolean canEdit = AccessControl.canEditSales();
+    bEdit.setEnabled(canView);
+    bNew.setEnabled(canEdit);
+    bDel.setEnabled(canEdit);
+    bToDN.setEnabled(canEdit);
+    bConfirm.setEnabled(canEdit);
+    bLock.setEnabled(canEdit);
+    bCancel.setEnabled(canEdit);
     add(toolbar, BorderLayout.NORTH);
 
     model = new DefaultTableModel(new Object[]{"Numéro","Date","Client","Statut","HT","TVA","TTC","ID","Version"}, 0){

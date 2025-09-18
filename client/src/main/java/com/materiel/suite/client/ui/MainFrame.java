@@ -1,21 +1,23 @@
 package com.materiel.suite.client.ui;
 
+import com.materiel.suite.client.auth.AccessControl;
+import com.materiel.suite.client.auth.SessionManager;
 import com.materiel.suite.client.config.AppConfig;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.SyncService;
+import com.materiel.suite.client.ui.commands.CommandBus;
+import com.materiel.suite.client.ui.crm.ClientsPanel;
 import com.materiel.suite.client.ui.delivery.DeliveryNotesPanel;
 import com.materiel.suite.client.ui.invoices.InvoicesPanel;
 import com.materiel.suite.client.ui.orders.OrdersPanel;
-import com.materiel.suite.client.ui.quotes.QuotesPanel;
 import com.materiel.suite.client.ui.planning.PlanningPanel;
 import com.materiel.suite.client.ui.planning.agenda.AgendaPanel;
+import com.materiel.suite.client.ui.quotes.QuotesPanel;
 import com.materiel.suite.client.ui.resources.ResourcesPanel;
-import com.materiel.suite.client.ui.crm.ClientsPanel;
-import com.materiel.suite.client.ui.theme.ThemeManager;
-import com.materiel.suite.client.ui.commands.CommandBus;
+import com.materiel.suite.client.ui.settings.SettingsPanel;
 import com.materiel.suite.client.ui.shell.CollapsibleSidebar;
 import com.materiel.suite.client.ui.shell.SidebarButton;
-import com.materiel.suite.client.ui.settings.SettingsPanel;
+import com.materiel.suite.client.ui.theme.ThemeManager;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -23,12 +25,14 @@ import java.awt.*;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-public class MainFrame extends JFrame {
+public class MainFrame extends JFrame implements SessionManager.SessionAware {
   private final CardLayout cards = new CardLayout();
   private final JPanel center = new JPanel(cards);
   private final JLabel status = new JLabel("Prêt.");
   private javax.swing.Timer syncTimer;
   private final Map<String, SidebarButton> navButtons = new LinkedHashMap<>();
+  private CollapsibleSidebar sidebar;
+  private String currentCard;
 
   public MainFrame(AppConfig cfg) {
     super("Gestion Matériel — Suite");
@@ -53,7 +57,7 @@ public class MainFrame extends JFrame {
     center.add(new ClientsPanel(), "clients");
     center.add(new SettingsPanel(), "settings");
 
-    openCard("quotes");
+    applyNavigationPolicy();
 
     if (ServiceFactory.http()!=null){
       SyncService sync = new SyncService(ServiceFactory.http());
@@ -65,6 +69,8 @@ public class MainFrame extends JFrame {
       });
       syncTimer.start();
     }
+
+    SessionManager.install(this);
   }
 
   private JMenuBar buildMenuBar(){
@@ -96,17 +102,17 @@ public class MainFrame extends JFrame {
   }
 
   private JComponent buildSidebar() {
-    CollapsibleSidebar side = new CollapsibleSidebar();
-    addSidebarItem(side, "planning", "calendar", "Planning");
-    addSidebarItem(side, "agenda", "calendar", "Agenda");
-    addSidebarItem(side, "quotes", "file", "Devis");
-    addSidebarItem(side, "orders", "pallet", "Commandes");
-    addSidebarItem(side, "delivery", "truck", "Bons de livraison");
-    addSidebarItem(side, "invoices", "invoice", "Factures");
-    addSidebarItem(side, "clients", "user", "Clients");
-    addSidebarItem(side, "resources", "wrench", "Ressources");
-    addSidebarItem(side, "settings", "settings", "Paramètres");
-    return side;
+    sidebar = new CollapsibleSidebar();
+    addSidebarItem(sidebar, "planning", "calendar", "Planning");
+    addSidebarItem(sidebar, "agenda", "calendar", "Agenda");
+    addSidebarItem(sidebar, "quotes", "file", "Devis");
+    addSidebarItem(sidebar, "orders", "pallet", "Commandes");
+    addSidebarItem(sidebar, "delivery", "truck", "Bons de livraison");
+    addSidebarItem(sidebar, "invoices", "invoice", "Factures");
+    addSidebarItem(sidebar, "clients", "user", "Clients");
+    addSidebarItem(sidebar, "resources", "wrench", "Ressources");
+    addSidebarItem(sidebar, "settings", "settings", "Paramètres");
+    return sidebar;
   }
 
   private void addSidebarItem(CollapsibleSidebar side, String card, String iconKey, String label) {
@@ -116,8 +122,58 @@ public class MainFrame extends JFrame {
 
   /** Navigation inter-panneaux depuis menus contextuels */
   public void openCard(String key){
+    SidebarButton button = navButtons.get(key);
+    if (button != null && !button.isVisible()){
+      return;
+    }
     cards.show(center, key);
     navButtons.forEach((card, button) -> button.setActive(card.equals(key)));
+    currentCard = key;
+  }
+
+  private void applyNavigationPolicy(){
+    setNavVisible("planning", AccessControl.canViewPlanning());
+    setNavVisible("agenda", AccessControl.canViewPlanning());
+    boolean sales = AccessControl.canViewSales();
+    setNavVisible("quotes", sales);
+    setNavVisible("orders", sales);
+    setNavVisible("delivery", sales);
+    setNavVisible("invoices", sales);
+    setNavVisible("clients", true);
+    setNavVisible("resources", AccessControl.canViewResources());
+    setNavVisible("settings", AccessControl.canViewSettings());
+    if (sidebar != null){
+      sidebar.revalidate();
+      sidebar.repaint();
+    }
+    ensureActiveCardVisible();
+  }
+
+  private void setNavVisible(String key, boolean visible){
+    SidebarButton button = navButtons.get(key);
+    if (button != null){
+      button.setVisible(visible);
+    }
+  }
+
+  private void ensureActiveCardVisible(){
+    if (currentCard != null){
+      SidebarButton current = navButtons.get(currentCard);
+      if (current != null && current.isVisible()){
+        return;
+      }
+    }
+    for (Map.Entry<String, SidebarButton> entry : navButtons.entrySet()){
+      if (entry.getValue().isVisible()){
+        openCard(entry.getKey());
+        return;
+      }
+    }
+  }
+
+  @Override
+  public void onSessionRefreshed(){
+    applyNavigationPolicy();
   }
 }
 

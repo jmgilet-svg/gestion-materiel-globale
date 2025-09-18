@@ -4,13 +4,13 @@ import com.materiel.suite.client.model.Contact;
 import com.materiel.suite.client.model.DocumentLine;
 import com.materiel.suite.client.model.Invoice;
 import com.materiel.suite.client.net.ServiceFactory;
+import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.doc.DocumentLineTableModel;
 import com.materiel.suite.client.ui.doc.DocumentTotalsPanel;
+import com.materiel.suite.client.ui.sales.BaseSalesDialog;
 // === CRM-INJECT BEGIN: invoice-client-binding-import ===
 import com.materiel.suite.client.ui.doc.ClientContactBinding;
 // === CRM-INJECT END ===
-
-import com.materiel.suite.client.ui.common.Toasts;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -18,7 +18,7 @@ import java.awt.*;
 import java.time.LocalDate;
 import java.util.UUID;
 
-public class InvoiceEditor extends JDialog {
+public class InvoiceEditor extends BaseSalesDialog {
   private final JTextField tfNumber = new JTextField(12);
   private final JTextField tfCustomer = new JTextField(24);
   private final JTextField tfDate = new JTextField(10);
@@ -32,7 +32,7 @@ public class InvoiceEditor extends JDialog {
   private Invoice bean;
 
   public InvoiceEditor(Window owner, UUID id){
-    super(owner, "Édition facture", ModalityType.APPLICATION_MODAL);
+    super(owner, "Édition facture");
     setSize(900, 560);
     setLocationRelativeTo(owner);
     setLayout(new BorderLayout());
@@ -53,6 +53,9 @@ public class InvoiceEditor extends JDialog {
     add(buildCenter(), BorderLayout.CENTER);
     add(buildSouth(), BorderLayout.SOUTH);
     refreshFromBean();
+    if (getContentPane() instanceof JComponent root){
+      enforceSalesPolicy(root);
+    }
   }
   private JComponent buildHeader(){
     JPanel p = new JPanel(new GridBagLayout());
@@ -98,16 +101,16 @@ public class InvoiceEditor extends JDialog {
     south.add(totalsPanel, BorderLayout.CENTER);
     JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
     JButton cancel = new JButton("Annuler");
-    JButton save = new JButton("Enregistrer");
+    saveButton = new JButton("Enregistrer");
     cancel.addActionListener(e -> dispose());
-    save.addActionListener(e -> {
+    saveButton.addActionListener(e -> {
       flushToBean();
       ServiceFactory.invoices().save(bean);
       Window anchor = getOwner() != null ? getOwner() : this;
       Toasts.success(anchor, "Facture enregistrée");
       dispose();
     });
-    buttons.add(cancel); buttons.add(save);
+    buttons.add(cancel); buttons.add(saveButton);
     south.add(buttons, BorderLayout.SOUTH);
     return south;
   }

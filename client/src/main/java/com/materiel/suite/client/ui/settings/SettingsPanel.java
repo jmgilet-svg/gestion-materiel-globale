@@ -28,6 +28,7 @@ public class SettingsPanel extends JPanel {
     }
 
     JTabbedPane tabs = new JTabbedPane();
+    tabs.addTab("Général", IconRegistry.small("lock"), new GeneralSettingsPanel());
     tabs.addTab("Types de ressources", IconRegistry.small("wrench"), new ResourceTypeEditor());
     tabs.addTab("Types d'intervention", IconRegistry.small("task"), new InterventionTypeEditor());
     tabs.addTab("Bibliothèque d'icônes", IconRegistry.small("settings"), buildIconLibraryPanel());

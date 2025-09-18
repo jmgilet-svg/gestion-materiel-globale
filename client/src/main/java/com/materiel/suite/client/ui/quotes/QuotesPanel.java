@@ -1,5 +1,6 @@
 package com.materiel.suite.client.ui.quotes;
 
+import com.materiel.suite.client.auth.AccessControl;
 import com.materiel.suite.client.model.Quote;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.ui.StatusBadgeRenderer;
@@ -25,6 +26,12 @@ public class QuotesPanel extends JPanel {
     JButton bDel = new JButton("Supprimer");
     JButton bToOrder = new JButton("Créer BC…");
     toolbar.add(bNew); toolbar.add(bEdit); toolbar.add(bDel); toolbar.add(Box.createHorizontalStrut(12)); toolbar.add(bToOrder);
+    boolean canView = AccessControl.canViewSales();
+    boolean canEdit = AccessControl.canEditSales();
+    bEdit.setEnabled(canView);
+    bNew.setEnabled(canEdit);
+    bDel.setEnabled(canEdit);
+    bToOrder.setEnabled(canEdit);
     add(toolbar, BorderLayout.NORTH);
 
     model = new DefaultTableModel(new Object[]{"Numéro","Date","Client","Statut","HT","TVA","TTC","ID"}, 0){
