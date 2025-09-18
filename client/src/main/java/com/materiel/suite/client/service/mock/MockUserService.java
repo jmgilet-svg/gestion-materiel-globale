@@ -20,9 +20,22 @@ public class MockUserService implements UserService {
   private final Map<String, String> passwords = new ConcurrentHashMap<>();
 
   public MockUserService(){
+    // 15 comptes mock (3 rôles) sur 2 agences
     seed("1", "admin", "Administrateur", Role.ADMIN, "A1", "Agence Lyon", "admin");
-    seed("2", "sales", "Commercial", Role.SALES, "A1", "Agence Lyon", "sales");
-    seed("3", "config", "Configurateur", Role.CONFIG, "A2", "Agence Paris", "config");
+    seed("2", "sales", "Commercial 1", Role.SALES, "A1", "Agence Lyon", "sales");
+    seed("3", "config", "Configurateur 1", Role.CONFIG, "A2", "Agence Paris", "config");
+    seed("4", "sales2", "Commercial 2", Role.SALES, "A1", "Agence Lyon", "sales2");
+    seed("5", "sales3", "Commercial 3", Role.SALES, "A2", "Agence Paris", "sales3");
+    seed("6", "cfg2", "Configurateur 2", Role.CONFIG, "A1", "Agence Lyon", "cfg2");
+    seed("7", "cfg3", "Configurateur 3", Role.CONFIG, "A2", "Agence Paris", "cfg3");
+    seed("8", "admin2", "Administrateur 2", Role.ADMIN, "A2", "Agence Paris", "admin2");
+    seed("9", "plan1", "Planif 1", Role.SALES, "A1", "Agence Lyon", "plan1");
+    seed("10", "plan2", "Planif 2", Role.SALES, "A2", "Agence Paris", "plan2");
+    seed("11", "back1", "Back Office 1", Role.CONFIG, "A1", "Agence Lyon", "back1");
+    seed("12", "back2", "Back Office 2", Role.CONFIG, "A2", "Agence Paris", "back2");
+    seed("13", "compta1", "Compta 1", Role.SALES, "A1", "Agence Lyon", "compta1");
+    seed("14", "compta2", "Compta 2", Role.SALES, "A2", "Agence Paris", "compta2");
+    seed("15", "admin3", "Administrateur 3", Role.ADMIN, "A1", "Agence Lyon", "admin3");
   }
 
   private void seed(String id, String username, String displayName, Role role, String agencyId, String agencyName, String password){
