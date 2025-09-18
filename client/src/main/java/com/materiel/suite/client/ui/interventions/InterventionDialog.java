@@ -1,6 +1,7 @@
 package com.materiel.suite.client.ui.interventions;
 
 import com.materiel.suite.client.auth.AccessControl;
+import com.materiel.suite.client.model.BillingLine;
 import com.materiel.suite.client.model.Client;
 import com.materiel.suite.client.model.Contact;
 import com.materiel.suite.client.model.DocumentLine;
@@ -15,10 +16,11 @@ import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.icons.IconRegistry;
 
 import javax.swing.*;
-import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.*;
 import java.io.File;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -28,6 +30,7 @@ import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -55,14 +58,19 @@ public class InterventionDialog extends JDialog {
   private final JLabel signaturePreview = new JLabel();
   private final ResourcePickerPanel resourcePicker;
   private final ContactPickerPanel contactPicker = new ContactPickerPanel();
-  private final QuoteTableModel quoteModel = new QuoteTableModel();
-  private final JTable quoteTable = new JTable(quoteModel);
+  private final BillingTableModel billingModel = new BillingTableModel();
+  private final JTable billingTable = new JTable(billingModel);
   private final JLabel totalHtLabel = new JLabel();
   private final NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(Locale.FRANCE);
   private final JButton saveButton = new JButton("Enregistrer", IconRegistry.small("success"));
-  private final JButton generateQuoteButton = new JButton("Générer depuis ressources", IconRegistry.small("file"));
+  private final JButton regenerateBillingButton = new JButton("Depuis ressources", IconRegistry.small("refresh"));
+  private final JButton addBillingLineButton = new JButton("Ajouter ligne", IconRegistry.small("plus"));
+  private final JButton removeBillingLineButton = new JButton("Supprimer", IconRegistry.small("trash"));
+  private final JButton generateQuoteButton = new JButton("Générer le devis", IconRegistry.small("file"));
   private final JButton importSignatureButton = new JButton("Importer PNG…");
   private final JButton clearSignatureButton = new JButton("Effacer");
+  private final JButton fullscreenButton = new JButton("", IconRegistry.small("maximize"));
+  private Rectangle previousBounds;
   private final boolean readOnly;
 
   private Intervention current;
@@ -77,25 +85,43 @@ public class InterventionDialog extends JDialog {
     this.typeService = typeService;
     this.resourcePicker = new ResourcePickerPanel(planningService);
     this.readOnly = !AccessControl.canEditInterventions();
+    this.resourcePicker.setSelectionListener(this::onResourceSelectionChanged);
     saveButton.addActionListener(e -> onSave());
-    generateQuoteButton.addActionListener(e -> generateQuoteDraft());
+    regenerateBillingButton.addActionListener(e -> regenerateBillingFromResources());
+    addBillingLineButton.addActionListener(e -> addManualBillingLine());
+    removeBillingLineButton.addActionListener(e -> removeSelectedBillingLine());
+    generateQuoteButton.addActionListener(e -> generateQuoteFromPrebilling());
     importSignatureButton.addActionListener(e -> importSignature());
     clearSignatureButton.addActionListener(e -> clearSignature());
+    fullscreenButton.addActionListener(e -> toggleFullscreen());
+    fullscreenButton.setFocusPainted(false);
+    fullscreenButton.setToolTipText("Plein écran");
     reloadAvailableTypes();
     buildUI();
-    setMinimumSize(new Dimension(980, 680));
+    setResizable(true);
+    setMinimumSize(new Dimension(1180, 760));
     setLocationRelativeTo(owner);
     applyReadOnly();
   }
 
   private void buildUI(){
     setLayout(new BorderLayout(8, 8));
+    add(buildToolbar(), BorderLayout.NORTH);
     add(buildTabs(), BorderLayout.CENTER);
     add(buildFooter(), BorderLayout.SOUTH);
     configureSpinners();
-    configureQuoteTable();
-    quoteModel.addTableModelListener(e -> computeTotals());
-    totalHtLabel.setText("Total HT : " + currencyFormat.format(0d));
+    configureBillingTable();
+    billingModel.addTableModelListener(e -> computeTotals());
+    totalHtLabel.setText("Total HT : " + currencyFormat.format(BigDecimal.ZERO));
+  }
+
+  private JComponent buildToolbar(){
+    JToolBar toolbar = new JToolBar();
+    toolbar.setFloatable(false);
+    fullscreenButton.setText("");
+    toolbar.add(fullscreenButton);
+    toolbar.add(Box.createHorizontalGlue());
+    return toolbar;
   }
 
   private void applyReadOnly(){
@@ -117,10 +143,13 @@ public class InterventionDialog extends JDialog {
     signatureAtSpinner.setEnabled(false);
     importSignatureButton.setEnabled(false);
     clearSignatureButton.setEnabled(false);
+    regenerateBillingButton.setEnabled(false);
+    addBillingLineButton.setEnabled(false);
+    removeBillingLineButton.setEnabled(false);
     generateQuoteButton.setEnabled(false);
     saveButton.setEnabled(false);
-    quoteTable.setEnabled(false);
-    quoteTable.setRowSelectionAllowed(false);
+    billingTable.setEnabled(false);
+    billingTable.setRowSelectionAllowed(false);
   }
 
   private void configureSpinners(){
@@ -129,9 +158,30 @@ public class InterventionDialog extends JDialog {
     signatureAtSpinner.setEditor(new JSpinner.DateEditor(signatureAtSpinner, "dd/MM/yyyy HH:mm"));
   }
 
-  private void configureQuoteTable(){
-    quoteTable.setRowHeight(24);
-    quoteTable.setFillsViewportHeight(true);
+  private void configureBillingTable(){
+    billingTable.setRowHeight(24);
+    billingTable.setFillsViewportHeight(true);
+    billingTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+    billingTable.setAutoCreateRowSorter(true);
+    billingTable.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
+    DefaultTableCellRenderer rightRenderer = new DefaultTableCellRenderer();
+    rightRenderer.setHorizontalAlignment(SwingConstants.RIGHT);
+    billingTable.setDefaultRenderer(BigDecimal.class, rightRenderer);
+    if (billingTable.getColumnModel().getColumnCount() > 0){
+      billingTable.getColumnModel().getColumn(0).setMaxWidth(70);
+      if (billingTable.getColumnModel().getColumnCount() > 2){
+        billingTable.getColumnModel().getColumn(2).setPreferredWidth(80);
+      }
+      if (billingTable.getColumnModel().getColumnCount() > 3){
+        billingTable.getColumnModel().getColumn(3).setPreferredWidth(80);
+      }
+      if (billingTable.getColumnModel().getColumnCount() > 4){
+        billingTable.getColumnModel().getColumn(4).setPreferredWidth(100);
+      }
+      if (billingTable.getColumnModel().getColumnCount() > 5){
+        billingTable.getColumnModel().getColumn(5).setPreferredWidth(120);
+      }
+    }
   }
 
   private JComponent buildHeader(){
@@ -198,13 +248,17 @@ public class InterventionDialog extends JDialog {
 
   private JComponent buildFacturationTab(){
     JPanel panel = new JPanel(new BorderLayout(8, 8));
-    JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
-    actions.add(generateQuoteButton);
-    actions.add(Box.createHorizontalStrut(12));
-    actions.add(totalHtLabel);
-
-    panel.add(actions, BorderLayout.NORTH);
-    panel.add(panelWithLabel("Pré-devis", new JScrollPane(quoteTable)), BorderLayout.CENTER);
+    JToolBar toolbar = new JToolBar();
+    toolbar.setFloatable(false);
+    toolbar.add(regenerateBillingButton);
+    toolbar.add(addBillingLineButton);
+    toolbar.add(removeBillingLineButton);
+    toolbar.addSeparator();
+    toolbar.add(generateQuoteButton);
+    toolbar.add(Box.createHorizontalStrut(12));
+    toolbar.add(totalHtLabel);
+    panel.add(toolbar, BorderLayout.NORTH);
+    panel.add(new JScrollPane(billingTable), BorderLayout.CENTER);
     return panel;
   }
 
@@ -339,11 +393,181 @@ public class InterventionDialog extends JDialog {
     }
   }
 
-  private void generateQuoteDraft(){
-    List<Resource> selected = resourcePicker.getSelectedResources();
-    quoteModel.generateFromResources(selected);
+  private void regenerateBillingFromResources(){
+    syncAutoBillingLinesWithResources();
+    Toasts.info(this, "Lignes générées depuis les ressources");
+  }
+
+  private void addManualBillingLine(){
+    BillingLine line = new BillingLine();
+    line.setId(UUID.randomUUID().toString());
+    line.setDesignation("Ligne manuelle");
+    line.setAutoGenerated(false);
+    List<BillingLine> lines = billingModel.getLines();
+    lines.add(line);
+    billingModel.setLines(lines);
+    int row = billingModel.getRowCount() - 1;
+    if (row >= 0){
+      billingTable.setRowSelectionInterval(row, row);
+      billingTable.editCellAt(row, 1);
+      billingTable.requestFocusInWindow();
+    }
     computeTotals();
   }
+
+  private void removeSelectedBillingLine(){
+    int viewRow = billingTable.getSelectedRow();
+    if (viewRow < 0){
+      return;
+    }
+    int modelRow = billingTable.convertRowIndexToModel(viewRow);
+    List<BillingLine> lines = billingModel.getLines();
+    if (modelRow < 0 || modelRow >= lines.size()){
+      return;
+    }
+    lines.remove(modelRow);
+    billingModel.setLines(lines);
+    computeTotals();
+  }
+
+  private void generateQuoteFromPrebilling(){
+    billingModel.recalcAll();
+    computeTotals();
+    BigDecimal total = billingModel.totalHt();
+    Toasts.success(this, "Devis généré (préparation) — Total HT : " + currencyFormat.format(total));
+  }
+
+  private void onResourceSelectionChanged(){
+    if (readOnly){
+      return;
+    }
+    syncAutoBillingLinesWithResources();
+  }
+
+  private void syncAutoBillingLinesWithResources(){
+    List<BillingLine> existing = billingModel.getLines();
+    List<BillingLine> manual = new ArrayList<>();
+    LinkedHashMap<String, BillingLine> autoByKey = new LinkedHashMap<>();
+    for (BillingLine line : existing){
+      if (line == null){
+        continue;
+      }
+      if (line.isAutoGenerated() && line.getResourceId() != null && !line.getResourceId().isBlank()){
+        autoByKey.put(line.getResourceId(), line);
+      } else {
+        manual.add(line);
+      }
+    }
+    List<BillingLine> updated = new ArrayList<>(manual);
+    List<Resource> selectedResources = resourcePicker.getSelectedResources();
+    for (Resource resource : selectedResources){
+      if (resource == null){
+        continue;
+      }
+      String key = resourceKey(resource);
+      BillingLine line = key != null ? autoByKey.remove(key) : null;
+      if (line == null){
+        line = new BillingLine();
+        line.setId(UUID.randomUUID().toString());
+        line.setAutoGenerated(true);
+        line.setResourceId(key);
+        line.setQuantity(BigDecimal.ONE);
+      }
+      if (resource.getName() != null && !resource.getName().isBlank()){
+        if (line.getDesignation() == null || line.getDesignation().isBlank() || line.isAutoGenerated()){
+          line.setDesignation(resource.getName());
+        }
+      }
+      BigDecimal price = resource.getUnitPriceHt();
+      if (price != null){
+        line.setUnitPriceHt(price);
+      }
+      if (line.getUnit() == null || line.getUnit().isBlank()){
+        line.setUnit("u");
+      }
+      updated.add(line);
+    }
+    billingModel.setLines(updated);
+    computeTotals();
+  }
+
+  private String resourceKey(Resource resource){
+    if (resource == null){
+      return null;
+    }
+    UUID id = resource.getId();
+    if (id != null){
+      return id.toString();
+    }
+    String name = resource.getName();
+    if (name != null && !name.isBlank()){
+      return "name:" + name.trim().toLowerCase(Locale.ROOT);
+    }
+    return null;
+  }
+
+  private void toggleFullscreen(){
+    if (previousBounds == null){
+      previousBounds = getBounds();
+      Rectangle screen = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+      setBounds(screen);
+      fullscreenButton.setIcon(IconRegistry.small("minimize"));
+      fullscreenButton.setToolTipText("Quitter le plein écran");
+    } else {
+      setBounds(previousBounds);
+      previousBounds = null;
+      fullscreenButton.setIcon(IconRegistry.small("maximize"));
+      fullscreenButton.setToolTipText("Plein écran");
+    }
+    revalidate();
+    repaint();
+  }
+  private List<BillingLine> convertDocumentLines(List<DocumentLine> lines){
+    List<BillingLine> result = new ArrayList<>();
+    if (lines == null){
+      return result;
+    }
+    for (DocumentLine line : lines){
+      if (line == null){
+        continue;
+      }
+      BillingLine billingLine = new BillingLine();
+      billingLine.setId(UUID.randomUUID().toString());
+      billingLine.setDesignation(line.getDesignation());
+      billingLine.setQuantity(BigDecimal.valueOf(line.getQuantite()));
+      String unit = line.getUnite();
+      billingLine.setUnit(unit != null && !unit.isBlank() ? unit : "u");
+      billingLine.setUnitPriceHt(BigDecimal.valueOf(line.getPrixUnitaireHT()));
+      billingLine.setTotalHt(BigDecimal.valueOf(line.lineHT()));
+      billingLine.setAutoGenerated(false);
+      result.add(billingLine);
+    }
+    return result;
+  }
+
+  private List<DocumentLine> toDocumentLines(List<BillingLine> lines){
+    List<DocumentLine> result = new ArrayList<>();
+    if (lines == null){
+      return result;
+    }
+    for (BillingLine line : lines){
+      if (line == null){
+        continue;
+      }
+      DocumentLine doc = new DocumentLine();
+      doc.setDesignation(line.getDesignation());
+      BigDecimal quantity = line.getQuantity();
+      doc.setQuantite(quantity != null ? quantity.doubleValue() : 0d);
+      doc.setUnite(line.getUnit());
+      BigDecimal price = line.getUnitPriceHt();
+      doc.setPrixUnitaireHT(price != null ? price.doubleValue() : 0d);
+      doc.setRemisePct(0d);
+      doc.setTvaPct(0d);
+      result.add(doc);
+    }
+    return result;
+  }
+
 
   public void edit(Intervention intervention){
     this.current = intervention == null ? new Intervention() : intervention;
@@ -381,7 +605,12 @@ public class InterventionDialog extends JDialog {
 
     resourcePicker.setSelectedResources(current.getResources());
 
-    quoteModel.setLines(current.getQuoteDraft());
+    List<BillingLine> lines = current.getBillingLines();
+    if (lines.isEmpty()){
+      lines = convertDocumentLines(current.getQuoteDraft());
+    }
+    billingModel.setLines(lines);
+    syncAutoBillingLinesWithResources();
     computeTotals();
   }
 
@@ -501,7 +730,7 @@ public class InterventionDialog extends JDialog {
   }
 
   private void computeTotals(){
-    double total = quoteModel.totalHT();
+    BigDecimal total = billingModel.totalHt();
     totalHtLabel.setText("Total HT : " + currencyFormat.format(total));
   }
 
@@ -540,7 +769,9 @@ public class InterventionDialog extends JDialog {
     }
 
     current.setContacts(contactPicker.getSelectedContacts());
-    current.setQuoteDraft(quoteModel.getLines());
+    List<BillingLine> billingLines = billingModel.getLines();
+    current.setBillingLines(billingLines);
+    current.setQuoteDraft(toDocumentLines(billingLines));
     String signer = signatureByField.getText();
     if (signer != null){
       signer = signer.trim();
@@ -616,118 +847,4 @@ public class InterventionDialog extends JDialog {
     }
   }
 
-  private static class QuoteTableModel extends AbstractTableModel {
-    private final List<DocumentLine> rows = new ArrayList<>();
-    private final String[] columns = {"Désignation", "Qté", "PU HT", "Total HT"};
-
-    @Override public int getRowCount(){ return rows.size(); }
-    @Override public int getColumnCount(){ return columns.length; }
-    @Override public String getColumnName(int column){ return columns[column]; }
-
-    @Override public Class<?> getColumnClass(int columnIndex){
-      return switch(columnIndex){
-        case 1, 2, 3 -> Double.class;
-        default -> String.class;
-      };
-    }
-
-    @Override public boolean isCellEditable(int rowIndex, int columnIndex){
-      if (!AccessControl.canEditInterventions()){
-        return false;
-      }
-      return columnIndex == 0 || columnIndex == 1 || columnIndex == 2;
-    }
-
-    @Override public Object getValueAt(int rowIndex, int columnIndex){
-      DocumentLine line = rows.get(rowIndex);
-      return switch(columnIndex){
-        case 0 -> line.getDesignation();
-        case 1 -> line.getQuantite();
-        case 2 -> line.getPrixUnitaireHT();
-        case 3 -> line.lineHT();
-        default -> "";
-      };
-    }
-
-    @Override public void setValueAt(Object aValue, int rowIndex, int columnIndex){
-      DocumentLine line = rows.get(rowIndex);
-      try {
-        switch (columnIndex){
-          case 0 -> line.setDesignation(aValue != null ? aValue.toString() : "");
-          case 1 -> line.setQuantite(parseDouble(aValue));
-          case 2 -> line.setPrixUnitaireHT(parseDouble(aValue));
-        }
-        fireTableRowsUpdated(rowIndex, rowIndex);
-      } catch (NumberFormatException ignore){}
-    }
-
-    private double parseDouble(Object value){
-      if (value instanceof Number number){
-        return number.doubleValue();
-      }
-      return Double.parseDouble(value.toString());
-    }
-
-    public void setLines(List<DocumentLine> lines){
-      rows.clear();
-      if (lines != null){
-        for (DocumentLine line : lines){
-          if (line != null){
-            DocumentLine copy = new DocumentLine();
-            copy.setDesignation(line.getDesignation());
-            copy.setQuantite(line.getQuantite());
-            copy.setUnite(line.getUnite());
-            copy.setPrixUnitaireHT(line.getPrixUnitaireHT());
-            copy.setRemisePct(line.getRemisePct());
-            copy.setTvaPct(line.getTvaPct());
-            rows.add(copy);
-          }
-        }
-      }
-      fireTableDataChanged();
-    }
-
-    public List<DocumentLine> getLines(){
-      List<DocumentLine> list = new ArrayList<>();
-      for (DocumentLine line : rows){
-        DocumentLine copy = new DocumentLine();
-        copy.setDesignation(line.getDesignation());
-        copy.setQuantite(line.getQuantite());
-        copy.setUnite(line.getUnite());
-        copy.setPrixUnitaireHT(line.getPrixUnitaireHT());
-        copy.setRemisePct(line.getRemisePct());
-        copy.setTvaPct(line.getTvaPct());
-        list.add(copy);
-      }
-      return list;
-    }
-
-    public void generateFromResources(List<Resource> resources){
-      rows.clear();
-      if (resources != null){
-        for (Resource resource : resources){
-          if (resource == null){
-            continue;
-          }
-          DocumentLine line = new DocumentLine();
-          line.setDesignation(resource.getName());
-          line.setQuantite(1d);
-          java.math.BigDecimal price = resource.getUnitPriceHt();
-          line.setPrixUnitaireHT(price != null ? price.doubleValue() : 0d);
-          rows.add(line);
-        }
-      }
-      fireTableDataChanged();
-    }
-
-    public double totalHT(){
-      double sum = 0d;
-      for (DocumentLine line : rows){
-        if (line != null){
-          sum += line.lineHT();
-        }
-      }
-      return sum;
-    }
-  }
 }
