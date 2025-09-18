@@ -18,4 +18,5 @@ public interface InterventionView {
   default void setOnMoveDateTime(BiConsumer<Intervention, Date> onMoveDateTime){}
   default void setOnResizeDateTime(BiConsumer<Intervention, Date> onResizeDateTime){}
   default void setMode(String mode){}
+  default List<Intervention> getSelection(){ return List.of(); }
 }

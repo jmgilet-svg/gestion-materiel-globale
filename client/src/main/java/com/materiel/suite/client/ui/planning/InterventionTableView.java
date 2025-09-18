@@ -20,13 +20,13 @@ import java.util.function.Consumer;
 /** Vue tabulaire compacte des interventions. */
 public class InterventionTableView implements InterventionView {
   private final DefaultTableModel model = new DefaultTableModel(
-      new Object[]{"Début", "Fin", "Type", "Titre", "Client", "Adresse", "Ressources"}, 0){
+      new Object[]{"Début", "Fin", "Type", "Titre", "Client", "Adresse", "Devis", "Ressources"}, 0){
     @Override public boolean isCellEditable(int row, int column){ return false; }
     @Override public Class<?> getColumnClass(int columnIndex){
       if (columnIndex == 0 || columnIndex == 1){
         return LocalDateTime.class;
       }
-      if (columnIndex == 6){
+      if (columnIndex == 7){
         return List.class;
       }
       return Object.class;
@@ -42,11 +42,11 @@ public class InterventionTableView implements InterventionView {
     table.setRowHeight(24);
     table.setFillsViewportHeight(true);
     table.setAutoCreateRowSorter(true);
-    table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+    table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
     table.getColumnModel().getColumn(0).setCellRenderer(dateRenderer());
     table.getColumnModel().getColumn(1).setCellRenderer(dateRenderer());
     table.getColumnModel().getColumn(2).setCellRenderer(typeRenderer());
-    table.getColumnModel().getColumn(6).setCellRenderer(resourceRenderer());
+    table.getColumnModel().getColumn(7).setCellRenderer(resourceRenderer());
     table.addMouseListener(new MouseAdapter(){
       @Override public void mousePressed(MouseEvent e){
         maybeShowPopup(e);
@@ -93,6 +93,7 @@ public class InterventionTableView implements InterventionView {
           safe(it.getLabel()),
           safe(it.getClientName()),
           safe(it.getAddress()),
+          quoteDisplay(it),
           it.getResources()
       });
     }
@@ -100,6 +101,21 @@ public class InterventionTableView implements InterventionView {
 
   @Override public void setOnOpen(Consumer<Intervention> onOpen){
     this.onOpen = onOpen != null ? onOpen : it -> {};
+  }
+
+  @Override public List<Intervention> getSelection(){
+    int[] selected = table.getSelectedRows();
+    if (selected == null || selected.length == 0){
+      return List.of();
+    }
+    List<Intervention> list = new ArrayList<>();
+    for (int row : selected){
+      int modelRow = table.convertRowIndexToModel(row);
+      if (modelRow >= 0 && modelRow < current.size()){
+        list.add(current.get(modelRow));
+      }
+    }
+    return list;
   }
 
   private void maybeShowPopup(MouseEvent e){
@@ -195,5 +211,16 @@ public class InterventionTableView implements InterventionView {
 
   private String safe(String value){
     return value == null ? "" : value;
+  }
+
+  private String quoteDisplay(Intervention it){
+    if (it == null){
+      return "";
+    }
+    String ref = it.getQuoteReference();
+    if (ref == null || ref.isBlank()){
+      ref = it.getQuoteNumber();
+    }
+    return ref == null ? "" : ref;
   }
 }

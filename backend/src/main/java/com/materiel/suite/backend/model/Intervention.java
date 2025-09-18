@@ -19,6 +19,8 @@ public class Intervention {
   private String signatureBy;
   private LocalDateTime signatureAt;
   private String signaturePngBase64;
+  private UUID quoteId;
+  private String quoteReference;
 
   public UUID getId(){ return id; }
   public void setId(UUID id){ this.id=id; }
@@ -93,4 +95,8 @@ public class Intervention {
   public void setSignatureAt(LocalDateTime signatureAt){ this.signatureAt=signatureAt; }
   public String getSignaturePngBase64(){ return signaturePngBase64; }
   public void setSignaturePngBase64(String signaturePngBase64){ this.signaturePngBase64=signaturePngBase64; }
+  public UUID getQuoteId(){ return quoteId; }
+  public void setQuoteId(UUID quoteId){ this.quoteId=quoteId; }
+  public String getQuoteReference(){ return quoteReference; }
+  public void setQuoteReference(String quoteReference){ this.quoteReference=quoteReference; }
 }
