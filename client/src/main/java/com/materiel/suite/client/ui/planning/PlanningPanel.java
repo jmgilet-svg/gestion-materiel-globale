@@ -17,6 +17,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
@@ -62,11 +63,27 @@ import com.materiel.suite.client.ui.interventions.PreDevisUtil;
 import com.materiel.suite.client.ui.interventions.QuoteGenerator;
 
 public class PlanningPanel extends JPanel {
+  private enum QuoteFilter {
+    TOUS("Tous"),
+    A_DEVISER("À deviser"),
+    DEJA_DEVISE("Déjà devisé");
+
+    private final String label;
+
+    QuoteFilter(String label){
+      this.label = label;
+    }
+
+    @Override public String toString(){
+      return label;
+    }
+  }
   private static final DateTimeFormatter SIMPLE_DAY_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
   private static final DateTimeFormatter SIMPLE_DAY_TIME_FORMAT = DateTimeFormatter.ofPattern("dd/MM HH:mm");
   private final PlanningBoard board = new PlanningBoard();
   private final AgendaBoard agenda = new AgendaBoard();
-  private final JButton bulkQuoteBtn = new JButton("Générer devis (sélection)", IconRegistry.small("file"));
+  private final JButton bulkQuoteBtn = new JButton("Générer devis (sélection)", IconRegistry.small("file-plus"));
+  private final JComboBox<QuoteFilter> quoteFilter = new JComboBox<>(QuoteFilter.values());
   private JButton conflictsBtn;
   private JPanel ganttContainer;
   private JTabbedPane tabs;
@@ -78,6 +95,7 @@ public class PlanningPanel extends JPanel {
   private JComboBox<String> simplePeriod;
   private JSpinner simpleRefDate;
   private boolean updatingSimpleRange;
+  private List<Intervention> allInterventions = List.of();
 
   public PlanningPanel(){
     super(new BorderLayout());
@@ -244,7 +262,15 @@ public class PlanningPanel extends JPanel {
     bar.add(Box.createHorizontalStrut(16)); bar.add(simpleLabel); bar.add(simplePeriod); bar.add(simpleRefDate);
     bar.add(simplePrev); bar.add(simpleToday); bar.add(simpleNext);
     bar.add(Box.createHorizontalStrut(16)); bar.add(addI);
-    bar.add(Box.createHorizontalStrut(8)); bar.add(bulkQuoteBtn);
+    JLabel quoteFilterLabel = new JLabel("Filtre devis:", IconRegistry.small("filter"), JLabel.LEFT);
+    quoteFilterLabel.setIconTextGap(4);
+    quoteFilter.setSelectedItem(QuoteFilter.TOUS);
+    quoteFilter.addActionListener(e -> updateFilteredSimpleViews());
+    bar.add(Box.createHorizontalStrut(12));
+    bar.add(quoteFilterLabel);
+    bar.add(quoteFilter);
+    bar.add(Box.createHorizontalStrut(8));
+    bar.add(bulkQuoteBtn);
     bulkQuoteBtn.addActionListener(e -> generateQuotesForSelection());
     return bar;
   }
@@ -413,8 +439,8 @@ public class PlanningPanel extends JPanel {
     PlanningService planning = ServiceFactory.planning();
     if (planning == null){
       calendarView.setMode(isMonthSelected() ? "Mois" : "Semaine");
-      calendarView.setData(List.of());
-      tableView.setData(List.of());
+      allInterventions = List.of();
+      updateFilteredSimpleViews();
       return;
     }
     board.reload();
@@ -426,8 +452,8 @@ public class PlanningPanel extends JPanel {
     PlanningService planning = ServiceFactory.planning();
     if (planning == null){
       calendarView.setMode(isMonthSelected() ? "Mois" : "Semaine");
-      calendarView.setData(List.of());
-      tableView.setData(List.of());
+      allInterventions = List.of();
+      updateFilteredSimpleViews();
       return;
     }
     refreshSimpleViews(planning);
@@ -534,11 +560,54 @@ public class PlanningPanel extends JPanel {
       Toasts.error(this, "Impossible de charger les interventions");
     }
     calendarView.setMode(isMonthSelected() ? "Mois" : "Semaine");
-    calendarView.setData(list);
-    tableView.setData(list);
+    allInterventions = sanitizeInterventions(list);
+    updateFilteredSimpleViews();
     if (success){
-      Toasts.info(this, list.size() + " intervention(s) chargée(s)");
+      Toasts.info(this, allInterventions.size() + " intervention(s) chargée(s)");
     }
+  }
+
+  private List<Intervention> sanitizeInterventions(List<Intervention> list){
+    if (list == null || list.isEmpty()){
+      return List.of();
+    }
+    List<Intervention> sanitized = new ArrayList<>();
+    for (Intervention intervention : list){
+      if (intervention != null){
+        sanitized.add(intervention);
+      }
+    }
+    return sanitized.isEmpty() ? List.of() : List.copyOf(sanitized);
+  }
+
+  private void updateFilteredSimpleViews(){
+    List<Intervention> base = allInterventions != null ? allInterventions : List.of();
+    QuoteFilter filter = (QuoteFilter) quoteFilter.getSelectedItem();
+    if (filter == null){
+      filter = QuoteFilter.TOUS;
+    }
+    if (filter == QuoteFilter.TOUS){
+      calendarView.setData(base);
+      tableView.setData(base);
+      return;
+    }
+    List<Intervention> filtered = new ArrayList<>();
+    for (Intervention intervention : base){
+      if (intervention == null){
+        continue;
+      }
+      boolean keep;
+      if (filter == QuoteFilter.A_DEVISER){
+        keep = !intervention.hasQuote();
+      } else {
+        keep = intervention.hasQuote();
+      }
+      if (keep){
+        filtered.add(intervention);
+      }
+    }
+    calendarView.setData(filtered);
+    tableView.setData(filtered);
   }
 
   private void moveIntervention(Intervention it, LocalDate targetDay){
