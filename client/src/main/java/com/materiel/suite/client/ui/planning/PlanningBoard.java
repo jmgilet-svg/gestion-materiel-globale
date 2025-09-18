@@ -139,6 +139,7 @@ public class PlanningBoard extends JComponent {
     copy.setInternalNote(selected.getInternalNote());
     copy.setClosingNote(selected.getClosingNote());
     copy.setContacts(selected.getContacts());
+    copy.setBillingLines(selected.getBillingLines());
     copy.setQuoteDraft(selected.getQuoteDraft());
     if (selected.getDateHeureDebut()!=null) copy.setDateHeureDebut(selected.getDateHeureDebut().plusDays(days));
     if (selected.getDateHeureFin()!=null) copy.setDateHeureFin(selected.getDateHeureFin().plusDays(days));

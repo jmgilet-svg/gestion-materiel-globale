@@ -479,6 +479,7 @@ public class AgendaBoard extends JComponent {
     copy.setInternalNote(contextItem.getInternalNote());
     copy.setClosingNote(contextItem.getClosingNote());
     copy.setContacts(contextItem.getContacts());
+    copy.setBillingLines(contextItem.getBillingLines());
     copy.setQuoteDraft(contextItem.getQuoteDraft());
     if (contextItem.getDateHeureDebut()!=null) copy.setDateHeureDebut(contextItem.getDateHeureDebut().plusDays(days));
     if (contextItem.getDateHeureFin()!=null) copy.setDateHeureFin(contextItem.getDateHeureFin().plusDays(days));

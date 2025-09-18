@@ -45,6 +45,7 @@ public class ResourcePickerPanel extends JPanel {
   private final Map<UUID, Resource> resourceIndex = new LinkedHashMap<>();
   private final LinkedHashMap<String, ResourceRef> selectedRefs = new LinkedHashMap<>();
   private boolean readOnly;
+  private Runnable selectionListener;
 
   public ResourcePickerPanel(){
     this(ServiceFactory.planning());
@@ -145,6 +146,7 @@ public class ResourcePickerPanel extends JPanel {
       }
     }
     model.refreshAll();
+    notifySelectionChanged();
   }
 
   public void setResources(List<Resource> resources){
@@ -195,6 +197,16 @@ public class ResourcePickerPanel extends JPanel {
       table.clearSelection();
     }
     updateEditPriceButtonState();
+  }
+
+  public void setSelectionListener(Runnable listener){
+    this.selectionListener = listener;
+  }
+
+  private void notifySelectionChanged(){
+    if (selectionListener != null){
+      selectionListener.run();
+    }
   }
 
   public List<Resource> getSelectedResources(){
@@ -438,6 +450,7 @@ public class ResourcePickerPanel extends JPanel {
         selectedRefs.remove(key);
       }
       fireTableRowsUpdated(rowIndex, rowIndex);
+      notifySelectionChanged();
     }
 
     void setRows(List<Resource> list){
