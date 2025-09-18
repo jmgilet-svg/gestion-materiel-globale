@@ -1,7 +1,9 @@
 package com.materiel.suite.client.ui.planning;
 
+import com.materiel.suite.client.auth.AccessControl;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.InterventionType;
+import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.icons.IconRegistry;
 
 import javax.swing.*;
@@ -246,6 +248,9 @@ public class InterventionCalendarView implements InterventionView {
     panel.addMouseListener(new MouseAdapter(){
       @Override public void mouseClicked(MouseEvent e){
         if (e.getClickCount() == 2){
+          if (!AccessControl.canEditInterventions()){
+            Toasts.info(panel, "Ouverture en lecture seule");
+          }
           onOpen.accept(it);
         }
       }

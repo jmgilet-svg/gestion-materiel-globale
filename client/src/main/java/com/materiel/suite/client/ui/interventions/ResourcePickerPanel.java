@@ -1,11 +1,13 @@
 package com.materiel.suite.client.ui.interventions;
 
+import com.materiel.suite.client.auth.AccessControl;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.model.ResourceRef;
 import com.materiel.suite.client.model.ResourceType;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.PlanningService;
 import com.materiel.suite.client.service.ServiceLocator;
+import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.icons.IconRegistry;
 import com.materiel.suite.client.ui.resources.ResourcePriceEditorDialog;
 
@@ -42,6 +44,7 @@ public class ResourcePickerPanel extends JPanel {
   private final List<Resource> allResources = new ArrayList<>();
   private final Map<UUID, Resource> resourceIndex = new LinkedHashMap<>();
   private final LinkedHashMap<String, ResourceRef> selectedRefs = new LinkedHashMap<>();
+  private boolean readOnly;
 
   public ResourcePickerPanel(){
     this(ServiceFactory.planning());
@@ -100,7 +103,17 @@ public class ResourcePickerPanel extends JPanel {
     });
     selectAllButton.addActionListener(e -> selectFiltered(true));
     clearAllButton.addActionListener(e -> selectFiltered(false));
-    editPriceButton.addActionListener(e -> openPriceDialog());
+    editPriceButton.addActionListener(e -> {
+      if (readOnly){
+        Toasts.info(ResourcePickerPanel.this, "Lecture seule");
+        return;
+      }
+      if (!AccessControl.canEditResources()){
+        Toasts.error(ResourcePickerPanel.this, "Droit requis : édition Ressources");
+        return;
+      }
+      openPriceDialog();
+    });
     table.getSelectionModel().addListSelectionListener(e -> {
       if (!e.getValueIsAdjusting()){
         updateEditPriceButtonState();
@@ -110,6 +123,9 @@ public class ResourcePickerPanel extends JPanel {
   }
 
   private void selectFiltered(boolean select){
+    if (readOnly){
+      return;
+    }
     List<Resource> visible = model.rows();
     if (visible.isEmpty()){
       return;
@@ -164,6 +180,21 @@ public class ResourcePickerPanel extends JPanel {
     ensureSelectedResourcesPresent();
     rebuildTypeFilter();
     applyFilter();
+  }
+
+  public void setReadOnly(boolean readOnly){
+    this.readOnly = readOnly;
+    typeFilter.setEnabled(!readOnly);
+    searchField.setEditable(!readOnly);
+    searchField.setEnabled(!readOnly);
+    selectAllButton.setEnabled(!readOnly);
+    clearAllButton.setEnabled(!readOnly);
+    table.setEnabled(!readOnly);
+    table.setRowSelectionAllowed(!readOnly);
+    if (readOnly){
+      table.clearSelection();
+    }
+    updateEditPriceButtonState();
   }
 
   public List<Resource> getSelectedResources(){
@@ -340,7 +371,8 @@ public class ResourcePickerPanel extends JPanel {
 
   private void updateEditPriceButtonState(){
     boolean hasSelection = table.getSelectedRow() >= 0;
-    editPriceButton.setEnabled(hasSelection && ServiceLocator.resources().isAvailable());
+    boolean canEdit = !readOnly && AccessControl.canEditResources() && ServiceLocator.resources().isAvailable();
+    editPriceButton.setEnabled(hasSelection && canEdit);
   }
 
   private static String typeLabel(Resource resource){
@@ -375,7 +407,7 @@ public class ResourcePickerPanel extends JPanel {
     }
 
     @Override public boolean isCellEditable(int rowIndex, int columnIndex){
-      return columnIndex == 0;
+      return !readOnly && columnIndex == 0;
     }
 
     @Override public Object getValueAt(int rowIndex, int columnIndex){

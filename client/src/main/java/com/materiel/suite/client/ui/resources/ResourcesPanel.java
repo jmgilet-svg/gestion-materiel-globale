@@ -1,5 +1,6 @@
 package com.materiel.suite.client.ui.resources;
 
+import com.materiel.suite.client.auth.AccessControl;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.ui.common.Toasts;
@@ -80,9 +81,18 @@ public class ResourcesPanel extends JPanel {
 
     add(new JScrollPane(table), BorderLayout.CENTER);
 
+    boolean canEdit = AccessControl.canEditResources() && ServiceLocator.resources().isAvailable();
+    editPriceBtn.setEnabled(canEdit);
+
     // Actions
     refreshBtn.addActionListener(e -> reload());
-    editPriceBtn.addActionListener(e -> openPriceDialogSelected());
+    editPriceBtn.addActionListener(e -> {
+      if (!AccessControl.canEditResources()){
+        Toasts.error(this, "Droit requis : édition Ressources");
+        return;
+      }
+      openPriceDialogSelected();
+    });
     search.getDocument().addDocumentListener((SimpleDoc) e -> applyFilter());
     typeFilter.addActionListener(e -> applyFilter());
 
@@ -174,7 +184,9 @@ public class ResourcesPanel extends JPanel {
         default -> String.class;
       };
     }
-    @Override public boolean isCellEditable(int r, int c){ return c==3; } // PU HT éditable
+    @Override public boolean isCellEditable(int r, int c){
+      return c==3 && AccessControl.canEditResources();
+    } // PU HT éditable
 
     @Override public Object getValueAt(int row, int col){
       Resource r = resourceAt(row);

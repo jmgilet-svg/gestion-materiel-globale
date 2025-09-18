@@ -1,5 +1,7 @@
 package com.materiel.suite.client.net;
 
+import com.materiel.suite.client.auth.AuthContext;
+import com.materiel.suite.client.auth.AuthService;
 import com.materiel.suite.client.config.AppConfig;
 import com.materiel.suite.client.service.*;
 import com.materiel.suite.client.service.api.*;
@@ -17,9 +19,12 @@ public class ServiceFactory {
   private static ClientService clientService;
   private static InterventionTypeService interventionTypeService;
   private static ResourceTypeService resourceTypeService;
+  private static AuthService authService;
 
   public static void init(AppConfig c) {
     cfg = c;
+    AuthContext.clear();
+    authService = null;
     switch (cfg.getMode()) {
       case "mock" -> initMock();
       case "backend" -> initBackend();
@@ -29,6 +34,7 @@ public class ServiceFactory {
 
   private static void initMock() {
     MockData.seedIfEmpty();
+    restClient = null;
     quoteService = new MockQuoteService();
     orderService = new MockOrderService();
     deliveryNoteService = new MockDeliveryNoteService();
@@ -38,6 +44,7 @@ public class ServiceFactory {
     clientService = new MockClientService();
     interventionTypeService = new MockInterventionTypeService();
     resourceTypeService = new MockResourceTypeService();
+    authService = new MockAuthService();
   }
 
   private static void initBackend() {
@@ -55,6 +62,7 @@ public class ServiceFactory {
     clientService = new ApiClientService(rc, new MockClientService());
     interventionTypeService = new ApiInterventionTypeService(rc, new MockInterventionTypeService());
     resourceTypeService = new ApiResourceTypeService(rc, new MockResourceTypeService());
+    authService = new ApiAuthService(rc, new MockAuthService());
   }
 
   public static QuoteService quotes(){ return quoteService; }
@@ -67,5 +75,6 @@ public class ServiceFactory {
   public static InterventionTypeService interventionTypes(){ return interventionTypeService; }
   public static ResourceTypeService resourceTypes(){ return resourceTypeService; }
   public static RestClient http(){ return restClient; }
+  public static AuthService auth(){ return authService; }
 }
 
