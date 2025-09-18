@@ -1,166 +1,200 @@
-# Gestion Matériel Globale
-ERP & planning multi-agences pour location de grues/camions/remorques avec chauffeur — monorepo Java (Spring Boot + Swing).
+# Gestion Matériel — README
 
-## Table des matières
-- [Aperçu du monorepo](#aperçu-du-monorepo)
-- [Fonctionnalités (vue d’ensemble)](#fonctionnalités-vue-densemble)
-- [Démarrage rapide (dev)](#démarrage-rapide-dev)
-- [API & contrats](#api--contrats)
-- [Guide utilisateur (client Swing)](#guide-utilisateur-client-swing)
-- [Architecture & décisions clés](#architecture--décisions-clés)
-- [Roadmap (lots priorisés)](#roadmap-lots-priorisés)
-- [Contribuer / Dev notes](#contribuer--dev-notes)
-- [Licences & mentions](#licences--mentions)
+Application **planning & exploitation** pour sociétés de levage/transport/manutention :
+ressources (grues, camions, chariots…), **interventions** multi-ressources, **devis/ventes**,
+paramétrage fin (icônes, types…), **sécurité par rôles**, et gros **jeu de données mock**.
 
-## Aperçu du monorepo
-- `backend/` – API Spring Boot 3 (Java 17)
-- `client/` – Application desktop Java Swing (Java 17)
-- `seeds/` – Données d’exemple (devis, commandes) pour tester le pipeline commercial
-- `docs/` – Notes techniques (offline build, OpenAPI vendored)
+> ✅ **Contrat v1 préservé**. Les ajouts sont introduits en **v2** (DTO/contrôleurs) pour éviter toute régression.
 
-Statut : expérimental mais exploitable en dev.
+---
 
-## Fonctionnalités (vue d’ensemble)
-### Planning & Agenda
-- ✅ DnD des interventions, redimensionnement, snapping 15 min
-- 🚧 Panneau “Conflits (N)” + actions d’auto-résolution (shift/reassign/split) côté client et endpoints côté serveur
-- 🚧 Lanes parallèles (affichage côte à côte en cas de chevauchements)
-- 🚧 Indisponibilités ressources (overlays, CRUD API)
-- ✅ Toolbar : bascule Semaine/Jour, densité, filtres rapides
-- ✅ Raccourcis clavier (N, D, Suppr, ←/→, Shift+←/→)
-- 🚧 Undo/Redo unifié (mouvements, resize, assignation)
+## 🧭 Sommaire
+1. [Aperçu des fonctionnalités](#aperçu-des-fonctionnalités)
+2. [Sécurité & rôles](#sécurité--rôles)
+3. [Données mock enrichies](#données-mock-enrichies)
+4. [UX — Navigation & écrans](#ux--navigation--écrans)
+5. [Interventions (v2)](#interventions-v2)
+6. [Ressources & types](#ressources--types)
+7. [Paramétrage](#paramétrage)
+8. [Ventes (devis/BC/BL/factures)](#ventes-devisbcblfactures)
+9. [API & contrat](#api--contrat)
+10. [Build & Run](#build--run)
+11. [Roadmap](#roadmap)
 
-### Ressources & indispos
-- 🚧 Endpoints GET/POST/DELETE `/api/resources/{id}/unavailability` + overlay UI
+---
 
-### Documents commerciaux (Devis → Bon de commande → BL → Facture)
-- 🚧 Pipeline statutaire (Brouillon→Validé→Envoyé→…)
-- 🚧 Totaux automatiques (multi-TVA), modèles de lignes (heure/jour/demi-journée, arrondis ¼ h)
-- 🚧 PDF multi-tenant (logo, palette, CGV, mentions), séquences (ex. FAC-00001)
+## Aperçu des fonctionnalités
 
-### Exports et conformité
-- 🧭 FEC export strict + ZIP avec SHA-256
-- 🧭 Exports CSV/XLSX
-- 🧭 Mapping comptable en base + mini admin UI
+- **Planning** d’interventions avec **drag & drop** (déplacement), **filtre de période** (semaine/mois) et **refresh auto** après enregistrement.
+- **Interventions multi-ressources** : sélection de plusieurs ressources de **tout type**, avec :
+  - **Type d’intervention** paramétrable (icône, ordre d’affichage), **tri** & **duplication rapide**,
+  - **Description**, **note interne**, **note de fin**,
+  - **Horaires planifiés** et **horaires effectifs** (début/fin),
+  - **Contacts client** multiples (filtrés par client sélectionné),
+  - Pré-devis rapide : **lignes par ressource** avec **PU HT** (prix porté par la *ressource*).
+- **Ressources** : vue type “Clients” avec édition **inline** dans le même panneau, filtre par **type**, tri par **type**, **indisponibilités** (date début/fin).
+- **Icônes SVG** en **couleur** et **catalogue partagé** (ressources, types, recherche globale, toasts/notifications, tuiles d’intervention).
+- **Paramètres** : icônes, types d’intervention (**ordre par DnD**, duplication, édition inline), général (ex. **durée de session**).
+- **Sécurité** : login (avec **agence**), rôles, **masquage** fin du menu, **lecture seule** sur écrans/boîtes de dialogue en fonction des droits,
+  **expiration de session** par inactivité, **changement de mot de passe**, **administration des utilisateurs**.
+- **Mock** riche pour la démo : ~**60 ressources**, **20 clients** × **2–4 contacts**, **15 utilisateurs**, ~**60 interventions** sur **2 semaines**.
 
-### Sécurité & multi-tenant
-- 🚧 JWT (`/auth/login`) + Bearer sur `/api/**`
-- 🚧 En-tête `X-Tenant` bout-en-bout
-- ✅ SSE `/api/system/ping` (~15 s) pour keep-alive (client + serveur)
+---
 
-### Offline & fiabilité
-- 🚧 File d’ordres locale (queue), retry avec backoff, reprise au démarrage
-- ✅ Mode Mock vs API sélectionnable au démarrage du client
+## Sécurité & rôles
 
-### Qualité & CI
-- 🚧 Tests unitaires/services (conflits, résolution, indispos)
-- 🚧 CI Maven, packaging JAR, scripts d’exécution
+Au lancement (après choix **Mock** / **API**), une fenêtre de **connexion** s’ouvre :
+sélection de **l’agence**, **login/mot de passe** (en mock : `admin/admin`, `sales/sales`, `config/config` et variantes).
 
-## Démarrage rapide (dev)
-### Prérequis
-- Java 17
-- Maven 3.9+
-- (Optionnel) Docker pour un Postgres local
-- Lire `docs/OFFLINE.md` pour compiler le client en mode hors-ligne (`-Poffline`)
+**Rôles :**
+- **ADMIN** : tous les droits.
+- **SALES** : lecture planning + **édition** ventes (Devis/BC/BL/Factures), pas de configuration.
+- **CONFIG** : lecture générale + **édition** **Ressources** et **Paramètres**.
+
+**Comportements clés :**
+- Menu latéral **masqué** par droit (planning, ventes, ressources, paramètres).
+- **Interventions** en lecture seule pour non-ADMIN.
+- Ventes en lecture seule pour non-SALES/ADMIN (boutons Nouveau/Modifier/Supprimer/Enregistrer **désactivés**).
+- **Header** : bouton **Déconnexion** + **“Mot de passe…”** (changement du mot de passe utilisateur).
+- **Session** : expiration par inactivité (par défaut **30 min**, **paramétrable**).
+- **Pré-câblage JWT** : le mock renvoie un `token` (client l’envoie en `Authorization: Bearer …`) — prêt pour durcir côté API.
+
+**Administration des comptes (ADMIN seulement)** :
+- Onglet **Paramètres → Comptes utilisateurs** : liste, **créer**, **modifier**, **supprimer**, **définir mot de passe**.
+
+---
+
+## Données mock enrichies
+
+- **Ressources (~60)** : grues, camions, chariots, conteneurs, quelques convois “spéciaux”, états variés (DISPONIBLE / OCCUPÉE / EN_MAINTENANCE), **PU HT réalistes**.
+- **Clients (20)** : adresses FR plausibles, **tri par nom**.
+- **Contacts (2–4 par client)** : email/portable cohérents, **contact principal** marqué (si le modèle le supporte).
+- **Utilisateurs (15)** : répartition ADMIN/SALES/CONFIG sur 2 agences, mots de passe mock alignés sur les logins.
+- **Interventions (~60 / 2 semaines)** : titres, adresses (client ou “chantier”), **types** (icônes), **ressources multiples**, **contacts**, notes, horaires planifiés/logiques.
+
+> Les seeds mock sont **déterministes** (graine) pour des tests stables.
+
+---
+
+## UX — Navigation & écrans
+
+- **Menu latéral** compact **épingle**/**auto-repli** (icône + libellé au survol).
+- Icônes en couleur partout (menu, recherche globale, toasts, tuiles).
+- **Ressources** : même **pattern que Clients** (édition dans le panneau – pas de dialog), **filtre** par type, tri par défaut **par type**.
+- **InterventionDialog** : réorganisée et **tabulée** (ex. *Général*, *Intervention*, *Facturation*), **plein écran** pour les dispatchers, sélection **ergonomique** des ressources/contacts (listes + filtres).
+- **Types d’intervention** : tableau avec **drag & drop** pour l’ordre (`orderIndex`), **duplication**, **édition inline** (F2), persistance par **ID**.
+
+---
+
+## Interventions (v2)
+
+Caractéristiques principales :
+- Plusieurs **ressources hétérogènes** affectées.
+- **Type d’intervention** (icône configurable, ordre personnalisable).
+- **Horaires planifiés** et **effectifs** (début/fin).
+- **Contacts client** multiples (et **filtrage** par client).
+- **Notes** (interne + fin).
+- **Pré-devis** : génération initiale des lignes avec **PU** de chaque ressource.
+- **Signature** PNG (champ prévu côté service; utilisé si présent).
+
+**Planning :**
+- **Drag & drop** pour déplacer un créneau; filtre **Semaine/Mois**; rechargement auto après `save()`.
+- Ouverture depuis le planning (double-clic / menu contextuel) ; en lecture seule si l’utilisateur n’a pas le droit d’éditer.
+
+---
+
+## Ressources & types
+
+- **Ressource = prix unitaire (PU HT)** porté par la *ressource* (pas par le type).
+- **Indisponibilités** stockées en paires **date début** / **date fin**.
+- **Type de ressource** : porte l’**icône** (catalogue SVG couleur commun).
+- Édition **inline** des ressources dans le panneau (à la “Clients”).
+
+---
+
+## Paramétrage
+
+- **Icônes** : catalogue SVG couleur mutualisé (ressources, types, recherche globale, toasts).
+- **Types d’intervention** : ordre **DnD**, **duplication**, **édition inline** (F2), tri persistant (`orderIndex`).
+- **Général** : **durée d’inactivité** (minutes) avant déconnexion — *appliquée à chaud*.
+- **Comptes utilisateurs (ADMIN)** : CRUD utilisateurs + définition de mot de passe.
+
+---
+
+## Ventes (Devis/BC/BL/Factures)
+
+- Accès **lecture/édition** contrôlé par rôle (**SALES** ou **ADMIN** pour l’édition).
+- **Dialogs** de ventes forcent la **lecture seule** si l’utilisateur n’a pas les droits (boutons d’action désactivés, champs non éditables).
+- Conversion/flux à venir (pré-devis depuis l’intervention déjà amorcé via lignes ressources).
+
+---
+
+## API & contrat
+
+### Compatibilité
+- **OpenAPI v1** conservée pour les endpoints historiques (ex : `#/components/schemas/Quote` existants).
+- Les nouveautés sont **versionnées en v2** (DTO/contrôleurs dédiés).
+
+### Endpoints v2 ajoutés
+
+Authentification & agences :
+- `GET /api/v2/agencies` — liste des agences.
+- `POST /api/v2/auth/login` — **login** (retourne `UserV2` + éventuel `token` mock).
+
+Administration utilisateurs :
+- `GET /api/v2/users` — lister.
+- `POST /api/v2/users` — créer (payload `UserCreateRequest` avec mot de passe).
+- `PUT /api/v2/users/{id}` — mettre à jour.
+- `DELETE /api/v2/users/{id}` — supprimer.
+- `POST /api/v2/users/{id}/password` — définir le mot de passe.
+
+Types d’intervention :
+- `GET /api/v2/intervention-types` — renvoie la liste **triée** par `orderIndex`.
+- `POST /api/v2/intervention-types` / `PUT /api/v2/intervention-types/{id}` — création/maj (gèrent `orderIndex`).
+
+> **Casing JSON** : attention aux propriétés `totalTtc` (client/serveur alignés via `@JsonProperty("totalTtc")` le cas échéant).
+
+### Auth côté client
+- Le client reçoit un `token` (mock) au login et l’envoie automatiquement via `Authorization: Bearer …`.
+- Le backend **n’exige pas** encore le JWT : prêt pour un durcissement futur (filtre/decoder).
+
+---
+
+## Build & Run
 
 ### Backend
 ```bash
-cd backend
-mvn spring-boot:run
+mvn -pl backend -am spring-boot:run
 ```
-
-- Profil `dev` (défaut) : `application.yml` → H2 en mémoire + console H2 activée.
-- Profil `pg` (en cours) : future `application-pg.yml` à activer via `--spring.profiles.active=pg` ; en attendant, injecter `SPRING_DATASOURCE_URL/USERNAME/PASSWORD`.
-- Variables d’environnement utiles : `JWT_SECRET`, `TENANT_DEFAULT`, `ALLOWED_ORIGINS`.
-- URL dev typique : http://localhost:8080.
+Expose les endpoints **v1** historiques et les ajouts **v2** ci-dessus. Spécification OpenAPI dans
+`backend/src/main/resources/openapi/gestion-materiel-v1.yaml` (inclut les schémas v2).
 
 ### Client (Swing)
 ```bash
-cd client
-mvn -q exec:java
+mvn -pl client -am package
+java -jar client/target/gestion-materiel-client.jar
 ```
+Au démarrage :
+1. Choisir **Mock** ou **API**,
+2. **Login** (sélection d’agence + identifiants).
 
-- Classe main alternative : `com.materiel.suite.client.Launcher`.
-- Choix Mock/API : effectué sur l’écran d’accueil (base URL, token, tenant).
+**Comptes mock** utiles :
+- `admin / admin` (plein accès),
+- `sales / sales` (ventes éditables),
+- `config / config` (paramètres & ressources éditables).
 
-> **Mode Mock vs API**  
-> Mock = données locales, pas de détection de conflits serveur ni de persistance.  
-> API = appelle le backend REST ; nécessite un token JWT (en cours) et l’en-tête `X-Tenant`.  
-> Le mode peut être rebasculé via `Paramètres → Connexion` ; une file offline (🚧) mettra en cache les actions lors des coupures réseau.
+---
 
-### Seeds & données d’essai
-- Le backend charge un jeu d’essai en mémoire (`InMemoryStore`) : ressources “Grue A/B”, interventions de la semaine courante.
-- Jeux complémentaires : `seeds/quotes.json`, `seeds/orders.json` pour préparer les écrans Devis/Commandes.
-- Adapter les seeds lors du passage en multi-tenant (prévoir colonnes `tenantCode`).
+## Roadmap
 
-## API & contrats
-- OpenAPI versionnée : `backend/src/main/resources/openapi/gestion-materiel-v1.yaml` (copie vendored dans `client/openapi/` pour build offline).
-- Contrats mis à jour à chaque livraison backend ; les clients Swing consomment un SDK généré à partir de ce fichier.
+- Génération **PDF** (bons d’intervention / BL / factures) avec les icônes & signatures.
+- **Mobile** terrain : app dédiée pour chauffeurs/grutiers (liste du jour, démarrage & fin effectifs, signature client).
+- **JWT** côté backend (validation, rôles/autorités) + rafraîchissement de token.
+- Import/Export **JSON** des types d’intervention & icônes.
+- Optimisation calendrier : **regroupement** par ressource, **détection de conflits** (chevauchements/indispos).
 
-Endpoints clés :
-- POST `/auth/login` → JWT (🧭 roadmap)
-- GET `/api/system/ping` (SSE, dev) → keep-alive et surveillance des pannes
-- GET `/api/resources` / GET `/api/interventions` (dev)
-- GET `/api/planning/conflicts?from=&to=` (🚧)
-- POST `/api/planning/resolve` avec `action: shift|reassign|split` (🚧)
-- GET|POST|DELETE `/api/resources/{id}/unavailability` (🚧)
+---
 
-Exemples `curl` :
-```bash
-curl -N http://localhost:8080/api/system/ping
-curl -H "X-Tenant: DEMO" http://localhost:8080/api/planning/conflicts?from=2025-09-15T00:00:00&to=2025-09-21T23:59:59
-```
+## Licence
 
-En-têtes à fournir :
-- `Authorization: Bearer <token>` (JWT, 🚧)
-- `X-Tenant: <code_agence>` (multi-tenant, 🚧)
-
-## Guide utilisateur (client Swing)
-- Vue Planning : bascule Semaine/Jour, drag & drop horizontal/vertical, resize avec pas de 15 min, densité d’affichage.
-- Vue Agenda (15 min) : colonnes par ressource, création rapide par double-clic, navigation clavier (←/→ pour ±15 min).
-- Panneau Conflits : liste des collisions, boutons **Décaler**, **Réassigner**, **Scinder** (API en cours d’activation).
-- Overlays d’indisponibilités : affichage (🚧) avec toggle dans la toolbar ; CRUD relié au backend en cours.
-- Documents commerciaux : création d’un Devis, conversions Devis→BC→BL→Facture (🚧), totaux multi-TVA et modèles de lignes (🚧).
-- Export PDF : thèmes par tenant, logos et CGV (🚧, utilise OpenPDF si dispo).
-
-Pipeline statuts (personnalisable) :
-
-| Étape | Description |
-| --- | --- |
-| Brouillon | édition libre + duplication |
-| Validé | verrouillage partiel, prêt pour envoi |
-| Envoyé | suivi client, relances |
-| Facturé | déclenche la facturation & export comptable |
-
-## Architecture & décisions clés
-- Monorepo Maven : `backend/` (API) vs `client/` (Swing) avec parent `pom.xml` commun.
-- OpenAPI embarqué pour garantir le build offline et éviter les divergences de contrat.
-- Multi-tenant via en-tête `X-Tenant` (🚧) + colonnes tenant dans les futures tables.
-- Authentification JWT (🚧) : filter Spring Security à activer, stockage des refresh tokens à définir.
-- SSE `/api/system/ping` : keep-alive 15 s pour détecter les coupures réseau (implémentation minimaliste côté serveur/client).
-- File offline (🚧) : ordonnancement local et reprise après reconnexion.
-- Documents commerciaux : pipeline Devis→BC→BL→Facture et PDF multi-tenant (🚧) avec séquences par agence.
-- Exports comptables : FEC/CSV/XLSX + archive ZIP signée SHA-256 (🧭).
-
-## Roadmap (lots priorisés)
-- **Lot A – Conflits (serveur & client)** : finaliser les endpoints `/api/planning/conflicts` & `/api/planning/resolve`, panneau Conflits interactif.
-- **Lot B – Indispos** : CRUD complet des indisponibilités + overlay UI et filtres.
-- **Lot C – Agenda pro** : lanes parallèles, snapping consolidé, DnD vertical/horizontal stabilisé.
-- **Lot D – Docs commerciaux** : statuts & conversions complètes, totaux multi-TVA, modèles de lignes, PDF multi-tenant & séquences.
-- **Lot E – Sécurité & multi-tenant** : auth JWT, propagation `X-Tenant`, SSE robuste, file offline & retry.
-
-## Contribuer / Dev notes
-- Branche principale : `main`. Utiliser des PRs courtes ; pas de branches longues non rebases.
-- Conventions de commit : Conventional Commits (`feat:`, `fix:`, `docs:`…).
-- Style Java : Google Java Style simplifié (imports groupés, pas de `*`).
-- Tests à compléter : services de détection de conflits, règles de résolution, indisponibilités, conversions Devis→Facture.
-- Build local : `mvn -q -DskipTests install` depuis la racine ; exécuter `mvn -pl backend test` avant PR dès que les suites seront ajoutées.
-- Scripts de lancement dédiés (`run-backend.sh`, `run-client.sh`) : TODO.
-- Pense-bête multi-tenant : toujours inclure `X-Tenant` dans les appels API et filtrer côté repo/service.
-
-## Licences & mentions
-- Licence : MIT (`LICENSE`).
-- Dépendances clés : Spring Boot 3, Spring Data JPA, OkHttp, Jackson, FlatLaf (UI), OpenPDF (PDF). Tous compatibles Java 17.
-- Packages tiers embarqués : SDK client généré depuis l’OpenAPI, thèmes FlatLaf clair/sombre.
-- Mentions légales : aligner CGV et identité visuelle par tenant ; signature électronique avancée (eIDAS) en 🧭 roadmap.
-- Sécurité : audit JWT/tenants à planifier avant déploiement prod ; vérifier les hachages SHA-256 sur les exports.
+Voir le fichier `LICENSE` le cas échéant.
