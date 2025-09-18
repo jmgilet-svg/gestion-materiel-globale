@@ -86,7 +86,7 @@ final class InterventionAgendaRenderer {
     // Chips docs
     y += 22;
     wrapChips(g2, r, x, y, List.of(
-        chipSpec(it.getQuoteNumber(), new Color(0xD1FAE5), new Color(0x176E43), "Devis "),
+        chipSpec(quoteReference(it), new Color(0xD1FAE5), new Color(0x176E43), "Devis "),
         chipSpec(it.getOrderNumber(), new Color(0xFEF3C7), new Color(0xA16207), "Commande "),
         chipSpec(it.getDeliveryNumber(), new Color(0xE5E7EB), new Color(0x374151), "BL "),
         chipSpec(it.getInvoiceNumber(), new Color(0xE5E7EB), new Color(0x374151), "Fact. ")
@@ -139,6 +139,17 @@ final class InterventionAgendaRenderer {
     g2.setStroke(new BasicStroke(2));
     g2.drawRect(x, y+6, 12, 10);
     g2.drawArc(x+1, y, 10, 12, 0, 180);
+  }
+
+  private String quoteReference(Intervention it){
+    if (it == null){
+      return null;
+    }
+    String ref = it.getQuoteReference();
+    if (ref == null || ref.isBlank()){
+      ref = it.getQuoteNumber();
+    }
+    return ref;
   }
 }
 

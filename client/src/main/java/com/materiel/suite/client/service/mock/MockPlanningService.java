@@ -284,7 +284,10 @@ public class MockPlanningService implements PlanningService {
     intervention.setFavorite(rnd.nextInt(6) == 0);
     intervention.setLocked(rnd.nextInt(10) == 0);
     if (rnd.nextInt(4) == 0){
-      intervention.setQuoteNumber(String.format(Locale.ROOT, "Q-2025-%03d", 150 + rnd.nextInt(400)));
+      String quoteRef = String.format(Locale.ROOT, "Q-2025-%03d", 150 + rnd.nextInt(400));
+      intervention.setQuoteNumber(quoteRef);
+      intervention.setQuoteReference(quoteRef);
+      intervention.setQuoteId(UUID.randomUUID());
     }
     if (rnd.nextInt(5) == 0){
       intervention.setOrderNumber(String.format(Locale.ROOT, "CMD-2025-%04d", 50 + rnd.nextInt(300)));

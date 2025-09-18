@@ -19,7 +19,10 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 import javax.swing.AbstractAction;
 import javax.swing.Box;
@@ -42,22 +45,28 @@ import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 
+import com.materiel.suite.client.model.BillingLine;
 import com.materiel.suite.client.model.Conflict;
 import com.materiel.suite.client.model.Intervention;
-import com.materiel.suite.client.ui.icons.IconRegistry;
-import com.materiel.suite.client.ui.interventions.InterventionDialog;
+import com.materiel.suite.client.model.Quote;
 import com.materiel.suite.client.model.Resource;
+import com.materiel.suite.client.model.ResourceRef;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.PlanningService;
 import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.commands.CommandBus;
 import com.materiel.suite.client.ui.MainFrame;
+import com.materiel.suite.client.ui.icons.IconRegistry;
+import com.materiel.suite.client.ui.interventions.InterventionDialog;
+import com.materiel.suite.client.ui.interventions.PreDevisUtil;
+import com.materiel.suite.client.ui.interventions.QuoteGenerator;
 
 public class PlanningPanel extends JPanel {
   private static final DateTimeFormatter SIMPLE_DAY_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
   private static final DateTimeFormatter SIMPLE_DAY_TIME_FORMAT = DateTimeFormatter.ofPattern("dd/MM HH:mm");
   private final PlanningBoard board = new PlanningBoard();
   private final AgendaBoard agenda = new AgendaBoard();
+  private final JButton bulkQuoteBtn = new JButton("Générer devis (sélection)", IconRegistry.small("file"));
   private JButton conflictsBtn;
   private JPanel ganttContainer;
   private JTabbedPane tabs;
@@ -235,6 +244,8 @@ public class PlanningPanel extends JPanel {
     bar.add(Box.createHorizontalStrut(16)); bar.add(simpleLabel); bar.add(simplePeriod); bar.add(simpleRefDate);
     bar.add(simplePrev); bar.add(simpleToday); bar.add(simpleNext);
     bar.add(Box.createHorizontalStrut(16)); bar.add(addI);
+    bar.add(Box.createHorizontalStrut(8)); bar.add(bulkQuoteBtn);
+    bulkQuoteBtn.addActionListener(e -> generateQuotesForSelection());
     return bar;
   }
 
@@ -334,6 +345,70 @@ public class PlanningPanel extends JPanel {
     refreshPlanning();
   }
 
+  private void generateQuotesForSelection(){
+    if (tabs == null || tabs.getSelectedComponent() != tableView.getComponent()){
+      Toasts.info(this, "Sélectionnez les interventions dans l'onglet Liste pour générer les devis.");
+      return;
+    }
+    List<Intervention> selection = tableView.getSelection();
+    if (selection.isEmpty()){
+      Toasts.info(this, "Aucune intervention sélectionnée");
+      return;
+    }
+    PlanningService planning = ServiceFactory.planning();
+    var quoteService = ServiceFactory.quotes();
+    if (planning == null || quoteService == null){
+      Toasts.error(this, "Service indisponible pour générer les devis");
+      return;
+    }
+    Map<UUID, Resource> catalog = new HashMap<>();
+    for (Resource resource : planning.listResources()){
+      if (resource != null && resource.getId() != null){
+        catalog.put(resource.getId(), resource);
+      }
+    }
+    int created = 0, skipped = 0, failed = 0;
+    for (Intervention intervention : selection){
+      if (intervention == null){
+        continue;
+      }
+      if (intervention.hasQuote()){
+        skipped++;
+        continue;
+      }
+      try {
+        List<BillingLine> lines = ensureBillingLines(intervention, catalog);
+        if (lines.isEmpty()){
+          skipped++;
+          continue;
+        }
+        Quote draft = QuoteGenerator.buildQuoteFromIntervention(intervention, lines);
+        Quote createdQuote = quoteService.save(draft);
+        if (createdQuote == null){
+          throw new IllegalStateException("Réponse vide du service devis");
+        }
+        intervention.setBillingLines(lines);
+        intervention.setQuoteDraft(QuoteGenerator.toDocumentLines(lines));
+        intervention.setQuoteId(createdQuote.getId());
+        intervention.setQuoteReference(createdQuote.getNumber());
+        intervention.setQuoteNumber(createdQuote.getNumber());
+        planning.saveIntervention(intervention);
+        created++;
+      } catch (Exception ex){
+        failed++;
+      }
+    }
+    refreshPlanning();
+    String message = String.format("Devis générés: %d • ignorés: %d • erreurs: %d", created, skipped, failed);
+    if (failed > 0){
+      Toasts.error(this, message);
+    } else if (created > 0){
+      Toasts.success(this, message);
+    } else {
+      Toasts.info(this, message);
+    }
+  }
+
   private void refreshPlanning(){
     PlanningService planning = ServiceFactory.planning();
     if (planning == null){
@@ -397,6 +472,17 @@ public class PlanningPanel extends JPanel {
     LocalDate[] range = currentSimpleRange();
     LocalDate target = isMonthSelected() ? range[0].plusMonths(direction) : range[0].plusWeeks(direction);
     updateSimpleReference(target);
+  }
+
+  private List<BillingLine> ensureBillingLines(Intervention intervention, Map<UUID, Resource> catalog){
+    List<BillingLine> lines = intervention.getBillingLines();
+    if (lines != null && !lines.isEmpty()){
+      return lines;
+    }
+    List<ResourceRef> refs = intervention.getResources();
+    List<BillingLine> generated = PreDevisUtil.fromResourceRefs(refs, catalog);
+    intervention.setBillingLines(generated);
+    return generated;
   }
 
   private void updateSimpleReference(LocalDate date){

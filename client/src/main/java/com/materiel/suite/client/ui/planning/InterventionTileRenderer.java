@@ -273,8 +273,9 @@ final class InterventionTileRenderer {
 
   private String[] chipsFor(Intervention it){
     List<String> list = new ArrayList<>();
-    if (it.getQuoteNumber()!=null && !it.getQuoteNumber().isBlank())
-      list.add("Devis " + it.getQuoteNumber());
+    String quote = quoteReference(it);
+    if (quote != null)
+      list.add("Devis " + quote);
     if (it.getOrderNumber()!=null && !it.getOrderNumber().isBlank())
       list.add("Commande " + it.getOrderNumber());
     if (it.getDeliveryNumber()!=null && !it.getDeliveryNumber().isBlank())
@@ -315,6 +316,20 @@ final class InterventionTileRenderer {
           new Color(0xE5E7EB), new Color(0x374151), s);
       curX += w + CHIP_GAP;
     }
+  }
+
+  private String quoteReference(Intervention it){
+    if (it == null){
+      return null;
+    }
+    String ref = it.getQuoteReference();
+    if (ref == null || ref.isBlank()){
+      ref = it.getQuoteNumber();
+    }
+    if (ref == null || ref.isBlank()){
+      return null;
+    }
+    return ref;
   }
 }
 

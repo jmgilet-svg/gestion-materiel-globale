@@ -31,6 +31,8 @@ public class Intervention {
   private final List<DocumentLine> quoteDraft = new ArrayList<>();
 
   private final List<BillingLine> billingLines = new ArrayList<>();
+  private UUID quoteId;
+  private String quoteReference;
 
   // Champs enrichis pour rendu "carte"
   private String clientName;
@@ -301,6 +303,19 @@ public class Intervention {
   public void setLocked(boolean locked){ this.locked = locked; }
   public String getQuoteNumber(){ return quoteNumber; }
   public void setQuoteNumber(String quoteNumber){ this.quoteNumber = quoteNumber; }
+  public UUID getQuoteId(){ return quoteId; }
+  public void setQuoteId(UUID quoteId){ this.quoteId = quoteId; }
+  public String getQuoteReference(){ return quoteReference; }
+  public void setQuoteReference(String quoteReference){ this.quoteReference = quoteReference; }
+  public boolean hasQuote(){
+    if (quoteId != null){
+      return true;
+    }
+    if (quoteReference != null && !quoteReference.isBlank()){
+      return true;
+    }
+    return quoteNumber != null && !quoteNumber.isBlank();
+  }
   public String getOrderNumber(){ return orderNumber; }
   public void setOrderNumber(String orderNumber){ this.orderNumber = orderNumber; }
   public String getDeliveryNumber(){ return deliveryNumber; }

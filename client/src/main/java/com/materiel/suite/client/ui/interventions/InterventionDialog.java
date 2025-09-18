@@ -7,8 +7,10 @@ import com.materiel.suite.client.model.Contact;
 import com.materiel.suite.client.model.DocumentLine;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.InterventionType;
+import com.materiel.suite.client.model.Quote;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.model.ResourceRef;
+import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.ClientService;
 import com.materiel.suite.client.service.InterventionTypeService;
 import com.materiel.suite.client.service.PlanningService;
@@ -61,6 +63,7 @@ public class InterventionDialog extends JDialog {
   private final BillingTableModel billingModel = new BillingTableModel();
   private final JTable billingTable = new JTable(billingModel);
   private final JLabel totalHtLabel = new JLabel();
+  private final JLabel quoteStatusLabel = new JLabel("Aucun devis généré");
   private final NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(Locale.FRANCE);
   private final JButton saveButton = new JButton("Enregistrer", IconRegistry.small("success"));
   private final JButton regenerateBillingButton = new JButton("Depuis ressources", IconRegistry.small("refresh"));
@@ -256,6 +259,8 @@ public class InterventionDialog extends JDialog {
     toolbar.addSeparator();
     toolbar.add(generateQuoteButton);
     toolbar.add(Box.createHorizontalStrut(12));
+    toolbar.add(quoteStatusLabel);
+    toolbar.add(Box.createHorizontalStrut(12));
     toolbar.add(totalHtLabel);
     panel.add(toolbar, BorderLayout.NORTH);
     panel.add(new JScrollPane(billingTable), BorderLayout.CENTER);
@@ -433,8 +438,55 @@ public class InterventionDialog extends JDialog {
   private void generateQuoteFromPrebilling(){
     billingModel.recalcAll();
     computeTotals();
-    BigDecimal total = billingModel.totalHt();
-    Toasts.success(this, "Devis généré (préparation) — Total HT : " + currencyFormat.format(total));
+    List<BillingLine> lines = billingModel.getLines();
+    if (lines.isEmpty()){
+      Toasts.info(this, "Aucune ligne de pré-devis à convertir");
+      return;
+    }
+    if (current == null){
+      Toasts.error(this, "Intervention introuvable");
+      return;
+    }
+    if (current.hasQuote()){
+      int confirm = JOptionPane.showConfirmDialog(this,
+          "Un devis est déjà lié à cette intervention. Générer un nouveau devis ?",
+          "Devis existant",
+          JOptionPane.OK_CANCEL_OPTION,
+          JOptionPane.WARNING_MESSAGE);
+      if (confirm != JOptionPane.OK_OPTION){
+        return;
+      }
+    }
+    var quoteService = ServiceFactory.quotes();
+    if (quoteService == null){
+      Toasts.error(this, "Service devis indisponible");
+      return;
+    }
+    try {
+      Quote draft = QuoteGenerator.buildQuoteFromIntervention(current, lines);
+      Quote created = quoteService.save(draft);
+      if (created == null){
+        throw new IllegalStateException("Réponse vide du service devis");
+      }
+      current.setBillingLines(lines);
+      current.setQuoteDraft(QuoteGenerator.toDocumentLines(lines));
+      current.setQuoteId(created.getId());
+      current.setQuoteReference(created.getNumber());
+      current.setQuoteNumber(created.getNumber());
+      updateQuoteBadge();
+      String ref = created.getNumber();
+      if (ref == null || ref.isBlank()){
+        ref = created.getId() != null ? created.getId().toString() : "";
+      }
+      Toasts.success(this, ref == null || ref.isBlank() ? "Devis créé" : "Devis créé — " + ref);
+      if (onSaveCallback != null){
+        onSaveCallback.accept(current);
+      } else if (planningService != null){
+        planningService.saveIntervention(current);
+      }
+    } catch (Exception ex){
+      Toasts.error(this, "Échec de génération du devis : " + ex.getMessage());
+    }
   }
 
   private void onResourceSelectionChanged(){
@@ -545,29 +597,6 @@ public class InterventionDialog extends JDialog {
     return result;
   }
 
-  private List<DocumentLine> toDocumentLines(List<BillingLine> lines){
-    List<DocumentLine> result = new ArrayList<>();
-    if (lines == null){
-      return result;
-    }
-    for (BillingLine line : lines){
-      if (line == null){
-        continue;
-      }
-      DocumentLine doc = new DocumentLine();
-      doc.setDesignation(line.getDesignation());
-      BigDecimal quantity = line.getQuantity();
-      doc.setQuantite(quantity != null ? quantity.doubleValue() : 0d);
-      doc.setUnite(line.getUnit());
-      BigDecimal price = line.getUnitPriceHt();
-      doc.setPrixUnitaireHT(price != null ? price.doubleValue() : 0d);
-      doc.setRemisePct(0d);
-      doc.setTvaPct(0d);
-      result.add(doc);
-    }
-    return result;
-  }
-
 
   public void edit(Intervention intervention){
     this.current = intervention == null ? new Intervention() : intervention;
@@ -612,6 +641,7 @@ public class InterventionDialog extends JDialog {
     billingModel.setLines(lines);
     syncAutoBillingLinesWithResources();
     computeTotals();
+    updateQuoteBadge();
   }
 
   private void populateTypes(){
@@ -734,6 +764,24 @@ public class InterventionDialog extends JDialog {
     totalHtLabel.setText("Total HT : " + currencyFormat.format(total));
   }
 
+  private void updateQuoteBadge(){
+    String text = "Aucun devis généré";
+    if (current != null){
+      String ref = current.getQuoteReference();
+      if (ref == null || ref.isBlank()){
+        ref = current.getQuoteNumber();
+      }
+      if (current.hasQuote() || (ref != null && !ref.isBlank())){
+        if (ref == null || ref.isBlank()){
+          text = "Devis lié";
+        } else {
+          text = "Devis : " + ref;
+        }
+      }
+    }
+    quoteStatusLabel.setText(text);
+  }
+
   public Intervention collect(){
     if (current == null){
       current = new Intervention();
@@ -771,7 +819,7 @@ public class InterventionDialog extends JDialog {
     current.setContacts(contactPicker.getSelectedContacts());
     List<BillingLine> billingLines = billingModel.getLines();
     current.setBillingLines(billingLines);
-    current.setQuoteDraft(toDocumentLines(billingLines));
+    current.setQuoteDraft(QuoteGenerator.toDocumentLines(billingLines));
     String signer = signatureByField.getText();
     if (signer != null){
       signer = signer.trim();

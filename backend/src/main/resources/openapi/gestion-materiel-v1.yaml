@@ -599,6 +599,13 @@ components:
           type: boolean
         quoteNumber:
           type: string
+        quoteId:
+          type: string
+          format: uuid
+          description: Identifiant du devis lié
+        quoteReference:
+          type: string
+          description: Référence lisible du devis lié
         orderNumber:
           type: string
         deliveryNumber:
