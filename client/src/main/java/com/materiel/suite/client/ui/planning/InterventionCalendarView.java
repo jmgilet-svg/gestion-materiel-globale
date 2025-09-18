@@ -35,6 +35,7 @@ public class InterventionCalendarView implements InterventionView {
   private static final int SLOT_MINUTES = 15;
   private static final int COLUMN_WIDTH = 180;
   private static final int RESIZE_HANDLE = 6;
+  private static final Icon QUOTE_BADGE = IconRegistry.small("badge");
 
   private final JPanel root = new JPanel(new BorderLayout());
   private final JPanel days = new JPanel();
@@ -211,10 +212,14 @@ public class InterventionCalendarView implements InterventionView {
     JPanel panel = new JPanel(new BorderLayout(8, 0));
     panel.setOpaque(true);
     panel.setBackground(Color.WHITE);
-    panel.setBorder(BorderFactory.createCompoundBorder(
+    String quote = quoteReference(it);
+    panel.setBorder(badgeBorder(BorderFactory.createCompoundBorder(
         BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(235, 235, 235)),
         BorderFactory.createEmptyBorder(6, 8, 6, 8)
-    ));
+    ), quote));
+    if (quote != null){
+      panel.setToolTipText("Devis " + quote);
+    }
     panel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
     JLabel iconLabel = new JLabel();
@@ -443,6 +448,27 @@ public class InterventionCalendarView implements InterventionView {
     return value.substring(0, 1).toUpperCase(Locale.FRENCH) + value.substring(1);
   }
 
+  private javax.swing.border.Border badgeBorder(javax.swing.border.Border base, String quote){
+    if (quote != null && !quote.isBlank() && QUOTE_BADGE != null){
+      return BorderFactory.createCompoundBorder(new BadgeBorder(QUOTE_BADGE), base);
+    }
+    return base;
+  }
+
+  private String quoteReference(Intervention it){
+    if (it == null){
+      return null;
+    }
+    String ref = it.getQuoteReference();
+    if (ref == null || ref.isBlank()){
+      ref = it.getQuoteNumber();
+    }
+    if (ref == null || ref.isBlank()){
+      return null;
+    }
+    return ref;
+  }
+
   private class DayColumn extends JPanel {
     private final LocalDate day;
 
@@ -495,7 +521,12 @@ public class InterventionCalendarView implements InterventionView {
         {
           setOpaque(true);
           setBackground(new Color(197, 225, 250));
-          setBorder(BorderFactory.createLineBorder(new Color(144, 202, 249)));
+          String quoteInfo = quoteReference(it);
+          javax.swing.border.Border baseBorder = BorderFactory.createLineBorder(new Color(144, 202, 249));
+          setBorder(badgeBorder(baseBorder, quoteInfo));
+          if (quoteInfo != null){
+            setToolTipText("Devis " + quoteInfo);
+          }
           JLabel label = new JLabel(blockLabel(it, localStart, localEnd));
           InterventionType type = it.getType();
           if (type != null && type.getIconKey() != null){

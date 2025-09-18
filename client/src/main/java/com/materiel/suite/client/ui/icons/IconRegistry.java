@@ -18,7 +18,8 @@ public final class IconRegistry {
       "search", "success", "error", "info", "settings", "signature", "task", "invoice",
       "maximize", "minimize", "plus", "edit", "trash", "refresh", "image", "cube", "file",
       "calendar", "user", "wrench", "lock", "building",
-      "crane", "truck", "forklift", "container", "excavator", "generator", "hook", "helmet", "pallet"
+      "crane", "truck", "forklift", "container", "excavator", "generator", "hook", "helmet", "pallet",
+      "badge"
   );
   private static final Set<String> ICON_SET = Set.copyOf(ICON_KEYS);
   private static final Map<Integer, Icon> PLACEHOLDER_CACHE = new ConcurrentHashMap<>();

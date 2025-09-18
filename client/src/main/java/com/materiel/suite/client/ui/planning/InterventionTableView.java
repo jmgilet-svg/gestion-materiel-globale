@@ -46,6 +46,10 @@ public class InterventionTableView implements InterventionView {
     table.getColumnModel().getColumn(0).setCellRenderer(dateRenderer());
     table.getColumnModel().getColumn(1).setCellRenderer(dateRenderer());
     table.getColumnModel().getColumn(2).setCellRenderer(typeRenderer());
+    table.getColumnModel().getColumn(6).setCellRenderer(quoteRenderer());
+    table.getColumnModel().getColumn(6).setMaxWidth(48);
+    table.getColumnModel().getColumn(6).setMinWidth(36);
+    table.getColumnModel().getColumn(6).setPreferredWidth(40);
     table.getColumnModel().getColumn(7).setCellRenderer(resourceRenderer());
     table.addMouseListener(new MouseAdapter(){
       @Override public void mousePressed(MouseEvent e){
@@ -169,6 +173,33 @@ public class InterventionTableView implements InterventionView {
           label.setIconTextGap(6);
         } else {
           label.setText("");
+        }
+        return label;
+      }
+    };
+  }
+
+  private DefaultTableCellRenderer quoteRenderer(){
+    return new DefaultTableCellRenderer(){
+      private final Icon badge = IconRegistry.small("badge");
+      private final Icon fallback = IconRegistry.small("file");
+
+      @Override public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column){
+        JLabel label = (JLabel) super.getTableCellRendererComponent(table, "", isSelected, hasFocus, row, column);
+        label.setHorizontalAlignment(SwingConstants.CENTER);
+        label.setText("");
+        label.setIcon(null);
+        label.setToolTipText(null);
+        String ref = value instanceof String ? (String) value : null;
+        boolean show = ref != null && !ref.isBlank();
+        if (show){
+          Icon icon = badge != null ? badge : fallback;
+          if (icon != null){
+            label.setIcon(icon);
+          } else {
+            label.setText("•");
+          }
+          label.setToolTipText(ref);
         }
         return label;
       }
