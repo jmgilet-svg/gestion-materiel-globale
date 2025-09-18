@@ -1,6 +1,9 @@
 package com.materiel.suite.client.ui.planning;
 
 import com.materiel.suite.client.model.Intervention;
+import com.materiel.suite.client.ui.icons.IconRegistry;
+
+import javax.swing.Icon;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -11,6 +14,7 @@ final class InterventionTileRenderer {
   private static final int R = PlanningUx.RADIUS;
   private static final int CHIP_H = 24;
   private static final int CHIP_GAP = 8;
+  private static final Icon QUOTE_BADGE = IconRegistry.small("badge");
   private boolean compact = false;
   private UiDensity density = UiDensity.NORMAL;
   private double scaleY = 1.0;
@@ -172,6 +176,15 @@ final class InterventionTileRenderer {
       g2.setStroke(old);
     } else {
       PlanningUx.strokeRound(g2, r);
+    }
+
+    if (QUOTE_BADGE != null){
+      String quoteRef = quoteReference(it);
+      if (quoteRef != null){
+        int ix = r.x + r.width - QUOTE_BADGE.getIconWidth() - PAD;
+        int iy = r.y + PAD;
+        QUOTE_BADGE.paintIcon(null, g2, ix, iy);
+      }
     }
 
     int x = r.x + PAD;
