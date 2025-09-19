@@ -134,7 +134,10 @@ public class InterventionDialog extends JDialog {
   private void installWorkflowHooks(){
     // Mapping étapes → onglets (ordre figé) : Intervention(1), Devis(3), Facturation(2)
     workflowStepBar.setOnNavigate(this::navigateToStep);
-    ChangeListener spinnerListener = e -> refreshWorkflowState();
+    ChangeListener spinnerListener = e -> {
+      updateResourcePickerWindow();
+      refreshWorkflowState();
+    };
     startSpinner.addChangeListener(spinnerListener);
     endSpinner.addChangeListener(spinnerListener);
     titleField.getDocument().addDocumentListener(documentListener(this::refreshWorkflowState));
@@ -733,6 +736,8 @@ public class InterventionDialog extends JDialog {
     this.current = intervention == null ? new Intervention() : intervention;
     this.saved = false;
 
+    resourcePicker.setContext(this.current);
+
     reloadAvailableTypes();
     populateTypes();
     populateClients();
@@ -763,6 +768,7 @@ public class InterventionDialog extends JDialog {
     startSpinner.setValue(toDate(start));
     endSpinner.setValue(toDate(end));
 
+    updateResourcePickerWindow();
     resourcePicker.setSelectedResources(current.getResources());
 
     List<BillingLine> lines = current.getBillingLines();
@@ -888,6 +894,15 @@ public class InterventionDialog extends JDialog {
       return client.getId();
     }
     return null;
+  }
+
+  private void updateResourcePickerWindow(){
+    if (resourcePicker == null){
+      return;
+    }
+    LocalDateTime start = toLocalDateTime(startSpinner.getValue());
+    LocalDateTime end = toLocalDateTime(endSpinner.getValue());
+    resourcePicker.setPlannedWindow(start, end);
   }
 
   private void loadResources(){
