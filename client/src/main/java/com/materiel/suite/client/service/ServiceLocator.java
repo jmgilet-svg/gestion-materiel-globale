@@ -4,6 +4,7 @@ import com.materiel.suite.client.auth.AuthService;
 import com.materiel.suite.client.model.InterventionType;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.net.ServiceFactory;
+import com.materiel.suite.client.service.impl.LocalSettingsService;
 import com.materiel.suite.client.users.UserService;
 
 import java.util.List;
@@ -16,6 +17,8 @@ import java.util.UUID;
 public final class ServiceLocator {
   private static final ResourcesGateway RESOURCES = new ResourcesGateway();
   private static final InterventionTypesGateway INTERVENTION_TYPES = new InterventionTypesGateway();
+
+  private static SettingsService SETTINGS;
 
   private ServiceLocator(){
   }
@@ -38,6 +41,13 @@ public final class ServiceLocator {
 
   public static SalesService sales(){
     return ServiceFactory.sales();
+  }
+
+  public static SettingsService settings(){
+    if (SETTINGS == null){
+      SETTINGS = new LocalSettingsService();
+    }
+    return SETTINGS;
   }
 
   public static final class ResourcesGateway {
