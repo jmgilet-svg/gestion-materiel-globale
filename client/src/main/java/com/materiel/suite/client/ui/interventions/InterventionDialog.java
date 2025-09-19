@@ -28,6 +28,9 @@ import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.*;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -37,6 +40,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.text.NumberFormat;
+import java.text.SimpleDateFormat;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Date;
@@ -44,6 +49,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Deque;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -91,6 +97,16 @@ public class InterventionDialog extends JDialog {
   private final JButton fullscreenButton = new JButton("", IconRegistry.small("maximize"));
   private Rectangle previousBounds;
   private final boolean readOnly;
+  private volatile boolean dirty;
+  private volatile long lastEditTs;
+  private final Timer autosaveTimer = new Timer(30_000, e -> tryAutosave());
+  private final JLabel autosaveLabel = new JLabel(" ");
+  private final Deque<List<BillingLine>> undoStack = new ArrayDeque<>();
+  private final Deque<List<BillingLine>> redoStack = new ArrayDeque<>();
+  private static final int MAX_HISTORY = 20;
+  private List<BillingLine> lastLinesSnapshot = new ArrayList<>();
+  private boolean skipNextTableSnapshot;
+  private boolean suppressDirtyEvents;
 
   private Intervention current;
   private boolean saved;
@@ -110,7 +126,10 @@ public class InterventionDialog extends JDialog {
     this.resourcePicker = new ResourcePickerPanel(planningService);
     this.readOnly = !AccessControl.canEditInterventions();
     this.resourcePicker.setSelectionListener(this::onResourceSelectionChanged);
-    this.contactPicker.setSelectionListener(this::refreshWorkflowState);
+    this.contactPicker.setSelectionListener(() -> {
+      refreshWorkflowState();
+      markEdited();
+    });
     templateCombo.setRenderer(new DefaultListCellRenderer(){
       @Override public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus){
         JLabel label = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
@@ -140,6 +159,8 @@ public class InterventionDialog extends JDialog {
     loadTemplates();
     installWorkflowHooks();
     buildShortcuts();
+    wireDirtyTracking();
+    startAutosave();
     refreshWorkflowState();
     setResizable(true);
     setMinimumSize(new Dimension(1180, 760));
@@ -155,6 +176,7 @@ public class InterventionDialog extends JDialog {
     configureSpinners();
     configureBillingTable();
     billingModel.addTableModelListener(e -> {
+      handleBillingModelMutation();
       computeTotals();
       refreshWorkflowState();
     });
@@ -183,6 +205,7 @@ public class InterventionDialog extends JDialog {
     ChangeListener spinnerListener = e -> {
       updateResourcePickerWindow();
       refreshWorkflowState();
+      markEdited();
     };
     startSpinner.addChangeListener(spinnerListener);
     endSpinner.addChangeListener(spinnerListener);
@@ -199,6 +222,233 @@ public class InterventionDialog extends JDialog {
     KeymapUtil.bindGlobal(root, "intervention-step-1", KeymapUtil.ctrlDigit(1), () -> selectTabSafe(1));
     KeymapUtil.bindGlobal(root, "intervention-step-2", KeymapUtil.ctrlDigit(2), () -> selectTabSafe(3));
     KeymapUtil.bindGlobal(root, "intervention-step-3", KeymapUtil.ctrlDigit(3), () -> selectTabSafe(2));
+    InputMap map = root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+    ActionMap actions = root.getActionMap();
+    map.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, KeymapUtil.menuMask()), "intervention-undo");
+    actions.put("intervention-undo", new AbstractAction(){
+      @Override public void actionPerformed(java.awt.event.ActionEvent e){
+        undoLines();
+      }
+    });
+    map.put(KeyStroke.getKeyStroke(KeyEvent.VK_Y, KeymapUtil.menuMask()), "intervention-redo");
+    actions.put("intervention-redo", new AbstractAction(){
+      @Override public void actionPerformed(java.awt.event.ActionEvent e){
+        redoLines();
+      }
+    });
+  }
+
+  private void wireDirtyTracking(){
+    if (readOnly){
+      autosaveLabel.setText("Lecture seule");
+      return;
+    }
+    titleField.getDocument().addDocumentListener(documentListener(this::markEdited));
+    addressField.getDocument().addDocumentListener(documentListener(this::markEdited));
+    descriptionArea.getDocument().addDocumentListener(documentListener(this::markEdited));
+    internalNoteArea.getDocument().addDocumentListener(documentListener(this::markEdited));
+    closingNoteArea.getDocument().addDocumentListener(documentListener(this::markEdited));
+    signatureByField.getDocument().addDocumentListener(documentListener(this::markEdited));
+    ChangeListener listener = e -> markEdited();
+    startSpinner.addChangeListener(listener);
+    endSpinner.addChangeListener(listener);
+    signatureAtSpinner.addChangeListener(listener);
+    lastLinesSnapshot = deepCopyLines(billingModel.getLines());
+  }
+
+  private void startAutosave(){
+    if (readOnly){
+      autosaveLabel.setText("Lecture seule");
+      return;
+    }
+    autosaveTimer.setRepeats(true);
+    autosaveTimer.setInitialDelay(30_000);
+    autosaveTimer.start();
+    addWindowListener(new WindowAdapter(){
+      @Override public void windowClosing(WindowEvent e){
+        if (!dirty){
+          setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+          return;
+        }
+        int choice = JOptionPane.showConfirmDialog(
+            InterventionDialog.this,
+            "Des modifications n'ont pas été enregistrées. Enregistrer avant de fermer ?",
+            "Fermer la fiche",
+            JOptionPane.YES_NO_CANCEL_OPTION);
+        if (choice == JOptionPane.CANCEL_OPTION){
+          setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
+          return;
+        }
+        if (choice == JOptionPane.YES_OPTION){
+          doSaveNow(true);
+          if (dirty){
+            setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
+            return;
+          }
+        }
+        setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+      }
+
+      @Override public void windowClosed(WindowEvent e){
+        autosaveTimer.stop();
+      }
+    });
+  }
+
+  private void tryAutosave(){
+    if (readOnly || !dirty){
+      return;
+    }
+    long since = System.currentTimeMillis() - lastEditTs;
+    if (since < 10_000L){
+      return;
+    }
+    doSaveNow(false);
+  }
+
+  private void doSaveNow(boolean toast){
+    if (readOnly){
+      return;
+    }
+    try {
+      collect();
+      boolean persisted = false;
+      if (onSaveCallback != null){
+        onSaveCallback.accept(current);
+        persisted = true;
+      } else if (planningService != null){
+        planningService.saveIntervention(current);
+        persisted = true;
+      }
+      if (toast && persisted){
+        Toasts.success(this, "Modifications enregistrées");
+      }
+      markSaved(toast && persisted ? "Modifications enregistrées" : "Brouillon enregistré");
+    } catch (IllegalArgumentException ex){
+      autosaveLabel.setText("⚠︎ " + ex.getMessage());
+    } catch (RuntimeException ex){
+      String msg = ex.getMessage();
+      if (msg == null || msg.isBlank()){
+        msg = ex.getClass().getSimpleName();
+      }
+      autosaveLabel.setText("⚠︎ Échec enregistrement : " + msg);
+    }
+  }
+
+  private void markEdited(){
+    if (readOnly || suppressDirtyEvents){
+      return;
+    }
+    dirty = true;
+    lastEditTs = System.currentTimeMillis();
+    autosaveLabel.setText("Modifications non enregistrées…");
+  }
+
+  private void markSaved(String message){
+    lastLinesSnapshot = deepCopyLines(billingModel.getLines());
+    dirty = false;
+    lastEditTs = 0L;
+    if (readOnly){
+      autosaveLabel.setText("Lecture seule");
+      return;
+    }
+    if (message == null || message.isBlank()){
+      autosaveLabel.setText(" ");
+    } else {
+      autosaveLabel.setText(message + " (" + new SimpleDateFormat("HH:mm:ss").format(new Date()) + ")");
+    }
+  }
+
+  private void snapshotLinesForUndo(){
+    if (readOnly || suppressDirtyEvents){
+      return;
+    }
+    pushUndoSnapshot(billingModel.getLines());
+    skipNextTableSnapshot = true;
+  }
+
+  private void handleBillingModelMutation(){
+    if (suppressDirtyEvents || readOnly){
+      lastLinesSnapshot = deepCopyLines(billingModel.getLines());
+      return;
+    }
+    if (!skipNextTableSnapshot){
+      pushUndoSnapshot(lastLinesSnapshot);
+    } else {
+      skipNextTableSnapshot = false;
+    }
+    lastLinesSnapshot = deepCopyLines(billingModel.getLines());
+    markEdited();
+  }
+
+  private void pushUndoSnapshot(List<BillingLine> snapshot){
+    if (snapshot == null){
+      snapshot = List.of();
+    }
+    undoStack.push(deepCopyLines(snapshot));
+    if (undoStack.size() > MAX_HISTORY){
+      undoStack.removeLast();
+    }
+    redoStack.clear();
+  }
+
+  private void undoLines(){
+    if (readOnly || undoStack.isEmpty()){
+      return;
+    }
+    redoStack.push(deepCopyLines(billingModel.getLines()));
+    if (redoStack.size() > MAX_HISTORY){
+      redoStack.removeLast();
+    }
+    List<BillingLine> previous = undoStack.pop();
+    suppressDirtyEvents = true;
+    billingModel.setLines(deepCopyLines(previous));
+    suppressDirtyEvents = false;
+    lastLinesSnapshot = deepCopyLines(billingModel.getLines());
+    computeTotals();
+    refreshWorkflowState();
+    markEdited();
+  }
+
+  private void redoLines(){
+    if (readOnly || redoStack.isEmpty()){
+      return;
+    }
+    undoStack.push(deepCopyLines(billingModel.getLines()));
+    if (undoStack.size() > MAX_HISTORY){
+      undoStack.removeLast();
+    }
+    List<BillingLine> next = redoStack.pop();
+    suppressDirtyEvents = true;
+    billingModel.setLines(deepCopyLines(next));
+    suppressDirtyEvents = false;
+    lastLinesSnapshot = deepCopyLines(billingModel.getLines());
+    computeTotals();
+    refreshWorkflowState();
+    markEdited();
+  }
+
+  private List<BillingLine> deepCopyLines(List<BillingLine> source){
+    List<BillingLine> copy = new ArrayList<>();
+    if (source == null){
+      return copy;
+    }
+    for (BillingLine line : source){
+      if (line == null){
+        continue;
+      }
+      BillingLine clone = new BillingLine();
+      clone.setId(line.getId());
+      clone.setAutoGenerated(line.isAutoGenerated());
+      clone.setResourceId(line.getResourceId());
+      clone.setDesignation(line.getDesignation());
+      clone.setUnit(line.getUnit());
+      clone.setQuantity(line.getQuantity());
+      clone.setUnitPriceHt(line.getUnitPriceHt());
+      clone.setTotalHt(line.getTotalHt());
+      copy.add(clone);
+    }
+    return copy;
   }
 
   private void selectTabSafe(int index){
@@ -295,6 +545,9 @@ public class InterventionDialog extends JDialog {
     fullscreenButton.setText("");
     toolbar.add(fullscreenButton);
     toolbar.add(Box.createHorizontalGlue());
+    autosaveLabel.setForeground(new Color(0x607D8B));
+    toolbar.add(Box.createHorizontalStrut(12));
+    toolbar.add(autosaveLabel);
     return toolbar;
   }
 
@@ -536,11 +789,13 @@ public class InterventionDialog extends JDialog {
       Toasts.error(this, "Impossible de lire le fichier sélectionné");
     }
     updateSignaturePreview();
+    markEdited();
   }
 
   private void clearSignature(){
     signatureBase64 = null;
     updateSignaturePreview();
+    markEdited();
   }
 
   private void updateSignaturePreview(){
@@ -588,6 +843,7 @@ public class InterventionDialog extends JDialog {
       if (onSaveCallback != null){
         onSaveCallback.accept(current);
       }
+      markSaved("Modifications enregistrées");
       saved = true;
       dispose();
       Toasts.success(this, "Intervention enregistrée");
@@ -617,6 +873,7 @@ public class InterventionDialog extends JDialog {
       Toasts.info(this, "Aucun modèle sélectionné");
       return;
     }
+    snapshotLinesForUndo();
     String typeId = template.getDefaultTypeId();
     if (typeId != null && !typeId.isBlank()){
       for (int i = 0; i < typeCombo.getItemCount(); i++){
@@ -674,9 +931,11 @@ public class InterventionDialog extends JDialog {
     syncAutoBillingLinesWithResources();
     String name = template.getName();
     Toasts.success(this, name == null || name.isBlank() ? "Modèle appliqué" : "Modèle appliqué : " + name);
+    markEdited();
   }
 
   private void addManualBillingLine(){
+    snapshotLinesForUndo();
     BillingLine line = new BillingLine();
     line.setId(UUID.randomUUID().toString());
     line.setDesignation("Ligne manuelle");
@@ -704,6 +963,7 @@ public class InterventionDialog extends JDialog {
     if (modelRow < 0 || modelRow >= lines.size()){
       return;
     }
+    snapshotLinesForUndo();
     lines.remove(modelRow);
     billingModel.setLines(lines);
     computeTotals();
@@ -756,6 +1016,7 @@ public class InterventionDialog extends JDialog {
         planningService.saveIntervention(current);
       }
       refreshWorkflowState();
+      markSaved("Devis enregistré");
     } catch (Exception ex){
       Toasts.error(this, "Échec de génération du devis : " + ex.getMessage());
     }
@@ -822,9 +1083,11 @@ public class InterventionDialog extends JDialog {
     }
     syncAutoBillingLinesWithResources();
     refreshWorkflowState();
+    markEdited();
   }
 
   private void syncAutoBillingLinesWithResources(){
+    snapshotLinesForUndo();
     List<BillingLine> existing = billingModel.getLines();
     List<BillingLine> manual = new ArrayList<>();
     LinkedHashMap<String, BillingLine> autoByKey = new LinkedHashMap<>();
@@ -939,54 +1202,64 @@ public class InterventionDialog extends JDialog {
 
 
   public void edit(Intervention intervention){
-    this.current = intervention == null ? new Intervention() : intervention;
-    this.saved = false;
+    suppressDirtyEvents = true;
+    try {
+      this.current = intervention == null ? new Intervention() : intervention;
+      this.saved = false;
 
-    resourcePicker.setContext(this.current);
+      resourcePicker.setContext(this.current);
 
-    reloadAvailableTypes();
-    loadTemplates();
-    populateTypes();
-    populateClients();
-    loadResources();
+      reloadAvailableTypes();
+      loadTemplates();
+      populateTypes();
+      populateClients();
+      loadResources();
 
-    titleField.setText(s(current.getLabel()));
-    addressField.setText(s(current.getAddress()));
-    descriptionArea.setText(s(current.getDescription()));
-    internalNoteArea.setText(s(current.getInternalNote()));
-    closingNoteArea.setText(s(current.getClosingNote()));
-    signatureByField.setText(s(current.getSignatureBy()));
-    if (current.getSignatureAt() != null){
-      signatureAtSpinner.setValue(toDate(current.getSignatureAt()));
-    } else {
-      signatureAtSpinner.setValue(new Date());
+      titleField.setText(s(current.getLabel()));
+      addressField.setText(s(current.getAddress()));
+      descriptionArea.setText(s(current.getDescription()));
+      internalNoteArea.setText(s(current.getInternalNote()));
+      closingNoteArea.setText(s(current.getClosingNote()));
+      signatureByField.setText(s(current.getSignatureBy()));
+      if (current.getSignatureAt() != null){
+        signatureAtSpinner.setValue(toDate(current.getSignatureAt()));
+      } else {
+        signatureAtSpinner.setValue(new Date());
+      }
+      signatureBase64 = current.getSignaturePngBase64();
+      updateSignaturePreview();
+
+      LocalDateTime start = current.getDateHeureDebut();
+      LocalDateTime end = current.getDateHeureFin();
+      if (start == null){
+        start = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES);
+      }
+      if (end == null){
+        end = start.plusHours(4);
+      }
+      startSpinner.setValue(toDate(start));
+      endSpinner.setValue(toDate(end));
+
+      updateResourcePickerWindow();
+      resourcePicker.setSelectedResources(current.getResources());
+
+      List<BillingLine> lines = current.getBillingLines();
+      if (lines.isEmpty()){
+        lines = convertDocumentLines(current.getQuoteDraft());
+      }
+      billingModel.setLines(lines);
+      syncAutoBillingLinesWithResources();
+      computeTotals();
+      updateQuoteBadge();
+      refreshWorkflowState();
+    } finally {
+      suppressDirtyEvents = false;
     }
-    signatureBase64 = current.getSignaturePngBase64();
-    updateSignaturePreview();
-
-    LocalDateTime start = current.getDateHeureDebut();
-    LocalDateTime end = current.getDateHeureFin();
-    if (start == null){
-      start = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES);
-    }
-    if (end == null){
-      end = start.plusHours(4);
-    }
-    startSpinner.setValue(toDate(start));
-    endSpinner.setValue(toDate(end));
-
-    updateResourcePickerWindow();
-    resourcePicker.setSelectedResources(current.getResources());
-
-    List<BillingLine> lines = current.getBillingLines();
-    if (lines.isEmpty()){
-      lines = convertDocumentLines(current.getQuoteDraft());
-    }
-    billingModel.setLines(lines);
-    syncAutoBillingLinesWithResources();
-    computeTotals();
-    updateQuoteBadge();
-    refreshWorkflowState();
+    undoStack.clear();
+    redoStack.clear();
+    skipNextTableSnapshot = false;
+    lastLinesSnapshot = deepCopyLines(billingModel.getLines());
+    markSaved("Brouillon chargé");
   }
 
   private void populateTypes(){
@@ -1014,6 +1287,10 @@ public class InterventionDialog extends JDialog {
         return label;
       }
     });
+    for (ActionListener listener : typeCombo.getActionListeners()){
+      typeCombo.removeActionListener(listener);
+    }
+    typeCombo.addActionListener(e -> markEdited());
     if (currentType != null){
       typeCombo.setSelectedItem(currentType);
     } else {
@@ -1050,6 +1327,7 @@ public class InterventionDialog extends JDialog {
     clientCombo.addActionListener(e -> {
       updateContactsForClient();
       refreshWorkflowState();
+      markEdited();
     });
 
     UUID clientId = current != null ? current.getClientId() : null;
