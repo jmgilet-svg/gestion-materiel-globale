@@ -22,6 +22,7 @@ public class ServiceFactory {
   private static InterventionTypeService interventionTypeService;
   private static ResourceTypeService resourceTypeService;
   private static TemplateService templateService;
+  private static TimelineService timelineService;
   private static AuthService authService;
   private static UserService userService;
 
@@ -32,6 +33,7 @@ public class ServiceFactory {
     userService = null;
     templateService = null;
     salesService = null;
+    timelineService = null;
     switch (cfg.getMode()) {
       case "mock" -> initMock();
       case "backend" -> initBackend();
@@ -53,6 +55,7 @@ public class ServiceFactory {
     interventionTypeService = new MockInterventionTypeService();
     resourceTypeService = new MockResourceTypeService();
     templateService = new MockTemplateService();
+    timelineService = new MockTimelineService();
     MockUserService mockUsers = new MockUserService();
     userService = mockUsers;
     authService = new MockAuthService(mockUsers);
@@ -75,6 +78,7 @@ public class ServiceFactory {
     interventionTypeService = new ApiInterventionTypeService(rc, new MockInterventionTypeService());
     resourceTypeService = new ApiResourceTypeService(rc, new MockResourceTypeService());
     templateService = new ApiTemplateService(rc, new MockTemplateService());
+    timelineService = new ApiTimelineService(rc, new MockTimelineService());
     MockUserService mockUsers = new MockUserService();
     userService = new ApiUserService(rc, mockUsers);
     authService = new ApiAuthService(rc, new MockAuthService(mockUsers));
@@ -91,6 +95,7 @@ public class ServiceFactory {
   public static InterventionTypeService interventionTypes(){ return interventionTypeService; }
   public static ResourceTypeService resourceTypes(){ return resourceTypeService; }
   public static TemplateService templates(){ return templateService; }
+  public static TimelineService timeline(){ return timelineService; }
   public static RestClient http(){ return restClient; }
   public static AuthService auth(){ return authService; }
   public static UserService users(){ return userService; }
