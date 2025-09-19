@@ -35,6 +35,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 public class MainFrame extends JFrame implements SessionManager.SessionAware {
   private final CardLayout cards = new CardLayout();
@@ -166,50 +167,52 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
   }
 
   private void initCommandPalette(){
-    List<CommandPalette.Command> commands = new ArrayList<>();
-    commands.add(new CommandPalette.Command("Aller au planning", "Navigation", "", () -> openCard("planning")));
-    commands.add(new CommandPalette.Command("Aller à l'agenda", "Navigation", "", () -> openCard("agenda")));
-    commands.add(new CommandPalette.Command("Aller aux devis", "Navigation", "", () -> openCard("quotes")));
-    commands.add(new CommandPalette.Command("Aller aux commandes", "Navigation", "", () -> openCard("orders")));
-    commands.add(new CommandPalette.Command("Aller aux bons de livraison", "Navigation", "", () -> openCard("delivery")));
-    commands.add(new CommandPalette.Command("Aller aux factures", "Navigation", "", () -> openCard("invoices")));
-    commands.add(new CommandPalette.Command("Aller aux clients", "Navigation", "", () -> openCard("clients")));
-    commands.add(new CommandPalette.Command("Aller aux ressources", "Navigation", "", () -> openCard("resources")));
-    commands.add(new CommandPalette.Command("Ouvrir les paramètres", "Navigation", "", () -> openCard("settings")));
+    Supplier<List<CommandPalette.Command>> provider = () -> {
+      List<CommandPalette.Command> commands = new ArrayList<>();
+      commands.add(new CommandPalette.Command("Aller au planning", "Navigation", "", () -> openCard("planning")));
+      commands.add(new CommandPalette.Command("Aller à l'agenda", "Navigation", "", () -> openCard("agenda")));
+      commands.add(new CommandPalette.Command("Aller aux devis", "Navigation", "", () -> openCard("quotes")));
+      commands.add(new CommandPalette.Command("Aller aux commandes", "Navigation", "", () -> openCard("orders")));
+      commands.add(new CommandPalette.Command("Aller aux bons de livraison", "Navigation", "", () -> openCard("delivery")));
+      commands.add(new CommandPalette.Command("Aller aux factures", "Navigation", "", () -> openCard("invoices")));
+      commands.add(new CommandPalette.Command("Aller aux clients", "Navigation", "", () -> openCard("clients")));
+      commands.add(new CommandPalette.Command("Aller aux ressources", "Navigation", "", () -> openCard("resources")));
+      commands.add(new CommandPalette.Command("Ouvrir les paramètres", "Navigation", "", () -> openCard("settings")));
 
-    commands.add(new CommandPalette.Command("Planning : recharger", "Planning", "R", () -> {
       PlanningPanel panel = visiblePlanningPanel();
       if (panel != null){
-        panel.actionReload();
+        int selected = Math.max(0, panel.getSelectedCount());
+        String selectionLabel = selected == 0
+            ? "Aucune intervention sélectionnée"
+            : selected + " intervention(s) sélectionnée(s)";
+        commands.add(new CommandPalette.Command(
+            "Planning : prévisualiser les devis",
+            selectionLabel,
+            "P",
+            panel::actionDryRun));
+        commands.add(new CommandPalette.Command(
+            "Planning : générer les devis",
+            selectionLabel,
+            "D",
+            panel::actionGenerateQuotes));
+        commands.add(new CommandPalette.Command(
+            "Planning : basculer le filtre",
+            "Filtre actuel : " + panel.getCurrentFilterLabel(),
+            "F",
+            panel::actionFilterCycle));
+        commands.add(new CommandPalette.Command(
+            "Planning : recharger",
+            "Actualiser les données",
+            "R",
+            panel::actionReload));
       }
-    }));
-    commands.add(new CommandPalette.Command("Planning : prévisualiser devis (sélection)", "Planning", "P", () -> {
-      PlanningPanel panel = visiblePlanningPanel();
-      if (panel != null){
-        panel.actionDryRun();
-      }
-    }));
-    commands.add(new CommandPalette.Command("Planning : générer devis (sélection)", "Planning", "D", () -> {
-      PlanningPanel panel = visiblePlanningPanel();
-      if (panel != null){
-        panel.actionGenerateQuotes();
-      }
-    }));
-    commands.add(new CommandPalette.Command("Planning : filtre À deviser", "Planning", "F", () -> {
-      PlanningPanel panel = visiblePlanningPanel();
-      if (panel != null){
-        panel.actionFilterToDeviser();
-      }
-    }));
-    commands.add(new CommandPalette.Command("Planning : filtre Déjà devisé", "Planning", "F", () -> {
-      PlanningPanel panel = visiblePlanningPanel();
-      if (panel != null){
-        panel.actionFilterDejaDevise();
-      }
-    }));
+      return commands;
+    };
 
-    commandPalette.setCommands(commands);
-    KeymapUtil.bindGlobal(getRootPane(), "open-command-palette", KeymapUtil.ctrlK(), () -> commandPalette.open(ok -> {}));
+    Supplier<JComponent> help = CommandPalette::defaultHelp;
+
+    KeymapUtil.bindGlobal(getRootPane(), "open-command-palette", KeymapUtil.ctrlK(),
+        () -> commandPalette.open(provider, help, ok -> {}));
   }
 
   private PlanningPanel visiblePlanningPanel(){

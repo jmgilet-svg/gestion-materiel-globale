@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /** Palette de commandes (Ctrl/Cmd-K). Filtrage simple contenant / case-insensitive. */
 public class CommandPalette extends JDialog {
@@ -37,6 +38,7 @@ public class CommandPalette extends JDialog {
   private final JList<Command> list = new JList<>(model);
   private List<Command> all = List.of();
   private Consumer<Boolean> onClose;
+  private Supplier<JComponent> helpSupplier;
 
   public CommandPalette(Window owner){
     super(owner, "Commandes", ModalityType.MODELESS);
@@ -56,6 +58,13 @@ public class CommandPalette extends JDialog {
     list.setCellRenderer(new Renderer());
     JScrollPane scrollPane = new JScrollPane(list);
     root.add(scrollPane, BorderLayout.CENTER);
+
+    JPanel bottom = new JPanel(new BorderLayout());
+    JButton help = new JButton("?", UIManager.getIcon("OptionPane.questionIcon"));
+    help.setToolTipText("Voir les raccourcis disponibles");
+    help.addActionListener(e -> openHelp());
+    bottom.add(help, BorderLayout.EAST);
+    root.add(bottom, BorderLayout.SOUTH);
 
     setContentPane(root);
 
@@ -94,12 +103,25 @@ public class CommandPalette extends JDialog {
     refilter();
   }
 
-  public void open(Consumer<Boolean> onClose){
+  public void open(Supplier<List<Command>> provider,
+                   Supplier<JComponent> helpSupplier,
+                   Consumer<Boolean> onClose){
+    this.helpSupplier = helpSupplier;
+    if (provider != null){
+      List<Command> commands = provider.get();
+      if (commands != null){
+        setCommands(commands);
+      }
+    }
     this.onClose = onClose;
     search.setText("");
     refilter();
     setVisible(true);
     SwingUtilities.invokeLater(() -> search.requestFocusInWindow());
+  }
+
+  public void open(Consumer<Boolean> onClose){
+    open(null, null, onClose);
   }
 
   private void refilter(){
@@ -154,6 +176,74 @@ public class CommandPalette extends JDialog {
     if (onClose != null){
       onClose.accept(executed);
     }
+  }
+
+  private void openHelp(){
+    JComponent content = helpSupplier != null ? helpSupplier.get() : null;
+    if (content == null){
+      content = defaultHelp();
+    }
+    if (content.getParent() != null){
+      content.getParent().remove(content);
+    }
+    JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(this),
+        "Raccourcis & aide",
+        ModalityType.MODELESS);
+    dialog.setSize(560, 400);
+    dialog.setLocationRelativeTo(this);
+    dialog.setContentPane(new JScrollPane(content));
+    dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+    dialog.setVisible(true);
+  }
+
+  public static JComponent defaultHelp(){
+    JPanel panel = new JPanel(new GridBagLayout());
+    GridBagConstraints gc = new GridBagConstraints();
+    gc.insets = new Insets(6, 8, 6, 8);
+    gc.anchor = GridBagConstraints.WEST;
+    gc.gridx = 0;
+    gc.gridy = 0;
+
+    panel.add(title("Palette & navigation"), gc);
+    gc.gridy++;
+    panel.add(item("Ouvrir la palette", "Ctrl/Cmd + K"), gc);
+
+    gc.gridy++;
+    panel.add(title("Planning"), gc);
+    gc.gridy++;
+    panel.add(item("Prévisualiser devis (sélection)", "P"), gc);
+    gc.gridy++;
+    panel.add(item("Générer devis (sélection)", "D"), gc);
+    gc.gridy++;
+    panel.add(item("Changer de filtre", "F"), gc);
+    gc.gridy++;
+    panel.add(item("Recharger", "R"), gc);
+
+    gc.gridy++;
+    panel.add(title("Intervention"), gc);
+    gc.gridy++;
+    panel.add(item("Générer le devis", "Ctrl/Cmd + G"), gc);
+    gc.gridy++;
+    panel.add(item("Regénérer lignes depuis ressources", "Ctrl/Cmd + R"), gc);
+    gc.gridy++;
+    panel.add(item("Étapes Intervention / Devis / Facturation", "Ctrl/Cmd + 1 / 2 / 3"), gc);
+
+    return panel;
+  }
+
+  private static JLabel title(String text){
+    JLabel label = new JLabel(text);
+    label.setFont(label.getFont().deriveFont(Font.BOLD));
+    return label;
+  }
+
+  private static JPanel item(String description, String shortcut){
+    JPanel row = new JPanel(new BorderLayout(8, 0));
+    row.add(new JLabel(description), BorderLayout.CENTER);
+    JLabel ks = new JLabel(shortcut);
+    ks.setForeground(new Color(0x455A64));
+    row.add(ks, BorderLayout.EAST);
+    return row;
   }
 
   static class Renderer extends JPanel implements ListCellRenderer<Command> {
