@@ -37,6 +37,7 @@ public class InterventionTableView implements InterventionView {
   private final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd/MM HH:mm");
   private List<Intervention> current = List.of();
   private Consumer<Intervention> onOpen = it -> {};
+  private Consumer<List<Intervention>> selectionListener = list -> {};
 
   public InterventionTableView(){
     table.setRowHeight(24);
@@ -51,6 +52,11 @@ public class InterventionTableView implements InterventionView {
     table.getColumnModel().getColumn(6).setMinWidth(36);
     table.getColumnModel().getColumn(6).setPreferredWidth(40);
     table.getColumnModel().getColumn(7).setCellRenderer(resourceRenderer());
+    table.getSelectionModel().addListSelectionListener(e -> {
+      if (!e.getValueIsAdjusting()){
+        fireSelectionChanged();
+      }
+    });
     table.addMouseListener(new MouseAdapter(){
       @Override public void mousePressed(MouseEvent e){
         maybeShowPopup(e);
@@ -101,10 +107,17 @@ public class InterventionTableView implements InterventionView {
           it.getResources()
       });
     }
+    table.clearSelection();
+    fireSelectionChanged();
   }
 
   @Override public void setOnOpen(Consumer<Intervention> onOpen){
     this.onOpen = onOpen != null ? onOpen : it -> {};
+  }
+
+  @Override public void setSelectionListener(Consumer<List<Intervention>> listener){
+    this.selectionListener = listener != null ? listener : list -> {};
+    fireSelectionChanged();
   }
 
   @Override public List<Intervention> getSelection(){
@@ -140,6 +153,10 @@ public class InterventionTableView implements InterventionView {
     if (menu.getComponentCount() > 0){
       menu.show(table, e.getX(), e.getY());
     }
+  }
+
+  private void fireSelectionChanged(){
+    selectionListener.accept(getSelection());
   }
 
   private JPopupMenu buildContextMenu(Intervention it){

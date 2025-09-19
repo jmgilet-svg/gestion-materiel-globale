@@ -42,6 +42,7 @@ import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSeparator;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
@@ -50,6 +51,7 @@ import javax.swing.JTextArea;
 import javax.swing.SpinnerDateModel;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
+import javax.swing.SwingConstants;
 import javax.swing.border.EmptyBorder;
 
 import com.materiel.suite.client.model.BillingLine;
@@ -91,9 +93,11 @@ public class PlanningPanel extends JPanel {
   private static final DateTimeFormatter SIMPLE_DAY_TIME_FORMAT = DateTimeFormatter.ofPattern("dd/MM HH:mm");
   private final PlanningBoard board = new PlanningBoard();
   private final AgendaBoard agenda = new AgendaBoard();
-  private final JButton bulkQuoteBtn = new JButton("Générer devis (sélection)", IconRegistry.small("file-plus"));
-  private final JButton dryRunBtn = new JButton("Prévisualiser", IconRegistry.small("info"));
+  private final JButton bulkQuoteBtn = new JButton("Générer devis", IconRegistry.small("file-plus"));
+  private final JButton dryRunBtn = new JButton("Prévisualiser", IconRegistry.small("calculator"));
   private final JComboBox<QuoteFilter> quoteFilter = new JComboBox<>(QuoteFilter.values());
+  private final JPanel bulkBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+  private final JLabel selCountLabel = new JLabel("0 interventions");
   private JButton conflictsBtn;
   private JPanel ganttContainer;
   private JTabbedPane tabs;
@@ -106,6 +110,7 @@ public class PlanningPanel extends JPanel {
   private JSpinner simpleRefDate;
   private boolean updatingSimpleRange;
   private List<Intervention> allInterventions = List.of();
+  private List<Intervention> currentSelection = List.of();
 
   public PlanningPanel(){
     super(new BorderLayout());
@@ -160,7 +165,9 @@ public class PlanningPanel extends JPanel {
     calendarView.setOnMove(this::moveIntervention);
     calendarView.setOnMoveDateTime(this::moveInterventionDateTime);
     calendarView.setOnResizeDateTime(this::resizeInterventionEndDateTime);
+    calendarView.setSelectionListener(this::updateSelectionLater);
     tableView.setOnOpen(this::openInterventionEditor);
+    tableView.setSelectionListener(this::updateSelectionLater);
 
     ganttContainer = center;
     tabs = new JTabbedPane();
@@ -170,6 +177,23 @@ public class PlanningPanel extends JPanel {
     tabs.addChangeListener(e -> updateModeToggleState());
     add(tabs, BorderLayout.CENTER);
     updateModeToggleState();
+
+    bulkBar.setBorder(new EmptyBorder(4, 8, 4, 8));
+    bulkBar.add(new JLabel("Sélection :"));
+    bulkBar.add(selCountLabel);
+    JSeparator bulkSep = new JSeparator(SwingConstants.VERTICAL);
+    bulkSep.setPreferredSize(new Dimension(1, 24));
+    bulkBar.add(bulkSep);
+    bulkBar.add(dryRunBtn);
+    bulkBar.add(bulkQuoteBtn);
+    bulkBar.setVisible(false);
+    dryRunBtn.setEnabled(false);
+    bulkQuoteBtn.setEnabled(false);
+    add(bulkBar, BorderLayout.SOUTH);
+
+    bulkQuoteBtn.addActionListener(e -> generateQuotesForSelection());
+    dryRunBtn.addActionListener(e -> showDryRun());
+    updateSelectionUI(List.of());
 
     reload();
 
@@ -280,12 +304,6 @@ public class PlanningPanel extends JPanel {
     bar.add(Box.createHorizontalStrut(12));
     bar.add(quoteFilterLabel);
     bar.add(quoteFilter);
-    bar.add(Box.createHorizontalStrut(8));
-    bar.add(dryRunBtn);
-    bar.add(Box.createHorizontalStrut(6));
-    bar.add(bulkQuoteBtn);
-    bulkQuoteBtn.addActionListener(e -> generateQuotesForSelection());
-    dryRunBtn.addActionListener(e -> showDryRun());
     return bar;
   }
 
@@ -385,12 +403,46 @@ public class PlanningPanel extends JPanel {
     refreshPlanning();
   }
 
-  private void showDryRun(){
-    if (tabs == null || tabs.getSelectedComponent() != tableView.getComponent()){
-      Toasts.info(this, "Sélectionnez les interventions dans l'onglet Liste pour prévisualiser les devis.");
-      return;
+  /* ---------- Gestion de la sélection ---------- */
+  private void updateSelectionLater(List<Intervention> selection){
+    SwingUtilities.invokeLater(() -> updateSelectionUI(selection));
+  }
+
+  private void updateSelectionUI(List<Intervention> selection){
+    List<Intervention> safe = new ArrayList<>();
+    if (selection != null){
+      for (Intervention intervention : selection){
+        if (intervention != null){
+          safe.add(intervention);
+        }
+      }
     }
-    List<Intervention> selection = tableView.getSelection();
+    currentSelection = safe.isEmpty() ? List.of() : List.copyOf(safe);
+    int count = currentSelection.size();
+    selCountLabel.setText(count + " intervention" + (count == 1 ? "" : "s"));
+    boolean active = count > 0;
+    dryRunBtn.setEnabled(active);
+    bulkQuoteBtn.setEnabled(active);
+    bulkBar.setVisible(active);
+    revalidate();
+    repaint();
+  }
+
+  private List<Intervention> selectedInterventions(){
+    return currentSelection;
+  }
+
+  private List<Intervention> selectedInterventionsForQuotes(String action){
+    List<Intervention> selection = selectedInterventions();
+    if (selection.isEmpty()){
+      Toasts.info(this, "Aucune intervention sélectionnée pour " + action);
+      return List.of();
+    }
+    return selection;
+  }
+
+  private void showDryRun(){
+    List<Intervention> selection = selectedInterventions();
     if (selection.isEmpty()){
       Toasts.info(this, "Aucune intervention sélectionnée");
       return;
@@ -585,15 +637,7 @@ public class PlanningPanel extends JPanel {
   }
 
   public int getSelectedCount(){
-    if (tabs == null || tableView == null){
-      return 0;
-    }
-    Component selectedComponent = tabs.getSelectedComponent();
-    if (selectedComponent != tableView.getComponent()){
-      return 0;
-    }
-    List<Intervention> selection = tableView.getSelection();
-    return selection == null ? 0 : selection.size();
+    return selectedInterventions().size();
   }
 
   public String getCurrentFilterLabel(){

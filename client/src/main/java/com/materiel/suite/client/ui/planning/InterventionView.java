@@ -19,4 +19,5 @@ public interface InterventionView {
   default void setOnResizeDateTime(BiConsumer<Intervention, Date> onResizeDateTime){}
   default void setMode(String mode){}
   default List<Intervention> getSelection(){ return List.of(); }
+  default void setSelectionListener(Consumer<List<Intervention>> listener){}
 }
