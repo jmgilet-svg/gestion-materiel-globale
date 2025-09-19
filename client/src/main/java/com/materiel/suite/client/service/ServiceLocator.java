@@ -69,6 +69,11 @@ public final class ServiceLocator {
       return svc != null ? svc.saveResource(resource) : resource;
     }
 
+    public Resource get(UUID id){
+      PlanningService svc = ServiceFactory.planning();
+      return svc != null ? svc.getResource(id) : null;
+    }
+
     public void delete(UUID id){
       PlanningService svc = ServiceFactory.planning();
       if (svc != null && id != null){

@@ -41,28 +41,7 @@ public class ApiPlanningService implements PlanningService {
       for (Object o : arr){
         var m = SimpleJson.asObj(o);
         Resource r = new Resource();
-        r.setId(UUID.fromString(SimpleJson.str(m.get("id"))));
-        r.setName(SimpleJson.str(m.getOrDefault("name","")));
-        r.setType(parseResourceType(m.get("type")));
-        r.setUnitPriceHt(parseBigDecimal(m.get("unitPriceHt")));
-        r.setColor(SimpleJson.str(m.get("color")));
-        r.setNotes(SimpleJson.str(m.get("notes")));
-        r.setState(SimpleJson.str(m.get("state")));
-        // === CRM-INJECT BEGIN: resource-api-read ===
-        Object cap = m.get("capacity");
-        if (cap instanceof Number n) r.setCapacity((int) Math.max(1, n.intValue()));
-        else {
-          String sc = SimpleJson.str(cap);
-          if (sc!=null && !sc.isBlank()){
-            try { r.setCapacity(Math.max(1, (int) Double.parseDouble(sc))); } catch(NumberFormatException ignore){}
-          }
-        }
-        String tags = SimpleJson.str(m.get("tags"));
-        if (tags!=null) r.setTags(tags);
-        String weekly = SimpleJson.str(m.get("weeklyUnavailability"));
-        if (weekly!=null) r.setWeeklyUnavailability(weekly);
-        // === CRM-INJECT END ===
-        r.setUnavailabilities(parseUnavailabilityList(m.get("unavailabilities")));
+        fillResource(r, m);
         out.add(r);
       }
       Map<String, ResourceType> catalog = fetchResourceTypeCatalog();
@@ -103,31 +82,26 @@ public class ApiPlanningService implements PlanningService {
       String json = toJson(m);
       String body = (r.getId()==null? rc.post("/api/v1/resources", json) : rc.put("/api/v1/resources/"+r.getId(), json));
       var map = SimpleJson.asObj(SimpleJson.parse(body));
-      r.setId(UUID.fromString(SimpleJson.str(map.get("id"))));
-      r.setName(SimpleJson.str(map.getOrDefault("name","")));
-      r.setType(parseResourceType(map.get("type")));
-      r.setUnitPriceHt(parseBigDecimal(map.get("unitPriceHt")));
-      r.setColor(SimpleJson.str(map.get("color")));
-      r.setNotes(SimpleJson.str(map.get("notes")));
-      r.setState(SimpleJson.str(map.get("state")));
+      fillResource(r, map);
       mergeType(r, fetchResourceTypeCatalog());
-      // === CRM-INJECT BEGIN: resource-api-after-save ===
-      Object cap = map.get("capacity");
-      if (cap instanceof Number n) r.setCapacity((int)Math.max(1, n.intValue()));
-      else {
-        String sc = SimpleJson.str(cap);
-        if (sc!=null && !sc.isBlank()){
-          try { r.setCapacity(Math.max(1, (int) Double.parseDouble(sc))); } catch(NumberFormatException ignore){}
-        }
-      }
-      String tags = SimpleJson.str(map.get("tags"));
-      if (tags!=null) r.setTags(tags);
-      String weekly = SimpleJson.str(map.get("weeklyUnavailability"));
-      if (weekly!=null) r.setWeeklyUnavailability(weekly);
-      r.setUnavailabilities(parseUnavailabilityList(map.get("unavailabilities")));
-      // === CRM-INJECT END ===
       return r;
     } catch(Exception e){ return fb.saveResource(r); }
+  }
+
+  @Override public Resource getResource(UUID id){
+    if (id == null){
+      return null;
+    }
+    try {
+      String body = rc.get("/api/v1/resources/" + id);
+      var map = SimpleJson.asObj(SimpleJson.parse(body));
+      Resource resource = new Resource();
+      fillResource(resource, map);
+      mergeType(resource, fetchResourceTypeCatalog());
+      return resource;
+    } catch(Exception e){
+      return fb.getResource(id);
+    }
   }
 
   @Override public void deleteResource(UUID id){
@@ -524,6 +498,50 @@ public class ApiPlanningService implements PlanningService {
     if (ref.getIcon()!=null && !ref.getIcon().isBlank()){
       type.setIcon(ref.getIcon());
     }
+  }
+
+  private void fillResource(Resource target, Map<?,?> data){
+    if (target == null || data == null){
+      return;
+    }
+    String id = SimpleJson.str(data.get("id"));
+    if (id != null && !id.isBlank()){
+      try {
+        target.setId(UUID.fromString(id));
+      } catch(IllegalArgumentException ignore){
+        target.setId(null);
+      }
+    } else {
+      target.setId(null);
+    }
+    target.setName(SimpleJson.str(data.getOrDefault("name", "")));
+    target.setType(parseResourceType(data.get("type")));
+    target.setUnitPriceHt(parseBigDecimal(data.get("unitPriceHt")));
+    target.setColor(SimpleJson.str(data.get("color")));
+    target.setNotes(SimpleJson.str(data.get("notes")));
+    target.setState(SimpleJson.str(data.get("state")));
+    // === CRM-INJECT BEGIN: resource-api-fill ===
+    Object cap = data.get("capacity");
+    if (cap instanceof Number n){
+      target.setCapacity((int) Math.max(1, n.intValue()));
+    } else {
+      String sc = SimpleJson.str(cap);
+      if (sc!=null && !sc.isBlank()){
+        try {
+          target.setCapacity(Math.max(1, (int) Double.parseDouble(sc)));
+        } catch(NumberFormatException ignore){}
+      }
+    }
+    String tags = SimpleJson.str(data.get("tags"));
+    if (tags!=null){
+      target.setTags(tags);
+    }
+    String weekly = SimpleJson.str(data.get("weeklyUnavailability"));
+    if (weekly!=null){
+      target.setWeeklyUnavailability(weekly);
+    }
+    // === CRM-INJECT END ===
+    target.setUnavailabilities(parseUnavailabilityList(data.get("unavailabilities")));
   }
 
   private ResourceType parseResourceType(Object value){
