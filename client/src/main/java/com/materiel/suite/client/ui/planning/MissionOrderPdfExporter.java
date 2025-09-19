@@ -8,6 +8,8 @@ import com.google.zxing.common.BitMatrix;
 import com.materiel.suite.client.model.Contact;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.ResourceRef;
+import com.materiel.suite.client.service.ServiceLocator;
+import com.materiel.suite.client.settings.GeneralSettings;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -17,6 +19,8 @@ import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -25,6 +29,9 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /** Génère un PDF "Ordre de mission" (une page par intervention). */
 final class MissionOrderPdfExporter {
@@ -49,6 +56,47 @@ final class MissionOrderPdfExporter {
     }
   }
 
+  public static void exportPerResourceZip(File file, List<Intervention> interventions) throws IOException {
+    Map<String, List<Intervention>> grouped = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+    if (interventions != null){
+      for (Intervention intervention : interventions){
+        if (intervention == null){
+          continue;
+        }
+        List<ResourceRef> resources = intervention.getResources();
+        if (resources == null || resources.isEmpty()){
+          grouped.computeIfAbsent("Sans ressource", key -> new ArrayList<>()).add(intervention);
+        } else {
+          for (ResourceRef resource : resources){
+            if (resource == null){
+              continue;
+            }
+            String name = safe(resource.getName(), "Ressource");
+            grouped.computeIfAbsent(name, key -> new ArrayList<>()).add(intervention);
+          }
+        }
+      }
+    }
+    try (ZipOutputStream zip = new ZipOutputStream(new FileOutputStream(file))){
+      for (Map.Entry<String, List<Intervention>> entry : grouped.entrySet()){
+        String resourceName = sanitizeFileName(entry.getKey());
+        File temp = File.createTempFile("mission-" + resourceName + "-", ".pdf");
+        try {
+          export(temp, entry.getValue());
+          zip.putNextEntry(new ZipEntry(resourceName + ".pdf"));
+          try (FileInputStream in = new FileInputStream(temp)){
+            in.transferTo(zip);
+          }
+          zip.closeEntry();
+        } finally {
+          if (!temp.delete()){
+            temp.deleteOnExit();
+          }
+        }
+      }
+    }
+  }
+
   /* ---------- Rendering ---------- */
   private static void renderIntervention(PDDocument doc, PDPage page, Intervention intervention) throws IOException {
     PDRectangle box = page.getMediaBox();
@@ -56,6 +104,14 @@ final class MissionOrderPdfExporter {
     float x = margin;
     float y = box.getHeight() - margin;
     try (PDPageContentStream stream = new PDPageContentStream(doc, page)){
+      byte[] logo = tryGetAgencyLogo();
+      if (logo != null && logo.length > 0){
+        try {
+          PDImageXObject image = PDImageXObject.createFromByteArray(doc, logo, "logo");
+          stream.drawImage(image, x, y - 40f, 120f, 36f);
+        } catch (Exception ignore){
+        }
+      }
       stream.setFont(PDType1Font.HELVETICA_BOLD, 18);
       String title = "ORDRE DE MISSION";
       float titleWidth = PDType1Font.HELVETICA_BOLD.getStringWidth(title) / 1000f * 18f;
@@ -63,7 +119,7 @@ final class MissionOrderPdfExporter {
       stream.newLineAtOffset((box.getWidth() - titleWidth) / 2f, y);
       stream.showText(title);
       stream.endText();
-      y -= 28f;
+      y -= 42f;
 
       stream.setFont(PDType1Font.HELVETICA_BOLD, 12);
       y = text(stream, x, y, "Intervention :", 12f, true);
@@ -147,6 +203,22 @@ final class MissionOrderPdfExporter {
         y = paragraph(stream, x, y, intervention.getInternalNote(), 450f, 12f, 4);
       }
 
+      String safety = tryGetSafety(intervention);
+      if (safety != null && !safety.isBlank()){
+        stream.setFont(PDType1Font.HELVETICA_BOLD, 12);
+        y = text(stream, x, y, "Consignes & EPI requis :", 12f, true);
+        stream.setFont(PDType1Font.HELVETICA, 12);
+        y = paragraph(stream, x, y, safety, 450f, 12f, 6);
+      }
+
+      String equipment = tryGetEquipment(intervention);
+      if (equipment != null && !equipment.isBlank()){
+        stream.setFont(PDType1Font.HELVETICA_BOLD, 12);
+        y = text(stream, x, y, "Matériel embarqué :", 12f, true);
+        stream.setFont(PDType1Font.HELVETICA, 12);
+        y = paragraph(stream, x, y, equipment, 450f, 12f, 6);
+      }
+
       float rightX = box.getWidth() - margin - 140f;
       String deeplink = buildDeepLink(intervention);
       PDImageXObject qr = qrImage(doc, deeplink, 128);
@@ -219,6 +291,16 @@ final class MissionOrderPdfExporter {
       return defaultValue;
     }
     return trimmed.replace('\r', ' ').replace('\n', ' ');
+  }
+
+  private static String safe(String text){
+    return safe(text, "");
+  }
+
+  private static String sanitizeFileName(String name){
+    String value = safe(name, "Ressource");
+    String cleaned = value.replaceAll("[^a-zA-Z0-9-_\\.]+", "_");
+    return cleaned.isBlank() ? "Ressource" : cleaned;
   }
 
   private static float text(PDPageContentStream stream, float x, float y, String text, float vspace, boolean bold) throws IOException {
@@ -318,6 +400,60 @@ final class MissionOrderPdfExporter {
     byte[] decoded = decodeBase64(intervention.getSignaturePngBase64());
     if (decoded != null && decoded.length > 0){
       return decoded;
+    }
+    return null;
+  }
+
+  private static byte[] tryGetAgencyLogo(){
+    try {
+      GeneralSettings settings = ServiceLocator.settings().getGeneral();
+      if (settings == null){
+        return null;
+      }
+      return decodeBase64(settings.getAgencyLogoPngBase64());
+    } catch (Exception ignore){
+      return null;
+    }
+  }
+
+  private static String tryGetSafety(Intervention intervention){
+    if (intervention == null){
+      return null;
+    }
+    String[] methods = {"getSafetyInstructions", "getEpiRequired", "getSafetyNote"};
+    for (String name : methods){
+      try {
+        var method = intervention.getClass().getMethod(name);
+        Object value = method.invoke(intervention);
+        if (value != null){
+          String text = String.valueOf(value);
+          if (!text.isBlank()){
+            return text;
+          }
+        }
+      } catch (Exception ignore){
+      }
+    }
+    return null;
+  }
+
+  private static String tryGetEquipment(Intervention intervention){
+    if (intervention == null){
+      return null;
+    }
+    String[] methods = {"getEquipmentList", "getEquipmentNotes", "getGear"};
+    for (String name : methods){
+      try {
+        var method = intervention.getClass().getMethod(name);
+        Object value = method.invoke(intervention);
+        if (value != null){
+          String text = String.valueOf(value);
+          if (!text.isBlank()){
+            return text;
+          }
+        }
+      } catch (Exception ignore){
+      }
     }
     return null;
   }

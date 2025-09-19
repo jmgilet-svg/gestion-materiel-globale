@@ -24,4 +24,26 @@ public final class Prefs {
   public static void setAutosaveIntervalSeconds(int seconds){
     PREFS.putInt("autosave.interval.seconds", Math.max(5, seconds));
   }
+
+  public static String getAgencyLogoPngBase64(){
+    String value = PREFS.get("agency.logo.png.base64", null);
+    if (value == null){
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  public static void setAgencyLogoPngBase64(String base64){
+    if (base64 == null){
+      PREFS.remove("agency.logo.png.base64");
+      return;
+    }
+    String trimmed = base64.trim();
+    if (trimmed.isEmpty()){
+      PREFS.remove("agency.logo.png.base64");
+      return;
+    }
+    PREFS.put("agency.logo.png.base64", trimmed);
+  }
 }

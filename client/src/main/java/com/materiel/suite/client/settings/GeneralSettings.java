@@ -4,6 +4,8 @@ package com.materiel.suite.client.settings;
 public class GeneralSettings {
   private int sessionTimeoutMinutes = 30;
   private int autosaveIntervalSeconds = 30;
+  /** PNG encodé en Base64 (optionnel) utilisé en en-tête PDF (logo d’agence). */
+  private String agencyLogoPngBase64;
 
   public int getSessionTimeoutMinutes(){
     return sessionTimeoutMinutes;
@@ -19,5 +21,13 @@ public class GeneralSettings {
 
   public void setAutosaveIntervalSeconds(int seconds){
     autosaveIntervalSeconds = Math.max(5, seconds);
+  }
+
+  public String getAgencyLogoPngBase64(){
+    return agencyLogoPngBase64;
+  }
+
+  public void setAgencyLogoPngBase64(String b64){
+    agencyLogoPngBase64 = b64;
   }
 }
