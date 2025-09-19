@@ -26,7 +26,55 @@ public final class Prefs {
   }
 
   public static String getAgencyLogoPngBase64(){
-    String value = PREFS.get("agency.logo.png.base64", null);
+    return readTrimmed("agency.logo.png.base64");
+  }
+
+  public static void setAgencyLogoPngBase64(String base64){
+    writeTrimmed("agency.logo.png.base64", base64);
+  }
+
+  public static String getAgencyName(){
+    return readTrimmed("agency.name");
+  }
+
+  public static void setAgencyName(String value){
+    writeTrimmed("agency.name", value);
+  }
+
+  public static String getAgencyPhone(){
+    return readTrimmed("agency.phone");
+  }
+
+  public static void setAgencyPhone(String value){
+    writeTrimmed("agency.phone", value);
+  }
+
+  public static String getAgencyAddress(){
+    return readTrimmed("agency.address");
+  }
+
+  public static void setAgencyAddress(String value){
+    writeTrimmed("agency.address", value);
+  }
+
+  public static String getCgvPdfBase64(){
+    return readTrimmed("agency.cgv.pdf.base64");
+  }
+
+  public static void setCgvPdfBase64(String base64){
+    writeTrimmed("agency.cgv.pdf.base64", base64);
+  }
+
+  public static String getCgvText(){
+    return readTrimmed("agency.cgv.text");
+  }
+
+  public static void setCgvText(String value){
+    writeTrimmed("agency.cgv.text", value);
+  }
+
+  private static String readTrimmed(String key){
+    String value = PREFS.get(key, null);
     if (value == null){
       return null;
     }
@@ -34,16 +82,16 @@ public final class Prefs {
     return trimmed.isEmpty() ? null : trimmed;
   }
 
-  public static void setAgencyLogoPngBase64(String base64){
-    if (base64 == null){
-      PREFS.remove("agency.logo.png.base64");
+  private static void writeTrimmed(String key, String value){
+    if (value == null){
+      PREFS.remove(key);
       return;
     }
-    String trimmed = base64.trim();
+    String trimmed = value.trim();
     if (trimmed.isEmpty()){
-      PREFS.remove("agency.logo.png.base64");
+      PREFS.remove(key);
       return;
     }
-    PREFS.put("agency.logo.png.base64", trimmed);
+    PREFS.put(key, trimmed);
   }
 }

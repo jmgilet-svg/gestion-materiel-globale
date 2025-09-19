@@ -246,13 +246,20 @@ final class MissionOrderPdfExporter {
         }
       }
 
-      if (intervention.getQuoteReference() != null){
-        stream.setFont(PDType1Font.HELVETICA_OBLIQUE, 10);
-        stream.beginText();
-        stream.newLineAtOffset(x, margin - 6f);
-        stream.showText("Réf. devis : " + intervention.getQuoteReference());
-        stream.endText();
+      String footer = formatAgencyFooter();
+      String quoteReference = intervention.getQuoteReference();
+      if (quoteReference != null && !quoteReference.isBlank()){
+        String cleanedRef = quoteReference.trim();
+        if (!footer.isEmpty()){
+          footer += " — ";
+        }
+        footer += "Réf. devis : " + cleanedRef;
       }
+      stream.setFont(PDType1Font.HELVETICA_OBLIQUE, 9);
+      stream.beginText();
+      stream.newLineAtOffset(x, margin - 6f);
+      stream.showText(footer.isEmpty() ? " " : footer);
+      stream.endText();
     }
   }
 
@@ -416,6 +423,46 @@ final class MissionOrderPdfExporter {
     }
   }
 
+  private static String formatAgencyFooter(){
+    try {
+      GeneralSettings settings = ServiceLocator.settings().getGeneral();
+      if (settings == null){
+        return "";
+      }
+      StringBuilder footer = new StringBuilder();
+      appendFooterPart(footer, normalizeFooter(settings.getAgencyName()));
+      String phone = normalizeFooter(settings.getAgencyPhone());
+      if (!phone.isEmpty()){
+        appendFooterPart(footer, "Tél. " + phone);
+      }
+      appendFooterPart(footer, normalizeFooter(settings.getAgencyAddress()));
+      return footer.toString();
+    } catch (Exception ignore){
+      return "";
+    }
+  }
+
+  private static void appendFooterPart(StringBuilder footer, String part){
+    if (part.isEmpty()){
+      return;
+    }
+    if (footer.length() > 0){
+      footer.append(" • ");
+    }
+    footer.append(part);
+  }
+
+  private static String normalizeFooter(String value){
+    if (value == null){
+      return "";
+    }
+    String trimmed = value.trim();
+    if (trimmed.isEmpty()){
+      return "";
+    }
+    return trimmed.replaceAll("\\s+", " ");
+  }
+
   private static String tryGetSafety(Intervention intervention){
     if (intervention == null){
       return null;
@@ -456,6 +503,120 @@ final class MissionOrderPdfExporter {
       }
     }
     return null;
+  }
+
+  public static void appendCgvIfAny(File outPdf) throws IOException {
+    if (outPdf == null || !outPdf.exists()){
+      return;
+    }
+    GeneralSettings settings;
+    try {
+      settings = ServiceLocator.settings().getGeneral();
+    } catch (Exception ex){
+      return;
+    }
+    if (settings == null){
+      return;
+    }
+    String pdfBase64 = settings.getCgvPdfBase64();
+    String text = settings.getCgvText();
+    boolean hasPdf = pdfBase64 != null && !pdfBase64.isBlank();
+    boolean hasText = text != null && !text.isBlank();
+    if (!hasPdf && !hasText){
+      return;
+    }
+    try (PDDocument document = PDDocument.load(outPdf)){
+      boolean appended = false;
+      if (hasPdf){
+        byte[] bytes = decodeBase64(pdfBase64);
+        if (bytes != null && bytes.length > 0){
+          try (PDDocument cgv = PDDocument.load(bytes)){
+            if (cgv.getNumberOfPages() > 0){
+              for (PDPage page : cgv.getPages()){
+                document.importPage(page);
+              }
+              appended = true;
+            }
+          } catch (IOException ex){
+            appended = false;
+          }
+        }
+      }
+      if (!appended && hasText){
+        appendCgvText(document, text);
+      }
+      document.save(outPdf);
+    }
+  }
+
+  private static void appendCgvText(PDDocument document, String text) throws IOException {
+    List<String> lines = wrapCgvLines(text, PDRectangle.A4.getWidth() - 72f);
+    if (lines.isEmpty()){
+      return;
+    }
+    float margin = 36f;
+    float leading = 14f;
+    PDPage page = new PDPage(PDRectangle.A4);
+    document.addPage(page);
+    PDRectangle box = page.getMediaBox();
+    PDPageContentStream stream = new PDPageContentStream(document, page);
+    float y = box.getHeight() - margin;
+    try {
+      y = drawCgvHeader(stream, margin, y);
+      stream.setFont(PDType1Font.HELVETICA, 11);
+      for (String line : lines){
+        if (y < margin){
+          stream.close();
+          page = new PDPage(PDRectangle.A4);
+          document.addPage(page);
+          stream = new PDPageContentStream(document, page);
+          box = page.getMediaBox();
+          y = box.getHeight() - margin;
+          y = drawCgvHeader(stream, margin, y);
+          stream.setFont(PDType1Font.HELVETICA, 11);
+        }
+        if (line.isEmpty()){
+          y -= leading;
+          continue;
+        }
+        stream.beginText();
+        stream.newLineAtOffset(margin, y);
+        stream.showText(line);
+        stream.endText();
+        y -= leading;
+      }
+    } finally {
+      stream.close();
+    }
+  }
+
+  private static float drawCgvHeader(PDPageContentStream stream, float margin, float y) throws IOException {
+    stream.setFont(PDType1Font.HELVETICA_BOLD, 16);
+    stream.beginText();
+    stream.newLineAtOffset(margin, y);
+    stream.showText("Conditions Générales de Vente");
+    stream.endText();
+    return y - 24f;
+  }
+
+  private static List<String> wrapCgvLines(String text, float width) throws IOException {
+    List<String> lines = new ArrayList<>();
+    if (text == null){
+      return lines;
+    }
+    String normalized = text.replace("\r\n", "\n").replace('\r', '\n').trim();
+    if (normalized.isEmpty()){
+      return lines;
+    }
+    String[] rawLines = normalized.split("\n");
+    for (String raw : rawLines){
+      if (raw.isBlank()){
+        lines.add("");
+        continue;
+      }
+      lines.addAll(wrap(raw.trim(), width, PDType1Font.HELVETICA, 11f, 0));
+    }
+    return lines;
   }
 
   private static byte[] decodeBase64(String base64){

@@ -915,6 +915,19 @@ public class PlanningPanel extends JPanel {
     if (choice == JOptionPane.CLOSED_OPTION){
       return;
     }
+    boolean includeCgv = false;
+    if (choice == 0){
+      int cgvChoice = JOptionPane.showConfirmDialog(
+          this,
+          "Inclure les CGV (si configurées) ?",
+          "CGV",
+          JOptionPane.YES_NO_OPTION
+      );
+      if (cgvChoice == JOptionPane.CLOSED_OPTION){
+        return;
+      }
+      includeCgv = (cgvChoice == JOptionPane.YES_OPTION);
+    }
     JFileChooser chooser = new JFileChooser();
     chooser.setSelectedFile(new File(choice == 0 ? "ordre-de-mission.pdf" : "ordre-de-mission-par-ressource.zip"));
     int result = chooser.showSaveDialog(this);
@@ -925,8 +938,12 @@ public class PlanningPanel extends JPanel {
     try {
       if (choice == 0){
         MissionOrderPdfExporter.export(destination, selection);
+        if (includeCgv){
+          MissionOrderPdfExporter.appendCgvIfAny(destination);
+        }
       } else {
         MissionOrderPdfExporter.exportPerResourceZip(destination, selection);
+        // CGV non injectées dans ce mode (un PDF par ressource) : à étendre si besoin.
       }
       Toasts.success(this, "Export généré : " + destination.getName());
     } catch (Exception ex){

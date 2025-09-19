@@ -14,6 +14,7 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.Base64;
 
 /** Paramètres généraux (durée d'inactivité, autosave, etc.). */
@@ -22,12 +23,29 @@ public class GeneralSettingsPanel extends JPanel {
   private final JSpinner autosaveSpinner;
   private final JLabel logoPreview;
   private String logoBase64;
+  private final JTextField agencyNameField;
+  private final JTextField agencyPhoneField;
+  private final JTextArea agencyAddressArea;
+  private final JLabel cgvPdfPreview;
+  private String cgvPdfBase64;
+  private final JTextArea cgvTextArea;
 
   public GeneralSettingsPanel(){
     super(new BorderLayout(8, 8));
 
     GeneralSettings settings = loadSettings();
     logoBase64 = settings.getAgencyLogoPngBase64();
+    cgvPdfBase64 = settings.getCgvPdfBase64();
+
+    agencyNameField = new JTextField(settings.getAgencyName() == null ? "" : settings.getAgencyName());
+    agencyPhoneField = new JTextField(settings.getAgencyPhone() == null ? "" : settings.getAgencyPhone());
+    agencyAddressArea = new JTextArea(settings.getAgencyAddress() == null ? "" : settings.getAgencyAddress(), 3, 24);
+    agencyAddressArea.setLineWrap(true);
+    agencyAddressArea.setWrapStyleWord(true);
+    cgvPdfPreview = new JLabel();
+    cgvTextArea = new JTextArea(settings.getCgvText() == null ? "" : settings.getCgvText(), 6, 24);
+    cgvTextArea.setLineWrap(true);
+    cgvTextArea.setWrapStyleWord(true);
 
     JPanel form = new JPanel(new GridBagLayout());
     GridBagConstraints gc = new GridBagConstraints();
@@ -65,6 +83,47 @@ public class GeneralSettingsPanel extends JPanel {
     gc.gridx = 1; gc.weightx = 1;
     form.add(logoRow, gc);
 
+    row++;
+    gc.gridx = 0; gc.gridy = row; gc.weightx = 0;
+    form.add(new JLabel("Nom d'agence"), gc);
+    gc.gridx = 1; gc.weightx = 1;
+    form.add(agencyNameField, gc);
+
+    row++;
+    gc.gridx = 0; gc.gridy = row; gc.weightx = 0;
+    form.add(new JLabel("Téléphone agence"), gc);
+    gc.gridx = 1; gc.weightx = 1;
+    form.add(agencyPhoneField, gc);
+
+    row++;
+    gc.gridx = 0; gc.gridy = row; gc.weightx = 0;
+    form.add(new JLabel("Adresse agence"), gc);
+    gc.gridx = 1; gc.weightx = 1;
+    gc.fill = GridBagConstraints.BOTH;
+    form.add(new JScrollPane(agencyAddressArea), gc);
+    gc.fill = GridBagConstraints.HORIZONTAL;
+
+    row++;
+    gc.gridx = 0; gc.gridy = row; gc.weightx = 0;
+    form.add(new JLabel("CGV (PDF)"), gc);
+    JPanel cgvRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+    JButton chooseCgvPdf = new JButton("Choisir PDF…");
+    JButton clearCgvPdf = new JButton("Supprimer");
+    updateCgvPdfPreview();
+    cgvRow.add(chooseCgvPdf);
+    cgvRow.add(clearCgvPdf);
+    cgvRow.add(cgvPdfPreview);
+    gc.gridx = 1; gc.weightx = 1;
+    form.add(cgvRow, gc);
+
+    row++;
+    gc.gridx = 0; gc.gridy = row; gc.weightx = 0;
+    form.add(new JLabel("CGV (texte fallback)"), gc);
+    gc.gridx = 1; gc.weightx = 1;
+    gc.fill = GridBagConstraints.BOTH;
+    form.add(new JScrollPane(cgvTextArea), gc);
+    gc.fill = GridBagConstraints.HORIZONTAL;
+
     JButton save = new JButton("Enregistrer");
     boolean canEdit = AccessControl.canEditSettings();
     timeoutSpinner.setEnabled(canEdit);
@@ -72,6 +131,14 @@ public class GeneralSettingsPanel extends JPanel {
     save.setEnabled(canEdit);
     chooseLogo.setEnabled(canEdit);
     clearLogo.setEnabled(canEdit);
+    agencyNameField.setEnabled(canEdit);
+    agencyPhoneField.setEnabled(canEdit);
+    agencyAddressArea.setEnabled(canEdit);
+    agencyAddressArea.setEditable(canEdit);
+    chooseCgvPdf.setEnabled(canEdit);
+    clearCgvPdf.setEnabled(canEdit);
+    cgvTextArea.setEnabled(canEdit);
+    cgvTextArea.setEditable(canEdit);
 
     JPanel south = new JPanel(new FlowLayout(FlowLayout.RIGHT));
     south.add(save);
@@ -82,6 +149,8 @@ public class GeneralSettingsPanel extends JPanel {
     save.addActionListener(e -> saveSettings());
     chooseLogo.addActionListener(e -> chooseLogo());
     clearLogo.addActionListener(e -> clearLogo());
+    chooseCgvPdf.addActionListener(e -> chooseCgvPdf());
+    clearCgvPdf.addActionListener(e -> clearCgvPdf());
   }
 
   private GeneralSettings loadSettings(){
@@ -103,6 +172,11 @@ public class GeneralSettingsPanel extends JPanel {
     updated.setSessionTimeoutMinutes(minutes);
     updated.setAutosaveIntervalSeconds(autosave);
     updated.setAgencyLogoPngBase64(logoBase64);
+    updated.setAgencyName(agencyNameField.getText());
+    updated.setAgencyPhone(agencyPhoneField.getText());
+    updated.setAgencyAddress(agencyAddressArea.getText());
+    updated.setCgvPdfBase64(cgvPdfBase64);
+    updated.setCgvText(cgvTextArea.getText());
 
     try {
       ServiceLocator.settings().saveGeneral(updated);
@@ -156,10 +230,49 @@ public class GeneralSettingsPanel extends JPanel {
     updateLogoPreview();
   }
 
+  private void chooseCgvPdf(){
+    JFileChooser chooser = new JFileChooser();
+    int result = chooser.showOpenDialog(this);
+    if (result != JFileChooser.APPROVE_OPTION){
+      return;
+    }
+    File file = chooser.getSelectedFile();
+    if (file == null){
+      return;
+    }
+    try {
+      byte[] bytes = Files.readAllBytes(file.toPath());
+      if (bytes == null || bytes.length == 0){
+        throw new IOException("Fichier vide");
+      }
+      cgvPdfBase64 = Base64.getEncoder().encodeToString(bytes);
+      cgvPdfPreview.setText("Chargé : " + file.getName());
+    } catch (IOException ex){
+      JOptionPane.showMessageDialog(
+          this,
+          "Impossible de charger le PDF : " + ex.getMessage(),
+          "CGV",
+          JOptionPane.ERROR_MESSAGE
+      );
+    }
+  }
+
+  private void clearCgvPdf(){
+    cgvPdfBase64 = null;
+    updateCgvPdfPreview();
+  }
+
   private void updateLogoPreview(){
     if (logoPreview == null){
       return;
     }
     logoPreview.setText(logoBase64 == null || logoBase64.isBlank() ? "(aucun logo)" : "(logo enregistré)");
+  }
+
+  private void updateCgvPdfPreview(){
+    if (cgvPdfPreview == null){
+      return;
+    }
+    cgvPdfPreview.setText(cgvPdfBase64 == null || cgvPdfBase64.isBlank() ? "(aucun PDF)" : "(PDF CGV enregistré)");
   }
 }

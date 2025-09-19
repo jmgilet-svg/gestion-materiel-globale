@@ -12,6 +12,11 @@ public class LocalSettingsService implements SettingsService {
     settings.setSessionTimeoutMinutes(Prefs.getSessionTimeoutMinutes());
     settings.setAutosaveIntervalSeconds(Prefs.getAutosaveIntervalSeconds());
     settings.setAgencyLogoPngBase64(Prefs.getAgencyLogoPngBase64());
+    settings.setAgencyName(Prefs.getAgencyName());
+    settings.setAgencyPhone(Prefs.getAgencyPhone());
+    settings.setAgencyAddress(Prefs.getAgencyAddress());
+    settings.setCgvPdfBase64(Prefs.getCgvPdfBase64());
+    settings.setCgvText(Prefs.getCgvText());
     return settings;
   }
 
@@ -23,5 +28,10 @@ public class LocalSettingsService implements SettingsService {
     Prefs.setSessionTimeoutMinutes(settings.getSessionTimeoutMinutes());
     Prefs.setAutosaveIntervalSeconds(settings.getAutosaveIntervalSeconds());
     Prefs.setAgencyLogoPngBase64(settings.getAgencyLogoPngBase64());
+    Prefs.setAgencyName(settings.getAgencyName());
+    Prefs.setAgencyPhone(settings.getAgencyPhone());
+    Prefs.setAgencyAddress(settings.getAgencyAddress());
+    Prefs.setCgvPdfBase64(settings.getCgvPdfBase64());
+    Prefs.setCgvText(settings.getCgvText());
   }
 }
