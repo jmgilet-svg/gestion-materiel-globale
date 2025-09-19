@@ -11,6 +11,7 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.FontMetrics;
 import java.awt.event.KeyEvent;
+import java.io.File;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
@@ -35,6 +36,7 @@ import javax.swing.AbstractAction;
 import javax.swing.Box;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
+import javax.swing.JFileChooser;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
@@ -97,6 +99,7 @@ public class PlanningPanel extends JPanel {
   private final PlanningBoard board = new PlanningBoard();
   private final AgendaBoard agenda = new AgendaBoard();
   private final JButton bulkQuoteBtn = new JButton("Générer devis", IconRegistry.small("file-plus"));
+  private final JButton exportIcsBtn = new JButton("Exporter .ics", IconRegistry.small("calendar"));
   private final JButton dryRunBtn = new JButton("Prévisualiser", IconRegistry.small("calculator"));
   private final JComboBox<QuoteFilter> quoteFilter = new JComboBox<>(QuoteFilter.values());
   private final JPanel bulkBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
@@ -189,13 +192,16 @@ public class PlanningPanel extends JPanel {
     bulkBar.add(bulkSep);
     bulkBar.add(dryRunBtn);
     bulkBar.add(bulkQuoteBtn);
+    bulkBar.add(exportIcsBtn);
     bulkBar.setVisible(false);
     dryRunBtn.setEnabled(false);
     bulkQuoteBtn.setEnabled(false);
+    exportIcsBtn.setEnabled(false);
     add(bulkBar, BorderLayout.SOUTH);
 
     bulkQuoteBtn.addActionListener(e -> generateQuotesForSelection());
     dryRunBtn.addActionListener(e -> showDryRun());
+    exportIcsBtn.addActionListener(e -> exportIcs());
     updateSelectionUI(List.of());
 
     reload();
@@ -426,6 +432,7 @@ public class PlanningPanel extends JPanel {
     boolean active = count > 0;
     dryRunBtn.setEnabled(active);
     bulkQuoteBtn.setEnabled(active);
+    exportIcsBtn.setEnabled(active);
     bulkBar.setVisible(active);
     revalidate();
     repaint();
@@ -880,6 +887,45 @@ public class PlanningPanel extends JPanel {
     KeymapUtil.bind(this, "planning-preview", KeyEvent.VK_P, 0, this::actionDryRun);
     KeymapUtil.bind(this, "planning-filter-cycle", KeyEvent.VK_F, 0, this::cycleQuoteFilter);
     KeymapUtil.bind(this, "planning-reload", KeyEvent.VK_R, 0, this::actionReload);
+  }
+
+  private void exportIcs(){
+    List<Intervention> selection = selectedInterventions();
+    if (selection == null || selection.isEmpty()){
+      Toasts.info(this, "Sélectionnez au moins une intervention à exporter.");
+      return;
+    }
+    Object[] modes = {"Un seul fichier .ics", "Un .zip par ressource (.ics chacun)"};
+    int choice = JOptionPane.showOptionDialog(
+        this,
+        "Choisir le format d’export :",
+        "Export calendrier",
+        JOptionPane.DEFAULT_OPTION,
+        JOptionPane.QUESTION_MESSAGE,
+        null,
+        modes,
+        modes[0]
+    );
+    if (choice == JOptionPane.CLOSED_OPTION){
+      return;
+    }
+    JFileChooser chooser = new JFileChooser();
+    chooser.setSelectedFile(new File(choice == 0 ? "planning-selection.ics" : "planning-par-ressource.zip"));
+    int result = chooser.showSaveDialog(this);
+    if (result != JFileChooser.APPROVE_OPTION){
+      return;
+    }
+    File destination = chooser.getSelectedFile();
+    try {
+      if (choice == 0){
+        IcsExporter.exportSingle(destination, selection);
+      } else {
+        IcsExporter.exportPerResourceZip(destination, selection);
+      }
+      Toasts.success(this, "Export créé : " + destination.getName());
+    } catch (Exception ex){
+      Toasts.error(this, "Échec export : " + ex.getMessage());
+    }
   }
 
   private void cycleQuoteFilter(){
