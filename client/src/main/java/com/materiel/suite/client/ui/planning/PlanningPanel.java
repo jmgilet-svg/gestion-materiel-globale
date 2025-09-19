@@ -49,11 +49,12 @@ import javax.swing.border.EmptyBorder;
 import com.materiel.suite.client.model.BillingLine;
 import com.materiel.suite.client.model.Conflict;
 import com.materiel.suite.client.model.Intervention;
-import com.materiel.suite.client.model.Quote;
+import com.materiel.suite.client.model.QuoteV2;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.model.ResourceRef;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.PlanningService;
+import com.materiel.suite.client.service.SalesService;
 import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.commands.CommandBus;
 import com.materiel.suite.client.ui.MainFrame;
@@ -83,6 +84,7 @@ public class PlanningPanel extends JPanel {
   private final PlanningBoard board = new PlanningBoard();
   private final AgendaBoard agenda = new AgendaBoard();
   private final JButton bulkQuoteBtn = new JButton("Générer devis (sélection)", IconRegistry.small("file-plus"));
+  private final JButton dryRunBtn = new JButton("Prévisualiser", IconRegistry.small("info"));
   private final JComboBox<QuoteFilter> quoteFilter = new JComboBox<>(QuoteFilter.values());
   private JButton conflictsBtn;
   private JPanel ganttContainer;
@@ -270,8 +272,11 @@ public class PlanningPanel extends JPanel {
     bar.add(quoteFilterLabel);
     bar.add(quoteFilter);
     bar.add(Box.createHorizontalStrut(8));
+    bar.add(dryRunBtn);
+    bar.add(Box.createHorizontalStrut(6));
     bar.add(bulkQuoteBtn);
     bulkQuoteBtn.addActionListener(e -> generateQuotesForSelection());
+    dryRunBtn.addActionListener(e -> showDryRun());
     return bar;
   }
 
@@ -372,18 +377,13 @@ public class PlanningPanel extends JPanel {
   }
 
   private void generateQuotesForSelection(){
-    if (tabs == null || tabs.getSelectedComponent() != tableView.getComponent()){
-      Toasts.info(this, "Sélectionnez les interventions dans l'onglet Liste pour générer les devis.");
-      return;
-    }
-    List<Intervention> selection = tableView.getSelection();
+    List<Intervention> selection = selectedInterventionsForQuotes("générer les devis");
     if (selection.isEmpty()){
-      Toasts.info(this, "Aucune intervention sélectionnée");
       return;
     }
     PlanningService planning = ServiceFactory.planning();
-    var quoteService = ServiceFactory.quotes();
-    if (planning == null || quoteService == null){
+    SalesService sales = ServiceFactory.sales();
+    if (planning == null || sales == null){
       Toasts.error(this, "Service indisponible pour générer les devis");
       return;
     }
@@ -408,16 +408,12 @@ public class PlanningPanel extends JPanel {
           skipped++;
           continue;
         }
-        Quote draft = QuoteGenerator.buildQuoteFromIntervention(intervention, lines);
-        Quote createdQuote = quoteService.save(draft);
+        intervention.setBillingLines(lines);
+        QuoteV2 createdQuote = sales.createQuoteFromIntervention(intervention);
         if (createdQuote == null){
           throw new IllegalStateException("Réponse vide du service devis");
         }
-        intervention.setBillingLines(lines);
-        intervention.setQuoteDraft(QuoteGenerator.toDocumentLines(lines));
-        intervention.setQuoteId(createdQuote.getId());
-        intervention.setQuoteReference(createdQuote.getNumber());
-        intervention.setQuoteNumber(createdQuote.getNumber());
+        applyQuoteToIntervention(intervention, createdQuote, lines);
         planning.saveIntervention(intervention);
         created++;
       } catch (Exception ex){
@@ -433,6 +429,64 @@ public class PlanningPanel extends JPanel {
     } else {
       Toasts.info(this, message);
     }
+  }
+
+  private List<Intervention> selectedInterventionsForQuotes(String action){
+    if (tabs == null || tabs.getSelectedComponent() != tableView.getComponent()){
+      Toasts.info(this, "Sélectionnez les interventions dans l'onglet Liste pour " + action + ".");
+      return List.of();
+    }
+    List<Intervention> selection = tableView.getSelection();
+    if (selection.isEmpty()){
+      Toasts.info(this, "Aucune intervention sélectionnée");
+      return List.of();
+    }
+    return selection;
+  }
+
+  private void showDryRun(){
+    List<Intervention> selection = selectedInterventionsForQuotes("prévisualiser les devis");
+    if (selection.isEmpty()){
+      return;
+    }
+    PlanningService planning = ServiceFactory.planning();
+    Map<UUID, Resource> catalog = new HashMap<>();
+    if (planning != null){
+      for (Resource resource : planning.listResources()){
+        if (resource != null && resource.getId() != null){
+          catalog.put(resource.getId(), resource);
+        }
+      }
+    }
+    List<Intervention> toCreate = new ArrayList<>();
+    List<Intervention> toSkip = new ArrayList<>();
+    for (Intervention intervention : selection){
+      if (intervention == null){
+        continue;
+      }
+      if (intervention.hasQuote()){
+        toSkip.add(intervention);
+        continue;
+      }
+      boolean hasLines = intervention.getBillingLines() != null && !intervention.getBillingLines().isEmpty();
+      if (!hasLines){
+        List<ResourceRef> refs = intervention.getResources();
+        if (refs != null && !refs.isEmpty()){
+          List<BillingLine> preview = PreDevisUtil.fromResourceRefs(refs, catalog);
+          hasLines = !preview.isEmpty();
+        }
+      }
+      if (hasLines){
+        toCreate.add(intervention);
+      } else {
+        toSkip.add(intervention);
+      }
+    }
+    new QuoteDryRunDialog(SwingUtilities.getWindowAncestor(this), toCreate, toSkip, confirmed -> {
+      if (confirmed){
+        generateQuotesForSelection();
+      }
+    }).setVisible(true);
   }
 
   private void refreshPlanning(){
@@ -509,6 +563,34 @@ public class PlanningPanel extends JPanel {
     List<BillingLine> generated = PreDevisUtil.fromResourceRefs(refs, catalog);
     intervention.setBillingLines(generated);
     return generated;
+  }
+
+  private void applyQuoteToIntervention(Intervention intervention, QuoteV2 quote, List<BillingLine> lines){
+    if (intervention == null || quote == null){
+      return;
+    }
+    if (lines != null){
+      intervention.setBillingLines(new ArrayList<>(lines));
+      intervention.setQuoteDraft(QuoteGenerator.toDocumentLines(lines));
+    }
+    String id = quote.getId();
+    if (id != null && !id.isBlank()){
+      try {
+        intervention.setQuoteId(UUID.fromString(id));
+      } catch (IllegalArgumentException ex){
+        intervention.setQuoteId(null);
+      }
+    } else {
+      intervention.setQuoteId(null);
+    }
+    String ref = quote.getReference();
+    if (ref != null && !ref.isBlank()){
+      intervention.setQuoteReference(ref);
+      intervention.setQuoteNumber(ref);
+    } else {
+      intervention.setQuoteReference(null);
+      intervention.setQuoteNumber(null);
+    }
   }
 
   private void updateSimpleReference(LocalDate date){

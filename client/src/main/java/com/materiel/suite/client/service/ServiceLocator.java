@@ -36,6 +36,10 @@ public final class ServiceLocator {
     return ServiceFactory.users();
   }
 
+  public static SalesService sales(){
+    return ServiceFactory.sales();
+  }
+
   public static final class ResourcesGateway {
     public List<Resource> listAll(){
       PlanningService svc = ServiceFactory.planning();

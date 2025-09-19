@@ -12,6 +12,7 @@ public class ServiceFactory {
   private static AppConfig cfg;
   private static RestClient restClient;
   private static QuoteService quoteService;
+  private static SalesService salesService;
   private static OrderService orderService;
   private static DeliveryNoteService deliveryNoteService;
   private static InvoiceService invoiceService;
@@ -30,6 +31,7 @@ public class ServiceFactory {
     authService = null;
     userService = null;
     templateService = null;
+    salesService = null;
     switch (cfg.getMode()) {
       case "mock" -> initMock();
       case "backend" -> initBackend();
@@ -41,6 +43,7 @@ public class ServiceFactory {
     MockData.seedIfEmpty();
     restClient = null;
     quoteService = new MockQuoteService();
+    salesService = new MockSalesService();
     orderService = new MockOrderService();
     deliveryNoteService = new MockDeliveryNoteService();
     invoiceService = new MockInvoiceService();
@@ -62,6 +65,7 @@ public class ServiceFactory {
     RestClient rc = new RestClient(base, token);
     restClient = rc;
     quoteService = new ApiQuoteService(rc, new MockQuoteService());
+    salesService = new ApiSalesService(rc, new MockSalesService());
     orderService = new ApiOrderService(rc, new MockOrderService());
     deliveryNoteService = new ApiDeliveryNoteService(rc, new MockDeliveryNoteService());
     invoiceService = new ApiInvoiceService(rc, new MockInvoiceService());
@@ -77,6 +81,7 @@ public class ServiceFactory {
   }
 
   public static QuoteService quotes(){ return quoteService; }
+  public static SalesService sales(){ return salesService; }
   public static OrderService orders(){ return orderService; }
   public static DeliveryNoteService deliveryNotes(){ return deliveryNoteService; }
   public static InvoiceService invoices(){ return invoiceService; }
