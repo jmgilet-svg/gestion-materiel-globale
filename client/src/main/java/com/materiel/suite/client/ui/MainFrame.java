@@ -13,6 +13,8 @@ import com.materiel.suite.client.ui.crm.ClientsPanel;
 import com.materiel.suite.client.ui.delivery.DeliveryNotesPanel;
 import com.materiel.suite.client.ui.invoices.InvoicesPanel;
 import com.materiel.suite.client.ui.auth.LoginDialog;
+import com.materiel.suite.client.ui.common.CommandPalette;
+import com.materiel.suite.client.ui.common.KeymapUtil;
 import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.orders.OrdersPanel;
 import com.materiel.suite.client.ui.planning.PlanningPanel;
@@ -29,7 +31,9 @@ import com.materiel.suite.client.ui.theme.ThemeManager;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 public class MainFrame extends JFrame implements SessionManager.SessionAware {
@@ -39,6 +43,7 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
   private javax.swing.Timer syncTimer;
   private final Map<String, SidebarButton> navButtons = new LinkedHashMap<>();
   private CollapsibleSidebar sidebar;
+  private final CommandPalette commandPalette;
   private String currentCard;
   private JLabel userLabel;
   private JButton changePasswordButton;
@@ -47,6 +52,7 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
   public MainFrame(AppConfig cfg) {
     super("Gestion Matériel — Suite");
     setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+    commandPalette = new CommandPalette(this);
     ThemeManager.applyInitial();
     setSize(1080, 720);
 
@@ -82,6 +88,7 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
 
     SessionManager.install(this);
     updateSessionInfo();
+    initCommandPalette();
   }
 
   private JMenuBar buildMenuBar(){
@@ -156,6 +163,62 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
     cards.show(center, key);
     navButtons.forEach((card, btn) -> btn.setActive(card.equals(key)));
     currentCard = key;
+  }
+
+  private void initCommandPalette(){
+    List<CommandPalette.Command> commands = new ArrayList<>();
+    commands.add(new CommandPalette.Command("Aller au planning", "Navigation", "", () -> openCard("planning")));
+    commands.add(new CommandPalette.Command("Aller à l'agenda", "Navigation", "", () -> openCard("agenda")));
+    commands.add(new CommandPalette.Command("Aller aux devis", "Navigation", "", () -> openCard("quotes")));
+    commands.add(new CommandPalette.Command("Aller aux commandes", "Navigation", "", () -> openCard("orders")));
+    commands.add(new CommandPalette.Command("Aller aux bons de livraison", "Navigation", "", () -> openCard("delivery")));
+    commands.add(new CommandPalette.Command("Aller aux factures", "Navigation", "", () -> openCard("invoices")));
+    commands.add(new CommandPalette.Command("Aller aux clients", "Navigation", "", () -> openCard("clients")));
+    commands.add(new CommandPalette.Command("Aller aux ressources", "Navigation", "", () -> openCard("resources")));
+    commands.add(new CommandPalette.Command("Ouvrir les paramètres", "Navigation", "", () -> openCard("settings")));
+
+    commands.add(new CommandPalette.Command("Planning : recharger", "Planning", "R", () -> {
+      PlanningPanel panel = visiblePlanningPanel();
+      if (panel != null){
+        panel.actionReload();
+      }
+    }));
+    commands.add(new CommandPalette.Command("Planning : prévisualiser devis (sélection)", "Planning", "P", () -> {
+      PlanningPanel panel = visiblePlanningPanel();
+      if (panel != null){
+        panel.actionDryRun();
+      }
+    }));
+    commands.add(new CommandPalette.Command("Planning : générer devis (sélection)", "Planning", "D", () -> {
+      PlanningPanel panel = visiblePlanningPanel();
+      if (panel != null){
+        panel.actionGenerateQuotes();
+      }
+    }));
+    commands.add(new CommandPalette.Command("Planning : filtre À deviser", "Planning", "F", () -> {
+      PlanningPanel panel = visiblePlanningPanel();
+      if (panel != null){
+        panel.actionFilterToDeviser();
+      }
+    }));
+    commands.add(new CommandPalette.Command("Planning : filtre Déjà devisé", "Planning", "F", () -> {
+      PlanningPanel panel = visiblePlanningPanel();
+      if (panel != null){
+        panel.actionFilterDejaDevise();
+      }
+    }));
+
+    commandPalette.setCommands(commands);
+    KeymapUtil.bindGlobal(getRootPane(), "open-command-palette", KeymapUtil.ctrlK(), () -> commandPalette.open(ok -> {}));
+  }
+
+  private PlanningPanel visiblePlanningPanel(){
+    for (Component component : center.getComponents()){
+      if (component instanceof PlanningPanel panel && component.isVisible()){
+        return panel;
+      }
+    }
+    return null;
   }
 
   private void applyNavigationPolicy(){

@@ -16,6 +16,7 @@ import com.materiel.suite.client.service.ClientService;
 import com.materiel.suite.client.service.InterventionTypeService;
 import com.materiel.suite.client.service.PlanningService;
 import com.materiel.suite.client.service.TemplateService;
+import com.materiel.suite.client.ui.common.KeymapUtil;
 import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.icons.IconRegistry;
 
@@ -134,6 +135,7 @@ public class InterventionDialog extends JDialog {
     buildUI();
     loadTemplates();
     installWorkflowHooks();
+    buildShortcuts();
     refreshWorkflowState();
     setResizable(true);
     setMinimumSize(new Dimension(1180, 760));
@@ -181,6 +183,27 @@ public class InterventionDialog extends JDialog {
     startSpinner.addChangeListener(spinnerListener);
     endSpinner.addChangeListener(spinnerListener);
     titleField.getDocument().addDocumentListener(documentListener(this::refreshWorkflowState));
+  }
+
+  private void buildShortcuts(){
+    JComponent root = getRootPane();
+    if (root == null){
+      return;
+    }
+    KeymapUtil.bindGlobal(root, "intervention-gen-quote", KeymapUtil.ctrlG(), this::generateQuoteFromPrebilling);
+    KeymapUtil.bindGlobal(root, "intervention-regenerate", KeymapUtil.ctrlR(), this::regenerateBillingFromResources);
+    KeymapUtil.bindGlobal(root, "intervention-step-1", KeymapUtil.ctrlDigit(1), () -> selectTabSafe(1));
+    KeymapUtil.bindGlobal(root, "intervention-step-2", KeymapUtil.ctrlDigit(2), () -> selectTabSafe(3));
+    KeymapUtil.bindGlobal(root, "intervention-step-3", KeymapUtil.ctrlDigit(3), () -> selectTabSafe(2));
+  }
+
+  private void selectTabSafe(int index){
+    if (tabs == null){
+      return;
+    }
+    if (index >= 0 && index < tabs.getTabCount()){
+      tabs.setSelectedIndex(index);
+    }
   }
 
   private void navigateToStep(int index){
