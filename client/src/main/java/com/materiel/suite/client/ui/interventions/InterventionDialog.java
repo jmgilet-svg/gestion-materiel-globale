@@ -325,8 +325,8 @@ public class InterventionDialog extends JDialog {
     }
     tabs.addTab("Général", IconRegistry.small("info"), buildGeneralTab());
     tabs.addTab("Intervention", IconRegistry.small("task"), buildInterventionTab());
-    tabs.addTab("Facturation", IconRegistry.small("invoice"), buildFacturationTab());
     tabs.addTab("Devis", IconRegistry.small("file"), buildQuoteTab());
+    tabs.addTab("Facturation", IconRegistry.small("invoice"), buildFacturationTab());
     tabs.addChangeListener(e -> refreshWorkflowState());
     return tabs;
   }

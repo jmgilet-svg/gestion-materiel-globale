@@ -6,6 +6,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.function.IntConsumer;
 
+
 /** Barre d'étapes interactive pour le suivi Intervention → Devis → Facturation. */
 public class StepBar extends JPanel {
   private final JLabel[] steps = new JLabel[3];
@@ -41,6 +42,7 @@ public class StepBar extends JPanel {
   public void setState(int active, boolean interventionReady, boolean quoteGenerated, boolean billingReady){
     int clamped = Math.max(0, Math.min(active, steps.length - 1));
     boolean[] done = {interventionReady, quoteGenerated, billingReady};
+
     for (int i = 0; i < steps.length; i++){
       JLabel label = steps[i];
       boolean isActive = i == clamped;
