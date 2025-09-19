@@ -20,6 +20,7 @@ public class ServiceFactory {
   private static ClientService clientService;
   private static InterventionTypeService interventionTypeService;
   private static ResourceTypeService resourceTypeService;
+  private static TemplateService templateService;
   private static AuthService authService;
   private static UserService userService;
 
@@ -28,6 +29,7 @@ public class ServiceFactory {
     AuthContext.clear();
     authService = null;
     userService = null;
+    templateService = null;
     switch (cfg.getMode()) {
       case "mock" -> initMock();
       case "backend" -> initBackend();
@@ -47,6 +49,7 @@ public class ServiceFactory {
     clientService = new MockClientService();
     interventionTypeService = new MockInterventionTypeService();
     resourceTypeService = new MockResourceTypeService();
+    templateService = new MockTemplateService();
     MockUserService mockUsers = new MockUserService();
     userService = mockUsers;
     authService = new MockAuthService(mockUsers);
@@ -67,6 +70,7 @@ public class ServiceFactory {
     clientService = new ApiClientService(rc, new MockClientService());
     interventionTypeService = new ApiInterventionTypeService(rc, new MockInterventionTypeService());
     resourceTypeService = new ApiResourceTypeService(rc, new MockResourceTypeService());
+    templateService = new ApiTemplateService(rc, new MockTemplateService());
     MockUserService mockUsers = new MockUserService();
     userService = new ApiUserService(rc, mockUsers);
     authService = new ApiAuthService(rc, new MockAuthService(mockUsers));
@@ -81,6 +85,7 @@ public class ServiceFactory {
   public static ClientService clients(){ return clientService; }
   public static InterventionTypeService interventionTypes(){ return interventionTypeService; }
   public static ResourceTypeService resourceTypes(){ return resourceTypeService; }
+  public static TemplateService templates(){ return templateService; }
   public static RestClient http(){ return restClient; }
   public static AuthService auth(){ return authService; }
   public static UserService users(){ return userService; }

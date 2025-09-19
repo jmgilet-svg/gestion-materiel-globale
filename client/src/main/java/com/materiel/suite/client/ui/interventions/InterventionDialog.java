@@ -6,6 +6,7 @@ import com.materiel.suite.client.model.Client;
 import com.materiel.suite.client.model.Contact;
 import com.materiel.suite.client.model.DocumentLine;
 import com.materiel.suite.client.model.Intervention;
+import com.materiel.suite.client.model.InterventionTemplate;
 import com.materiel.suite.client.model.InterventionType;
 import com.materiel.suite.client.model.Quote;
 import com.materiel.suite.client.model.Resource;
@@ -14,6 +15,7 @@ import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.ClientService;
 import com.materiel.suite.client.service.InterventionTypeService;
 import com.materiel.suite.client.service.PlanningService;
+import com.materiel.suite.client.service.TemplateService;
 import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.icons.IconRegistry;
 
@@ -48,12 +50,15 @@ public class InterventionDialog extends JDialog {
   private final PlanningService planningService;
   private final ClientService clientService;
   private final InterventionTypeService typeService;
+  private final TemplateService templateService;
   private final List<InterventionType> availableTypes = new ArrayList<>();
+  private final List<InterventionTemplate> availableTemplates = new ArrayList<>();
 
   private final JTextField titleField = new JTextField();
   private final JComboBox<InterventionType> typeCombo = new JComboBox<>();
   private final JComboBox<Client> clientCombo = new JComboBox<>();
   private final JTextField addressField = new JTextField();
+  private final JComboBox<InterventionTemplate> templateCombo = new JComboBox<>();
   private final JSpinner startSpinner = new JSpinner(new SpinnerDateModel());
   private final JSpinner endSpinner = new JSpinner(new SpinnerDateModel());
   private final JTextArea descriptionArea = new JTextArea(4, 30);
@@ -73,6 +78,7 @@ public class InterventionDialog extends JDialog {
   private final JLabel quoteSummaryLabel = new JLabel("Aucun devis généré");
   private final NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(Locale.FRANCE);
   private final JButton saveButton = new JButton("Enregistrer", IconRegistry.small("success"));
+  private final JButton applyTemplateButton = new JButton("Appliquer", IconRegistry.small("file-plus"));
   private final JButton regenerateBillingButton = new JButton("Depuis ressources", IconRegistry.small("refresh"));
   private final JButton addBillingLineButton = new JButton("Ajouter ligne", IconRegistry.small("plus"));
   private final JButton removeBillingLineButton = new JButton("Supprimer", IconRegistry.small("trash"));
@@ -88,16 +94,33 @@ public class InterventionDialog extends JDialog {
   private String signatureBase64;
   private Consumer<Intervention> onSaveCallback;
 
-  public InterventionDialog(Window owner, PlanningService planningService, ClientService clientService, InterventionTypeService typeService){
+  public InterventionDialog(Window owner,
+                            PlanningService planningService,
+                            ClientService clientService,
+                            InterventionTypeService typeService,
+                            TemplateService templateService){
     super(owner, "Intervention", ModalityType.APPLICATION_MODAL);
     this.planningService = planningService;
     this.clientService = clientService;
     this.typeService = typeService;
+    this.templateService = templateService;
     this.resourcePicker = new ResourcePickerPanel(planningService);
     this.readOnly = !AccessControl.canEditInterventions();
     this.resourcePicker.setSelectionListener(this::onResourceSelectionChanged);
     this.contactPicker.setSelectionListener(this::refreshWorkflowState);
+    templateCombo.setRenderer(new DefaultListCellRenderer(){
+      @Override public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus){
+        JLabel label = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+        if (value instanceof InterventionTemplate template){
+          label.setText(template.getName());
+        } else {
+          label.setText("(Aucun)");
+        }
+        return label;
+      }
+    });
     saveButton.addActionListener(e -> onSave());
+    applyTemplateButton.addActionListener(e -> applySelectedTemplate());
     regenerateBillingButton.addActionListener(e -> regenerateBillingFromResources());
     addBillingLineButton.addActionListener(e -> addManualBillingLine());
     removeBillingLineButton.addActionListener(e -> removeSelectedBillingLine());
@@ -109,6 +132,7 @@ public class InterventionDialog extends JDialog {
     fullscreenButton.setToolTipText("Plein écran");
     reloadAvailableTypes();
     buildUI();
+    loadTemplates();
     installWorkflowHooks();
     refreshWorkflowState();
     setResizable(true);
@@ -129,6 +153,22 @@ public class InterventionDialog extends JDialog {
       refreshWorkflowState();
     });
     totalHtLabel.setText("Total HT : " + currencyFormat.format(BigDecimal.ZERO));
+  }
+
+  private void loadTemplates(){
+    availableTemplates.clear();
+    if (templateService != null){
+      try {
+        availableTemplates.addAll(templateService.list());
+      } catch (Exception ignore){}
+    }
+    DefaultComboBoxModel<InterventionTemplate> model = new DefaultComboBoxModel<>();
+    model.addElement(null);
+    for (InterventionTemplate template : availableTemplates){
+      model.addElement(template);
+    }
+    templateCombo.setModel(model);
+    applyTemplateButton.setEnabled(!readOnly && model.getSize() > 1);
   }
 
   private void installWorkflowHooks(){
@@ -239,6 +279,8 @@ public class InterventionDialog extends JDialog {
     typeCombo.setEnabled(false);
     clientCombo.setEnabled(false);
     addressField.setEditable(false);
+    templateCombo.setEnabled(false);
+    applyTemplateButton.setEnabled(false);
     startSpinner.setEnabled(false);
     endSpinner.setEnabled(false);
     descriptionArea.setEditable(false);
@@ -299,6 +341,11 @@ public class InterventionDialog extends JDialog {
     gc.fill = GridBagConstraints.HORIZONTAL;
     gc.weightx = 0;
     int y = 0;
+
+    gc.gridx = 0; gc.gridy = y; panel.add(new JLabel("Modèle"), gc);
+    gc.gridx = 1; gc.weightx = 1; gc.gridwidth = 2; panel.add(templateCombo, gc);
+    gc.gridx = 3; gc.weightx = 0; gc.gridwidth = 1; panel.add(applyTemplateButton, gc);
+    y++;
 
     gc.gridx = 0; gc.gridy = y; panel.add(new JLabel("Titre"), gc);
     gc.gridx = 1; gc.weightx = 1; panel.add(titleField, gc); gc.weightx = 0;
@@ -532,6 +579,74 @@ public class InterventionDialog extends JDialog {
     refreshWorkflowState();
   }
 
+  private void applySelectedTemplate(){
+    if (readOnly){
+      return;
+    }
+    InterventionTemplate template = (InterventionTemplate) templateCombo.getSelectedItem();
+    if (template == null){
+      Toasts.info(this, "Aucun modèle sélectionné");
+      return;
+    }
+    String typeId = template.getDefaultTypeId();
+    if (typeId != null && !typeId.isBlank()){
+      for (int i = 0; i < typeCombo.getItemCount(); i++){
+        InterventionType type = typeCombo.getItemAt(i);
+        if (type != null && type.getCode() != null && typeId.equalsIgnoreCase(type.getCode())){
+          typeCombo.setSelectedIndex(i);
+          break;
+        }
+      }
+    }
+    Date start = spinnerDate(startSpinner);
+    Integer duration = template.getDefaultDurationMinutes();
+    if (start != null && duration != null && duration > 0){
+      long millis = start.getTime() + duration.longValue() * 60_000L;
+      endSpinner.setValue(new Date(millis));
+    }
+    List<BillingLine> lines = billingModel.getLines();
+    List<InterventionTemplate.TemplateLine> defaults = template.getDefaultLines();
+    if (defaults != null && !defaults.isEmpty()){
+      Date begin = spinnerDate(startSpinner);
+      Date finish = spinnerDate(endSpinner);
+      for (InterventionTemplate.TemplateLine source : defaults){
+        if (source == null){
+          continue;
+        }
+        BillingLine line = new BillingLine();
+        line.setId(UUID.randomUUID().toString());
+        line.setAutoGenerated(false);
+        String designation = source.getDesignation();
+        line.setDesignation(designation != null && !designation.isBlank() ? designation : "Ligne modèle");
+        String unit = source.getUnit();
+        if (unit == null || unit.isBlank()){
+          unit = "u";
+        }
+        line.setUnit(unit);
+        BigDecimal quantity = source.getQuantity();
+        if (quantity == null){
+          if ("h".equalsIgnoreCase(unit)){
+            quantity = PreDevisUtil.computeRoundedHours(begin, finish);
+          } else {
+            quantity = BigDecimal.ONE;
+          }
+        }
+        line.setQuantity(quantity);
+        BigDecimal price = source.getUnitPriceHt();
+        if (price == null){
+          price = BigDecimal.ZERO;
+        }
+        line.setUnitPriceHt(price);
+        line.setTotalHt(price.multiply(quantity));
+        lines.add(line);
+      }
+      billingModel.setLines(lines);
+    }
+    syncAutoBillingLinesWithResources();
+    String name = template.getName();
+    Toasts.success(this, name == null || name.isBlank() ? "Modèle appliqué" : "Modèle appliqué : " + name);
+  }
+
   private void addManualBillingLine(){
     BillingLine line = new BillingLine();
     line.setId(UUID.randomUUID().toString());
@@ -645,6 +760,8 @@ public class InterventionDialog extends JDialog {
     }
     List<BillingLine> updated = new ArrayList<>(manual);
     List<Resource> selectedResources = resourcePicker.getSelectedResources();
+    Date start = spinnerDate(startSpinner);
+    Date end = spinnerDate(endSpinner);
     for (Resource resource : selectedResources){
       if (resource == null){
         continue;
@@ -655,21 +772,30 @@ public class InterventionDialog extends JDialog {
         line = new BillingLine();
         line.setId(UUID.randomUUID().toString());
         line.setAutoGenerated(true);
+      }
+      if (resource.getId() != null){
+        line.setResourceId(resource.getId().toString());
+      } else if (key != null){
         line.setResourceId(key);
-        line.setQuantity(BigDecimal.ONE);
       }
-      if (resource.getName() != null && !resource.getName().isBlank()){
-        if (line.getDesignation() == null || line.getDesignation().isBlank() || line.isAutoGenerated()){
-          line.setDesignation(resource.getName());
-        }
+      String name = resource.getName();
+      if (name != null && !name.isBlank()){
+        line.setDesignation(name);
+      } else if (line.getDesignation() == null || line.getDesignation().isBlank()){
+        line.setDesignation("Ressource");
       }
+      PreDevisUtil.Inferred inferred = PreDevisUtil.inferUnitAndQty(resource, start, end);
+      line.setUnit(inferred.unit());
+      line.setQuantity(inferred.quantity());
       BigDecimal price = resource.getUnitPriceHt();
       if (price != null){
         line.setUnitPriceHt(price);
+      } else if (line.getUnitPriceHt() == null){
+        line.setUnitPriceHt(BigDecimal.ZERO);
       }
-      if (line.getUnit() == null || line.getUnit().isBlank()){
-        line.setUnit("u");
-      }
+      BigDecimal unitPrice = line.getUnitPriceHt() != null ? line.getUnitPriceHt() : BigDecimal.ZERO;
+      BigDecimal quantity = line.getQuantity() != null ? line.getQuantity() : BigDecimal.ONE;
+      line.setTotalHt(unitPrice.multiply(quantity));
       updated.add(line);
     }
     billingModel.setLines(updated);
@@ -739,6 +865,7 @@ public class InterventionDialog extends JDialog {
     resourcePicker.setContext(this.current);
 
     reloadAvailableTypes();
+    loadTemplates();
     populateTypes();
     populateClients();
     loadResources();
@@ -1019,6 +1146,20 @@ public class InterventionDialog extends JDialog {
       return ldt;
     }
     return LocalDateTime.now();
+  }
+
+  private Date spinnerDate(JSpinner spinner){
+    if (spinner == null){
+      return null;
+    }
+    Object value = spinner.getValue();
+    if (value instanceof Date date){
+      return date;
+    }
+    if (value instanceof LocalDateTime ldt){
+      return toDate(ldt);
+    }
+    return null;
   }
 
   private Date toDate(LocalDateTime value){
