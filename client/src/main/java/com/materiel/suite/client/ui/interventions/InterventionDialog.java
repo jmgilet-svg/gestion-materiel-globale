@@ -163,13 +163,13 @@ public class InterventionDialog extends JDialog {
       current.setGeneralDone(generalReady);
       current.setDetailsDone(detailsReady);
       current.setBillingReady(billingReady);
-      current.setWorkflowStage(quoted ? "DEVIS"
-          : billingReady ? "FACTURATION"
+      current.setWorkflowStage(billingReady ? "FACTURATION"
+          : quoted ? "DEVIS"
           : detailsReady ? "INTERVENTION"
           : "GÉNÉRAL");
     }
     int index = Math.max(0, tabs.getSelectedIndex());
-    workflowStepBar.setState(index, generalReady, detailsReady, billingReady, quoted);
+    workflowStepBar.setState(index, generalReady, detailsReady, quoted, billingReady);
     quoteSummaryLabel.setText(quoteStatusLabel.getText());
   }
 
@@ -312,8 +312,8 @@ public class InterventionDialog extends JDialog {
     }
     tabs.addTab("Général", IconRegistry.small("info"), buildGeneralTab());
     tabs.addTab("Intervention", IconRegistry.small("task"), buildInterventionTab());
-    tabs.addTab("Facturation", IconRegistry.small("invoice"), buildFacturationTab());
     tabs.addTab("Devis", IconRegistry.small("file"), buildQuoteTab());
+    tabs.addTab("Facturation", IconRegistry.small("invoice"), buildFacturationTab());
     tabs.addChangeListener(e -> refreshWorkflowState());
     return tabs;
   }
