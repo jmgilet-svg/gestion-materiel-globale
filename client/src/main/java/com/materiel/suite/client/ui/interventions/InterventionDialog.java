@@ -13,6 +13,7 @@ import com.materiel.suite.client.model.InterventionType;
 import com.materiel.suite.client.model.QuoteV2;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.model.ResourceRef;
+import com.materiel.suite.client.model.TimelineEvent;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.ClientService;
 import com.materiel.suite.client.service.InterventionTypeService;
@@ -42,6 +43,7 @@ import java.nio.file.Files;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.text.NumberFormat;
 import java.text.SimpleDateFormat;
@@ -55,6 +57,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Deque;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 /** Fenêtre avancée pour créer ou modifier une intervention. */
@@ -87,6 +90,10 @@ public class InterventionDialog extends JDialog {
   private final JLabel quoteStatusLabel = new JLabel("Aucun devis généré");
   private final StepBar workflowStepBar = new StepBar();
   private final JTabbedPane tabs = new JTabbedPane();
+  private final DefaultListModel<TimelineEvent> historyModel = new DefaultListModel<>();
+  private final JList<TimelineEvent> historyList = new JList<>(historyModel);
+  private final JTextArea historyInput = new JTextArea(3, 20);
+  private final JButton historySend = new JButton("Ajouter", IconRegistry.small("plus"));
   private final JLabel quoteSummaryLabel = new JLabel("Aucun devis généré");
   private final NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(Locale.FRANCE);
   private final JButton saveButton = new JButton("Enregistrer", IconRegistry.small("success"));
@@ -618,6 +625,8 @@ public class InterventionDialog extends JDialog {
     saveButton.setEnabled(false);
     billingTable.setEnabled(false);
     billingTable.setRowSelectionAllowed(false);
+    historyInput.setEditable(false);
+    historySend.setEnabled(false);
   }
 
   private void configureSpinners(){
@@ -696,6 +705,7 @@ public class InterventionDialog extends JDialog {
     tabs.addTab("Intervention", IconRegistry.small("task"), buildInterventionTab());
     tabs.addTab("Devis", IconRegistry.small("file"), buildQuoteTab());
     tabs.addTab("Facturation", IconRegistry.small("invoice"), buildFacturationTab());
+    tabs.addTab("Historique", IconRegistry.small("info"), buildHistoryTab());
     tabs.addChangeListener(e -> refreshWorkflowState());
     return tabs;
   }
@@ -760,6 +770,151 @@ public class InterventionDialog extends JDialog {
     info.add(helper);
     panel.add(info, BorderLayout.NORTH);
     return panel;
+  }
+
+  private JComponent buildHistoryTab(){
+    historyList.setCellRenderer(new HistoryRenderer());
+    historyList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+    historyList.setFixedCellHeight(-1);
+    historyInput.setLineWrap(true);
+    historyInput.setWrapStyleWord(true);
+    if (historySend.getActionListeners().length == 0){
+      historySend.addActionListener(e -> sendHistoryComment());
+    }
+    JPanel composer = new JPanel(new BorderLayout(6, 6));
+    composer.add(new JScrollPane(historyInput), BorderLayout.CENTER);
+    composer.add(historySend, BorderLayout.EAST);
+    JPanel panel = new JPanel(new BorderLayout(8, 8));
+    panel.add(new JScrollPane(historyList), BorderLayout.CENTER);
+    panel.add(composer, BorderLayout.SOUTH);
+    return panel;
+  }
+
+  private void loadHistory(){
+    historyModel.clear();
+    if (current == null || current.getId() == null){
+      return;
+    }
+    var timeline = ServiceLocator.timeline();
+    if (timeline == null){
+      return;
+    }
+    UUID interventionId = current.getId();
+    CompletableFuture
+        .supplyAsync(() -> {
+          try {
+            List<TimelineEvent> events = timeline.list(interventionId.toString());
+            return events != null ? events : List.<TimelineEvent>of();
+          } catch (Exception ex){
+            return List.<TimelineEvent>of();
+          }
+        })
+        .thenAccept(events -> SwingUtilities.invokeLater(() -> {
+          historyModel.clear();
+          for (TimelineEvent event : events){
+            historyModel.addElement(event);
+          }
+        }));
+  }
+
+  private void sendHistoryComment(){
+    String text = historyInput.getText();
+    if (text == null){
+      return;
+    }
+    String trimmed = text.trim();
+    if (trimmed.isEmpty()){
+      return;
+    }
+    historyInput.setText("");
+    logEventAsync("COMMENT", trimmed);
+  }
+
+  private void logEventAsync(String type, String message){
+    if (current == null || current.getId() == null){
+      return;
+    }
+    var timeline = ServiceLocator.timeline();
+    if (timeline == null){
+      return;
+    }
+    String trimmed = message == null ? "" : message.trim();
+    if (trimmed.isEmpty()){
+      return;
+    }
+    UUID interventionId = current.getId();
+    CompletableFuture
+        .supplyAsync(() -> {
+          try {
+            TimelineEvent event = new TimelineEvent();
+            event.setType(type);
+            event.setMessage(trimmed);
+            event.setTimestamp(Instant.now());
+            event.setAuthor(System.getProperty("user.name", "user"));
+            return timeline.append(interventionId.toString(), event);
+          } catch (Exception ex){
+            return null;
+          }
+        })
+        .thenAccept(saved -> {
+          if (saved != null){
+            SwingUtilities.invokeLater(() -> historyModel.addElement(saved));
+          }
+        });
+  }
+
+  private static class HistoryRenderer extends JPanel implements ListCellRenderer<TimelineEvent> {
+    private static final DateTimeFormatter HISTORY_FORMAT =
+        DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss").withZone(ZoneId.systemDefault());
+    private final JLabel header = new JLabel();
+    private final JLabel body = new JLabel();
+
+    HistoryRenderer(){
+      super(new BorderLayout(6, 2));
+      setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+      header.setFont(header.getFont().deriveFont(Font.BOLD));
+      body.setVerticalAlignment(SwingConstants.TOP);
+      header.setOpaque(false);
+      body.setOpaque(false);
+      add(header, BorderLayout.NORTH);
+      add(body, BorderLayout.CENTER);
+    }
+
+    @Override
+    public Component getListCellRendererComponent(JList<? extends TimelineEvent> list,
+                                                  TimelineEvent value,
+                                                  int index,
+                                                  boolean isSelected,
+                                                  boolean cellHasFocus){
+      String type = value != null && value.getType() != null ? value.getType() : "INFO";
+      Instant ts = value != null ? value.getTimestamp() : null;
+      String when = ts == null ? "" : HISTORY_FORMAT.format(ts);
+      String author = value != null && value.getAuthor() != null ? value.getAuthor() : "";
+      String headerText = "[" + type + "]";
+      if (!when.isBlank()){
+        headerText += " " + when;
+      }
+      if (!author.isBlank()){
+        headerText += " — " + author;
+      }
+      header.setText(headerText);
+      String message = value != null ? value.getMessage() : "";
+      body.setText("<html>" + escapeHtml(message) + "</html>");
+      Color background = isSelected ? new Color(0xDCEAFB) : Color.WHITE;
+      setBackground(background);
+      setOpaque(true);
+      return this;
+    }
+
+    private String escapeHtml(String text){
+      if (text == null || text.isEmpty()){
+        return "";
+      }
+      return text.replace("&", "&amp;")
+          .replace("<", "&lt;")
+          .replace(">", "&gt;")
+          .replace("\n", "<br>");
+    }
   }
 
   private JPanel panelWithLabel(String title, JComponent component){
@@ -1055,8 +1210,13 @@ public class InterventionDialog extends JDialog {
       }
       refreshWorkflowState();
       markSaved("Devis enregistré");
+      String finalRef = ref;
+      logEventAsync("ACTION", finalRef == null || finalRef.isBlank()
+          ? "Devis généré"
+          : "Devis généré : " + finalRef);
     } catch (Exception ex){
       Toasts.error(this, "Échec de génération du devis : " + ex.getMessage());
+      logEventAsync("SYSTEM", "Erreur génération devis : " + ex.getMessage());
     }
   }
 
@@ -1122,6 +1282,9 @@ public class InterventionDialog extends JDialog {
     syncAutoBillingLinesWithResources();
     refreshWorkflowState();
     markEdited();
+    List<Resource> selected = resourcePicker.getSelectedResources();
+    int count = selected == null ? 0 : selected.size();
+    logEventAsync("ACTION", "Sélection de ressources mise à jour (" + count + ")");
   }
 
   private void syncAutoBillingLinesWithResources(){
@@ -1298,6 +1461,7 @@ public class InterventionDialog extends JDialog {
     skipNextTableSnapshot = false;
     lastLinesSnapshot = deepCopyLines(billingModel.getLines());
     markSaved("Brouillon chargé");
+    loadHistory();
   }
 
   private void populateTypes(){

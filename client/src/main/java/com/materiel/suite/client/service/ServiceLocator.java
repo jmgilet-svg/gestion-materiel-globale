@@ -5,6 +5,7 @@ import com.materiel.suite.client.model.InterventionType;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.impl.LocalSettingsService;
+import com.materiel.suite.client.service.TimelineService;
 import com.materiel.suite.client.users.UserService;
 
 import java.util.List;
@@ -48,6 +49,10 @@ public final class ServiceLocator {
       SETTINGS = new LocalSettingsService();
     }
     return SETTINGS;
+  }
+
+  public static TimelineService timeline(){
+    return ServiceFactory.timeline();
   }
 
   public static final class ResourcesGateway {

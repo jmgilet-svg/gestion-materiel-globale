@@ -13,6 +13,7 @@ import java.awt.FontMetrics;
 import java.awt.event.KeyEvent;
 import java.time.DayOfWeek;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -62,8 +63,10 @@ import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.QuoteV2;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.model.ResourceRef;
+import com.materiel.suite.client.model.TimelineEvent;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.PlanningService;
+import com.materiel.suite.client.service.TimelineService;
 import com.materiel.suite.client.ui.common.KeymapUtil;
 import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.commands.CommandBus;
@@ -556,6 +559,7 @@ public class PlanningPanel extends JPanel {
     }
     PlanningService planning = ServiceFactory.planning();
     SalesService sales = ServiceFactory.sales();
+    TimelineService timeline = ServiceFactory.timeline();
     if (planning == null || sales == null){
       Toasts.error(this, "Service indisponible pour générer les devis");
       return;
@@ -588,6 +592,23 @@ public class PlanningPanel extends JPanel {
         }
         applyQuoteToIntervention(intervention, createdQuote, lines);
         planning.saveIntervention(intervention);
+        if (timeline != null && intervention.getId() != null){
+          try {
+            TimelineEvent event = new TimelineEvent();
+            event.setType("ACTION");
+            String reference = createdQuote.getReference();
+            if (reference == null || reference.isBlank()){
+              reference = createdQuote.getId();
+            }
+            event.setMessage(reference == null || reference.isBlank()
+                ? "Devis généré en masse"
+                : "Devis généré en masse : " + reference);
+            event.setTimestamp(Instant.now());
+            event.setAuthor(System.getProperty("user.name", "user"));
+            timeline.append(intervention.getId().toString(), event);
+          } catch (Exception ignore) {
+          }
+        }
         created++;
       } catch (Exception ex){
         failed++;
