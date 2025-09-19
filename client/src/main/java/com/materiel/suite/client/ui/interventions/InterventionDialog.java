@@ -1,6 +1,8 @@
 package com.materiel.suite.client.ui.interventions;
 
 import com.materiel.suite.client.auth.AccessControl;
+import com.materiel.suite.client.events.AppEventBus;
+import com.materiel.suite.client.events.SettingsEvents;
 import com.materiel.suite.client.model.BillingLine;
 import com.materiel.suite.client.model.Client;
 import com.materiel.suite.client.model.Contact;
@@ -109,6 +111,7 @@ public class InterventionDialog extends JDialog {
   private List<BillingLine> lastLinesSnapshot = new ArrayList<>();
   private boolean skipNextTableSnapshot;
   private boolean suppressDirtyEvents;
+  private AutoCloseable settingsSubscription;
 
   private Intervention current;
   private boolean saved;
@@ -276,6 +279,22 @@ public class InterventionDialog extends JDialog {
     autosaveTimer.setInitialDelay(delay);
     autosaveTimer.setRepeats(true);
     autosaveTimer.start();
+    settingsSubscription = AppEventBus.get().subscribe(SettingsEvents.GeneralSaved.class, event -> {
+      if (event == null){
+        return;
+      }
+      int seconds = Math.max(5, event.autosaveIntervalSeconds);
+      int newDelay = seconds * 1000;
+      autosaveTimer.setDelay(newDelay);
+      autosaveTimer.setInitialDelay(newDelay);
+      if (autosaveTimer.isRunning()){
+        autosaveTimer.restart();
+      }
+      SwingUtilities.invokeLater(() ->
+          autosaveLabel.setText("Autosauvegarde : " + seconds + "s appliquée ("
+              + new SimpleDateFormat("HH:mm:ss").format(new Date()) + ")")
+      );
+    });
     addWindowListener(new WindowAdapter(){
       @Override public void windowClosing(WindowEvent e){
         if (!dirty){
@@ -303,6 +322,13 @@ public class InterventionDialog extends JDialog {
 
       @Override public void windowClosed(WindowEvent e){
         autosaveTimer.stop();
+        if (settingsSubscription != null){
+          try {
+            settingsSubscription.close();
+          } catch (Exception ignore){
+          }
+          settingsSubscription = null;
+        }
       }
     });
   }
