@@ -16,4 +16,12 @@ public final class Prefs {
   public static void setSessionTimeoutMinutes(int minutes){
     PREFS.putInt("session.timeout.minutes", Math.max(1, minutes));
   }
+
+  public static int getAutosaveIntervalSeconds(){
+    return Math.max(5, PREFS.getInt("autosave.interval.seconds", 30));
+  }
+
+  public static void setAutosaveIntervalSeconds(int seconds){
+    PREFS.putInt("autosave.interval.seconds", Math.max(5, seconds));
+  }
 }

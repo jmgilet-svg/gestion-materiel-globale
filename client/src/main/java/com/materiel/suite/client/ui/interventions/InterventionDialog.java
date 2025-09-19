@@ -17,6 +17,8 @@ import com.materiel.suite.client.service.InterventionTypeService;
 import com.materiel.suite.client.service.PlanningService;
 import com.materiel.suite.client.service.SalesService;
 import com.materiel.suite.client.service.TemplateService;
+import com.materiel.suite.client.service.ServiceLocator;
+import com.materiel.suite.client.settings.GeneralSettings;
 import com.materiel.suite.client.ui.common.KeymapUtil;
 import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.icons.IconRegistry;
@@ -261,8 +263,18 @@ public class InterventionDialog extends JDialog {
       autosaveLabel.setText("Lecture seule");
       return;
     }
+    int delay = 30_000;
+    try {
+      GeneralSettings settings = ServiceLocator.settings().getGeneral();
+      if (settings != null){
+        int seconds = Math.max(5, settings.getAutosaveIntervalSeconds());
+        delay = seconds * 1000;
+      }
+    } catch (RuntimeException ignore){
+    }
+    autosaveTimer.setDelay(delay);
+    autosaveTimer.setInitialDelay(delay);
     autosaveTimer.setRepeats(true);
-    autosaveTimer.setInitialDelay(30_000);
     autosaveTimer.start();
     addWindowListener(new WindowAdapter(){
       @Override public void windowClosing(WindowEvent e){
