@@ -6,9 +6,11 @@ import java.awt.Color;
 import java.awt.Dialog;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.FontMetrics;
+import java.awt.event.KeyEvent;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -17,11 +19,14 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -41,6 +46,7 @@ import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JToggleButton;
+import javax.swing.JTextArea;
 import javax.swing.SpinnerDateModel;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
@@ -48,13 +54,15 @@ import javax.swing.border.EmptyBorder;
 
 import com.materiel.suite.client.model.BillingLine;
 import com.materiel.suite.client.model.Conflict;
+import com.materiel.suite.client.model.DocumentLine;
+import com.materiel.suite.client.model.DocumentTotals;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.QuoteV2;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.model.ResourceRef;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.PlanningService;
-import com.materiel.suite.client.service.SalesService;
+import com.materiel.suite.client.ui.common.KeymapUtil;
 import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.commands.CommandBus;
 import com.materiel.suite.client.ui.MainFrame;
@@ -166,6 +174,7 @@ public class PlanningPanel extends JPanel {
     reload();
 
     putUndoRedoKeymap();
+    installKeymap();
   }
 
   private JComponent buildToolbar(){
@@ -376,6 +385,118 @@ public class PlanningPanel extends JPanel {
     refreshPlanning();
   }
 
+  private void showDryRun(){
+    if (tabs == null || tabs.getSelectedComponent() != tableView.getComponent()){
+      Toasts.info(this, "Sélectionnez les interventions dans l'onglet Liste pour prévisualiser les devis.");
+      return;
+    }
+    List<Intervention> selection = tableView.getSelection();
+    if (selection.isEmpty()){
+      Toasts.info(this, "Aucune intervention sélectionnée");
+      return;
+    }
+    PlanningService planning = ServiceFactory.planning();
+    if (planning == null){
+      Toasts.error(this, "Service indisponible pour prévisualiser les devis");
+      return;
+    }
+    Map<UUID, Resource> catalog = new HashMap<>();
+    try {
+      List<Resource> resources = planning.listResources();
+      if (resources != null){
+        for (Resource resource : resources){
+          if (resource != null && resource.getId() != null){
+            catalog.put(resource.getId(), resource);
+          }
+        }
+      }
+    } catch (Exception ex){
+      Toasts.error(this, "Impossible de récupérer les ressources");
+      return;
+    }
+
+    NumberFormat currency = NumberFormat.getCurrencyInstance(Locale.FRANCE);
+    DecimalFormat qtyFormat = new DecimalFormat("0.##");
+    StringBuilder details = new StringBuilder();
+    int prepared = 0;
+    int skipped = 0;
+    int failed = 0;
+
+    for (Intervention intervention : selection){
+      if (intervention == null){
+        continue;
+      }
+      if (intervention.hasQuote()){
+        skipped++;
+        continue;
+      }
+      try {
+        List<BillingLine> lines = ensureBillingLines(intervention, catalog);
+        if (lines.isEmpty()){
+          skipped++;
+          continue;
+        }
+        Quote preview = QuoteGenerator.buildQuoteFromIntervention(intervention, lines);
+        if (prepared > 0){
+          details.append('\n');
+        }
+        details.append("• ").append(displayName(intervention)).append('\n');
+        DocumentTotals totals = preview.getTotals();
+        details.append("   Total HT: ").append(currency.format(totals.getTotalHT()));
+        details.append(" — TTC: ").append(currency.format(totals.getTotalTTC())).append('\n');
+        for (DocumentLine line : preview.getLines()){
+          if (line == null){
+            continue;
+          }
+          details.append("   · ").append(safeDesignation(line)).append(" — ");
+          double quantity = line.getQuantite();
+          if (quantity > 0d){
+            details.append(qtyFormat.format(quantity));
+            String unit = line.getUnite();
+            if (unit != null && !unit.isBlank()){
+              details.append(' ').append(unit);
+            }
+            details.append(" × ").append(currency.format(line.getPrixUnitaireHT()));
+          } else {
+            details.append(currency.format(line.getPrixUnitaireHT()));
+          }
+          details.append(" = ").append(currency.format(line.lineHT())).append(" HT\n");
+        }
+        prepared++;
+      } catch (Exception ex){
+        failed++;
+      }
+    }
+
+    if (prepared == 0){
+      String summary = String.format("Aucun devis à prévisualiser (ignorés: %d • erreurs: %d)", skipped, failed);
+      if (failed > 0){
+        Toasts.error(this, summary);
+      } else {
+        Toasts.info(this, summary);
+      }
+      return;
+    }
+
+    JTextArea area = new JTextArea(details.toString().stripTrailing());
+    area.setEditable(false);
+    area.setLineWrap(false);
+    area.setWrapStyleWord(false);
+    area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, area.getFont().getSize()));
+    JScrollPane scroll = new JScrollPane(area);
+    scroll.setPreferredSize(new Dimension(560, Math.min(480, 200 + prepared * 120)));
+    JOptionPane.showMessageDialog(this, scroll, "Prévisualisation des devis", JOptionPane.INFORMATION_MESSAGE);
+
+    String summary = String.format("Prévisualisations: %d • ignorés: %d • erreurs: %d", prepared, skipped, failed);
+    if (failed > 0){
+      Toasts.error(this, summary);
+    } else if (skipped > 0){
+      Toasts.info(this, summary);
+    } else {
+      Toasts.success(this, summary);
+    }
+  }
+
   private void generateQuotesForSelection(){
     List<Intervention> selection = selectedInterventionsForQuotes("générer les devis");
     if (selection.isEmpty()){
@@ -431,62 +552,32 @@ public class PlanningPanel extends JPanel {
     }
   }
 
-  private List<Intervention> selectedInterventionsForQuotes(String action){
-    if (tabs == null || tabs.getSelectedComponent() != tableView.getComponent()){
-      Toasts.info(this, "Sélectionnez les interventions dans l'onglet Liste pour " + action + ".");
-      return List.of();
-    }
-    List<Intervention> selection = tableView.getSelection();
-    if (selection.isEmpty()){
-      Toasts.info(this, "Aucune intervention sélectionnée");
-      return List.of();
-    }
-    return selection;
+  /* ---------- Exposition d'actions pour la Command Palette ---------- */
+  public void actionGenerateQuotes(){
+    generateQuotesForSelection();
   }
 
-  private void showDryRun(){
-    List<Intervention> selection = selectedInterventionsForQuotes("prévisualiser les devis");
-    if (selection.isEmpty()){
-      return;
+  public void actionDryRun(){
+    showDryRun();
+  }
+
+  public void actionFilterToDeviser(){
+    if (quoteFilter != null){
+      quoteFilter.setSelectedItem(QuoteFilter.A_DEVISER);
+      updateFilteredSimpleViews();
     }
-    PlanningService planning = ServiceFactory.planning();
-    Map<UUID, Resource> catalog = new HashMap<>();
-    if (planning != null){
-      for (Resource resource : planning.listResources()){
-        if (resource != null && resource.getId() != null){
-          catalog.put(resource.getId(), resource);
-        }
-      }
+  }
+
+  public void actionFilterDejaDevise(){
+    if (quoteFilter != null){
+      quoteFilter.setSelectedItem(QuoteFilter.DEJA_DEVISE);
+      updateFilteredSimpleViews();
     }
-    List<Intervention> toCreate = new ArrayList<>();
-    List<Intervention> toSkip = new ArrayList<>();
-    for (Intervention intervention : selection){
-      if (intervention == null){
-        continue;
-      }
-      if (intervention.hasQuote()){
-        toSkip.add(intervention);
-        continue;
-      }
-      boolean hasLines = intervention.getBillingLines() != null && !intervention.getBillingLines().isEmpty();
-      if (!hasLines){
-        List<ResourceRef> refs = intervention.getResources();
-        if (refs != null && !refs.isEmpty()){
-          List<BillingLine> preview = PreDevisUtil.fromResourceRefs(refs, catalog);
-          hasLines = !preview.isEmpty();
-        }
-      }
-      if (hasLines){
-        toCreate.add(intervention);
-      } else {
-        toSkip.add(intervention);
-      }
-    }
-    new QuoteDryRunDialog(SwingUtilities.getWindowAncestor(this), toCreate, toSkip, confirmed -> {
-      if (confirmed){
-        generateQuotesForSelection();
-      }
-    }).setVisible(true);
+  }
+
+  public void actionReload(){
+    reload();
+
   }
 
   private void refreshPlanning(){
@@ -565,32 +656,31 @@ public class PlanningPanel extends JPanel {
     return generated;
   }
 
-  private void applyQuoteToIntervention(Intervention intervention, QuoteV2 quote, List<BillingLine> lines){
-    if (intervention == null || quote == null){
-      return;
+  private String displayName(Intervention intervention){
+    if (intervention == null){
+      return "Intervention";
     }
-    if (lines != null){
-      intervention.setBillingLines(new ArrayList<>(lines));
-      intervention.setQuoteDraft(QuoteGenerator.toDocumentLines(lines));
+    String client = intervention.getClientName();
+    if (client != null && !client.isBlank()){
+      return client;
     }
-    String id = quote.getId();
-    if (id != null && !id.isBlank()){
-      try {
-        intervention.setQuoteId(UUID.fromString(id));
-      } catch (IllegalArgumentException ex){
-        intervention.setQuoteId(null);
-      }
-    } else {
-      intervention.setQuoteId(null);
+    String label = intervention.getLabel();
+    if (label != null && !label.isBlank()){
+      return label;
     }
-    String ref = quote.getReference();
-    if (ref != null && !ref.isBlank()){
-      intervention.setQuoteReference(ref);
-      intervention.setQuoteNumber(ref);
-    } else {
-      intervention.setQuoteReference(null);
-      intervention.setQuoteNumber(null);
+    UUID id = intervention.getId();
+    return id != null ? "Intervention " + id : "Intervention";
+  }
+
+  private String safeDesignation(DocumentLine line){
+    if (line == null){
+      return "(ligne)";
     }
+    String designation = line.getDesignation();
+    if (designation == null || designation.isBlank()){
+      return "(Sans libellé)";
+    }
+    return designation;
   }
 
   private void updateSimpleReference(LocalDate date){
@@ -690,6 +780,28 @@ public class PlanningPanel extends JPanel {
     }
     calendarView.setData(filtered);
     tableView.setData(filtered);
+  }
+
+  /* ---------- Raccourcis clavier locaux ---------- */
+  private void installKeymap(){
+    KeymapUtil.bind(this, "planning-generate", KeyEvent.VK_D, 0, this::actionGenerateQuotes);
+    KeymapUtil.bind(this, "planning-preview", KeyEvent.VK_P, 0, this::actionDryRun);
+    KeymapUtil.bind(this, "planning-filter-cycle", KeyEvent.VK_F, 0, this::cycleQuoteFilter);
+    KeymapUtil.bind(this, "planning-reload", KeyEvent.VK_R, 0, this::actionReload);
+  }
+
+  private void cycleQuoteFilter(){
+    if (quoteFilter == null){
+      return;
+    }
+    int count = quoteFilter.getItemCount();
+    if (count <= 0){
+      return;
+    }
+    int index = quoteFilter.getSelectedIndex();
+    int next = (index + 1) % count;
+    quoteFilter.setSelectedIndex(next);
+    updateFilteredSimpleViews();
   }
 
   private void moveIntervention(Intervention it, LocalDate targetDay){
