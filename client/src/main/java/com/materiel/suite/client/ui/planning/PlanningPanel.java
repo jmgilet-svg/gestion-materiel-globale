@@ -901,16 +901,34 @@ public class PlanningPanel extends JPanel {
       Toasts.info(this, "Sélectionnez au moins une intervention.");
       return;
     }
+    Object[] modes = {"Un seul PDF (multi-pages)", "Un .zip (1 PDF par ressource)"};
+    int choice = JOptionPane.showOptionDialog(
+        this,
+        "Choisir le format d’export :",
+        "Ordre de mission",
+        JOptionPane.DEFAULT_OPTION,
+        JOptionPane.QUESTION_MESSAGE,
+        null,
+        modes,
+        modes[0]
+    );
+    if (choice == JOptionPane.CLOSED_OPTION){
+      return;
+    }
     JFileChooser chooser = new JFileChooser();
-    chooser.setSelectedFile(new File("ordre-de-mission.pdf"));
+    chooser.setSelectedFile(new File(choice == 0 ? "ordre-de-mission.pdf" : "ordre-de-mission-par-ressource.zip"));
     int result = chooser.showSaveDialog(this);
     if (result != JFileChooser.APPROVE_OPTION){
       return;
     }
     File destination = chooser.getSelectedFile();
     try {
-      MissionOrderPdfExporter.export(destination, selection);
-      Toasts.success(this, "PDF généré : " + destination.getName());
+      if (choice == 0){
+        MissionOrderPdfExporter.export(destination, selection);
+      } else {
+        MissionOrderPdfExporter.exportPerResourceZip(destination, selection);
+      }
+      Toasts.success(this, "Export généré : " + destination.getName());
     } catch (Exception ex){
       Toasts.error(this, "Échec génération PDF : " + ex.getMessage());
     }

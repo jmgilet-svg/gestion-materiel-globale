@@ -11,6 +11,7 @@ public class LocalSettingsService implements SettingsService {
     GeneralSettings settings = new GeneralSettings();
     settings.setSessionTimeoutMinutes(Prefs.getSessionTimeoutMinutes());
     settings.setAutosaveIntervalSeconds(Prefs.getAutosaveIntervalSeconds());
+    settings.setAgencyLogoPngBase64(Prefs.getAgencyLogoPngBase64());
     return settings;
   }
 
@@ -21,5 +22,6 @@ public class LocalSettingsService implements SettingsService {
     }
     Prefs.setSessionTimeoutMinutes(settings.getSessionTimeoutMinutes());
     Prefs.setAutosaveIntervalSeconds(settings.getAutosaveIntervalSeconds());
+    Prefs.setAgencyLogoPngBase64(settings.getAgencyLogoPngBase64());
   }
 }
