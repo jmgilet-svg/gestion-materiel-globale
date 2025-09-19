@@ -2,6 +2,8 @@ package com.materiel.suite.client.ui.settings;
 
 import com.materiel.suite.client.auth.AccessControl;
 import com.materiel.suite.client.auth.SessionManager;
+import com.materiel.suite.client.events.AppEventBus;
+import com.materiel.suite.client.events.SettingsEvents;
 import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.settings.GeneralSettings;
 import com.materiel.suite.client.ui.common.Toasts;
@@ -80,6 +82,10 @@ public class GeneralSettingsPanel extends JPanel {
       SessionManager.setTimeoutMinutes(updated.getSessionTimeoutMinutes());
       timeoutSpinner.setValue(updated.getSessionTimeoutMinutes());
       autosaveSpinner.setValue(updated.getAutosaveIntervalSeconds());
+      AppEventBus.get().publish(new SettingsEvents.GeneralSaved(
+          updated.getSessionTimeoutMinutes(),
+          updated.getAutosaveIntervalSeconds()
+      ));
       Toasts.success(this, "Paramètres généraux mis à jour");
     } catch (RuntimeException ex){
       Toasts.error(this, "Échec de l'enregistrement des paramètres");
