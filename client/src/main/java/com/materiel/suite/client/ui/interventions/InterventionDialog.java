@@ -8,14 +8,16 @@ import com.materiel.suite.client.model.DocumentLine;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.InterventionTemplate;
 import com.materiel.suite.client.model.InterventionType;
-import com.materiel.suite.client.model.Quote;
+import com.materiel.suite.client.model.QuoteV2;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.model.ResourceRef;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.ClientService;
 import com.materiel.suite.client.service.InterventionTypeService;
 import com.materiel.suite.client.service.PlanningService;
+import com.materiel.suite.client.service.SalesService;
 import com.materiel.suite.client.service.TemplateService;
+import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.icons.IconRegistry;
 
@@ -83,6 +85,7 @@ public class InterventionDialog extends JDialog {
   private final JButton addBillingLineButton = new JButton("Ajouter ligne", IconRegistry.small("plus"));
   private final JButton removeBillingLineButton = new JButton("Supprimer", IconRegistry.small("trash"));
   private final JButton generateQuoteButton = new JButton("Générer le devis", IconRegistry.small("file"));
+  private final JButton openQuoteButton = new JButton("Ouvrir le devis");
   private final JButton importSignatureButton = new JButton("Importer PNG…");
   private final JButton clearSignatureButton = new JButton("Effacer");
   private final JButton fullscreenButton = new JButton("", IconRegistry.small("maximize"));
@@ -125,11 +128,13 @@ public class InterventionDialog extends JDialog {
     addBillingLineButton.addActionListener(e -> addManualBillingLine());
     removeBillingLineButton.addActionListener(e -> removeSelectedBillingLine());
     generateQuoteButton.addActionListener(e -> generateQuoteFromPrebilling());
+    openQuoteButton.addActionListener(e -> openQuotePreview());
     importSignatureButton.addActionListener(e -> importSignature());
     clearSignatureButton.addActionListener(e -> clearSignature());
     fullscreenButton.addActionListener(e -> toggleFullscreen());
     fullscreenButton.setFocusPainted(false);
     fullscreenButton.setToolTipText("Plein écran");
+    openQuoteButton.setEnabled(false);
     reloadAvailableTypes();
     buildUI();
     loadTemplates();
@@ -296,6 +301,7 @@ public class InterventionDialog extends JDialog {
     addBillingLineButton.setEnabled(false);
     removeBillingLineButton.setEnabled(false);
     generateQuoteButton.setEnabled(false);
+    openQuoteButton.setEnabled(false);
     saveButton.setEnabled(false);
     billingTable.setEnabled(false);
     billingTable.setRowSelectionAllowed(false);
@@ -414,6 +420,7 @@ public class InterventionDialog extends JDialog {
     toolbar.add(removeBillingLineButton);
     toolbar.addSeparator();
     toolbar.add(generateQuoteButton);
+    toolbar.add(openQuoteButton);
     toolbar.add(Box.createHorizontalStrut(12));
     toolbar.add(quoteStatusLabel);
     toolbar.add(Box.createHorizontalStrut(12));
@@ -703,26 +710,22 @@ public class InterventionDialog extends JDialog {
         return;
       }
     }
-    var quoteService = ServiceFactory.quotes();
-    if (quoteService == null){
+    SalesService sales = ServiceLocator.sales();
+    if (sales == null){
       Toasts.error(this, "Service devis indisponible");
       return;
     }
     try {
-      Quote draft = QuoteGenerator.buildQuoteFromIntervention(current, lines);
-      Quote created = quoteService.save(draft);
-      if (created == null){
+      current.setBillingLines(lines);
+      QuoteV2 quote = sales.createQuoteFromIntervention(current);
+      if (quote == null){
         throw new IllegalStateException("Réponse vide du service devis");
       }
-      current.setBillingLines(lines);
-      current.setQuoteDraft(QuoteGenerator.toDocumentLines(lines));
-      current.setQuoteId(created.getId());
-      current.setQuoteReference(created.getNumber());
-      current.setQuoteNumber(created.getNumber());
+      applyQuoteToIntervention(current, quote, lines);
       updateQuoteBadge();
-      String ref = created.getNumber();
+      String ref = quote.getReference();
       if (ref == null || ref.isBlank()){
-        ref = created.getId() != null ? created.getId().toString() : "";
+        ref = quote.getId() != null ? quote.getId() : "";
       }
       Toasts.success(this, ref == null || ref.isBlank() ? "Devis créé" : "Devis créé — " + ref);
       if (onSaveCallback != null){
@@ -733,6 +736,61 @@ public class InterventionDialog extends JDialog {
       refreshWorkflowState();
     } catch (Exception ex){
       Toasts.error(this, "Échec de génération du devis : " + ex.getMessage());
+    }
+  }
+
+  private void applyQuoteToIntervention(Intervention intervention, QuoteV2 quote, List<BillingLine> lines){
+    if (intervention == null || quote == null){
+      return;
+    }
+    if (lines != null){
+      intervention.setBillingLines(new ArrayList<>(lines));
+      intervention.setQuoteDraft(QuoteGenerator.toDocumentLines(lines));
+    }
+    String id = quote.getId();
+    if (id != null && !id.isBlank()){
+      try {
+        intervention.setQuoteId(UUID.fromString(id));
+      } catch (IllegalArgumentException ex){
+        intervention.setQuoteId(null);
+      }
+    } else {
+      intervention.setQuoteId(null);
+    }
+    String reference = quote.getReference();
+    if (reference != null && !reference.isBlank()){
+      intervention.setQuoteReference(reference);
+      intervention.setQuoteNumber(reference);
+    } else {
+      intervention.setQuoteReference(null);
+      intervention.setQuoteNumber(null);
+    }
+  }
+
+  private void openQuotePreview(){
+    if (current == null || !current.hasQuote()){
+      Toasts.info(this, "Aucun devis lié à cette intervention.");
+      return;
+    }
+    SalesService sales = ServiceLocator.sales();
+    if (sales == null){
+      Toasts.error(this, "Service devis indisponible");
+      return;
+    }
+    UUID quoteId = current.getQuoteId();
+    if (quoteId == null){
+      Toasts.error(this, "Identifiant de devis indisponible.");
+      return;
+    }
+    try {
+      QuoteV2 quote = sales.getQuote(quoteId.toString());
+      if (quote == null){
+        Toasts.error(this, "Devis introuvable côté service.");
+        return;
+      }
+      new QuotePreviewDialog(this, quote).setVisible(true);
+    } catch (Exception ex){
+      Toasts.error(this, "Impossible d'ouvrir le devis : " + ex.getMessage());
     }
   }
 
@@ -1063,6 +1121,8 @@ public class InterventionDialog extends JDialog {
     }
     quoteStatusLabel.setText(text);
     quoteSummaryLabel.setText(text);
+    boolean enable = current != null && current.hasQuote();
+    openQuoteButton.setEnabled(enable);
     refreshWorkflowState();
   }
 
