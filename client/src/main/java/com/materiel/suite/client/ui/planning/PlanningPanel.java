@@ -100,6 +100,7 @@ public class PlanningPanel extends JPanel {
   private final AgendaBoard agenda = new AgendaBoard();
   private final JButton bulkQuoteBtn = new JButton("Générer devis", IconRegistry.small("file-plus"));
   private final JButton exportIcsBtn = new JButton("Exporter .ics", IconRegistry.small("calendar"));
+  private final JButton exportMissionBtn = new JButton("Ordre de mission (PDF)", IconRegistry.small("file"));
   private final JButton dryRunBtn = new JButton("Prévisualiser", IconRegistry.small("calculator"));
   private final JComboBox<QuoteFilter> quoteFilter = new JComboBox<>(QuoteFilter.values());
   private final JPanel bulkBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
@@ -193,15 +194,18 @@ public class PlanningPanel extends JPanel {
     bulkBar.add(dryRunBtn);
     bulkBar.add(bulkQuoteBtn);
     bulkBar.add(exportIcsBtn);
+    bulkBar.add(exportMissionBtn);
     bulkBar.setVisible(false);
     dryRunBtn.setEnabled(false);
     bulkQuoteBtn.setEnabled(false);
     exportIcsBtn.setEnabled(false);
+    exportMissionBtn.setEnabled(false);
     add(bulkBar, BorderLayout.SOUTH);
 
     bulkQuoteBtn.addActionListener(e -> generateQuotesForSelection());
     dryRunBtn.addActionListener(e -> showDryRun());
     exportIcsBtn.addActionListener(e -> exportIcs());
+    exportMissionBtn.addActionListener(e -> exportMissionPdf());
     updateSelectionUI(List.of());
 
     reload();
@@ -433,6 +437,7 @@ public class PlanningPanel extends JPanel {
     dryRunBtn.setEnabled(active);
     bulkQuoteBtn.setEnabled(active);
     exportIcsBtn.setEnabled(active);
+    exportMissionBtn.setEnabled(active);
     bulkBar.setVisible(active);
     revalidate();
     repaint();
@@ -887,6 +892,28 @@ public class PlanningPanel extends JPanel {
     KeymapUtil.bind(this, "planning-preview", KeyEvent.VK_P, 0, this::actionDryRun);
     KeymapUtil.bind(this, "planning-filter-cycle", KeyEvent.VK_F, 0, this::cycleQuoteFilter);
     KeymapUtil.bind(this, "planning-reload", KeyEvent.VK_R, 0, this::actionReload);
+  }
+
+  /* ---------- Export Ordre de mission (PDF) ---------- */
+  private void exportMissionPdf(){
+    List<Intervention> selection = selectedInterventions();
+    if (selection == null || selection.isEmpty()){
+      Toasts.info(this, "Sélectionnez au moins une intervention.");
+      return;
+    }
+    JFileChooser chooser = new JFileChooser();
+    chooser.setSelectedFile(new File("ordre-de-mission.pdf"));
+    int result = chooser.showSaveDialog(this);
+    if (result != JFileChooser.APPROVE_OPTION){
+      return;
+    }
+    File destination = chooser.getSelectedFile();
+    try {
+      MissionOrderPdfExporter.export(destination, selection);
+      Toasts.success(this, "PDF généré : " + destination.getName());
+    } catch (Exception ex){
+      Toasts.error(this, "Échec génération PDF : " + ex.getMessage());
+    }
   }
 
   private void exportIcs(){
