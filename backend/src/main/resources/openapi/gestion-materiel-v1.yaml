@@ -589,9 +589,7 @@ components:
         quoteReference:
           type: string
           description: 'Référence devis lisible'
-        workflowStage:
-          type: string
-          enum: [ 'GÉNÉRAL', 'INTERVENTION', 'FACTURATION', 'DEVIS' ]
+        workflowStage: { type: string, enum: ["INTERVENTION","DEVIS","FACTURATION"] }
         generalDone:
           type: boolean
         detailsDone:
