@@ -18,9 +18,12 @@ import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -28,8 +31,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -42,6 +45,7 @@ public class ResourcePickerPanel extends JPanel {
   private final JComboBox<String> typeFilter = new JComboBox<>();
   private final JComboBox<String> stateFilter = new JComboBox<>(new String[]{"(tous)", "DISPONIBLE", "OCCUPEE", "EN_MAINTENANCE"});
   private final JCheckBox onlyAvailable = new JCheckBox("Disponibles sur le créneau");
+  private final JCheckBox sortByAvailability = new JCheckBox("Trier par disponibilité");
   private final DefaultListModel<Resource> resultsModel = new DefaultListModel<>();
   private final JList<Resource> resultsList = new JList<>(resultsModel);
   private final DefaultListModel<Resource> selectedModel = new DefaultListModel<>();
@@ -88,6 +92,16 @@ public class ResourcePickerPanel extends JPanel {
     gc.gridx = 0; gc.gridy = ++y; filters.add(new JLabel("État"), gc);
     gc.gridx = 0; gc.gridy = ++y; filters.add(stateFilter, gc);
     gc.gridx = 0; gc.gridy = ++y; filters.add(onlyAvailable, gc);
+    gc.gridx = 0; gc.gridy = ++y; filters.add(sortByAvailability, gc);
+    JPanel legend = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+    legend.setOpaque(false);
+    legend.add(dot(new Color(0x43A047)));
+    legend.add(new JLabel("Libre"));
+    legend.add(dot(new Color(0xFB8C00)));
+    legend.add(new JLabel("Conflit partiel"));
+    legend.add(dot(new Color(0xE53935)));
+    legend.add(new JLabel("Conflit majeur"));
+    gc.gridx = 0; gc.gridy = ++y; filters.add(legend, gc);
     gc.weighty = 1; gc.gridy = ++y; filters.add(Box.createVerticalGlue(), gc);
 
     JScrollPane center = new JScrollPane(resultsList);
@@ -129,6 +143,7 @@ public class ResourcePickerPanel extends JPanel {
     typeFilter.addActionListener(refresh);
     stateFilter.addActionListener(refresh);
     onlyAvailable.addActionListener(refresh);
+    sortByAvailability.addActionListener(refresh);
     search.addActionListener(refresh);
     search.getDocument().addDocumentListener(new SimpleDocListener(this::refreshResults));
   }
@@ -144,6 +159,7 @@ public class ResourcePickerPanel extends JPanel {
     typeFilter.setEnabled(!readOnly);
     stateFilter.setEnabled(!readOnly);
     onlyAvailable.setEnabled(!readOnly);
+    sortByAvailability.setEnabled(!readOnly);
     addButton.setEnabled(!readOnly);
     removeButton.setEnabled(!readOnly);
     resultsList.setEnabled(!readOnly);
@@ -338,7 +354,17 @@ public class ResourcePickerPanel extends JPanel {
     String state = (String) stateFilter.getSelectedItem();
     boolean availOnly = onlyAvailable.isSelected();
 
-    List<Resource> filtered = new ArrayList<>();
+    class Row {
+      final Resource resource;
+      final int overlap;
+
+      Row(Resource resource, int overlap){
+        this.resource = resource;
+        this.overlap = overlap;
+      }
+    }
+
+    List<Row> rows = new ArrayList<>();
     for (Resource resource : allResources){
       if (resource == null){
         continue;
@@ -363,15 +389,24 @@ public class ResourcePickerPanel extends JPanel {
       if (!normalized.isEmpty() && !matches(resource, normalized)){
         continue;
       }
-      if (availOnly && hasOverlap(busyByResource.get(key))){
+      int overlap = overlapPercent(busyByResource.get(key));
+      if (availOnly && overlap > 0){
         continue;
       }
-      filtered.add(resource);
+      rows.add(new Row(resource, overlap));
     }
-    filtered.sort(Comparator.comparing(r -> Optional.ofNullable(r.getName()).orElse("").toLowerCase(Locale.ROOT)));
+
+    Comparator<Row> comparator = Comparator
+      .comparing((Row row) -> Optional.ofNullable(row.resource.getName()).orElse("").toLowerCase(Locale.ROOT));
+    if (sortByAvailability.isSelected()){
+      comparator = Comparator.<Row>comparingInt(row -> row.overlap)
+        .thenComparing(comparator);
+    }
+    rows.sort(comparator);
+
     resultsModel.clear();
-    for (Resource resource : filtered){
-      resultsModel.addElement(resource);
+    for (Row row : rows){
+      resultsModel.addElement(row.resource);
     }
   }
 
@@ -387,22 +422,56 @@ public class ResourcePickerPanel extends JPanel {
     String typeName = type != null ? type.getName() : null;
     return typeName != null && typeName.toLowerCase(Locale.ROOT).contains(query);
   }
-  private boolean hasOverlap(List<BusySlot> slots){
+  private int overlapPercent(List<BusySlot> slots){
+    return overlapPercent(slots, plannedStart, plannedEnd);
+  }
+
+  private int overlapPercent(List<BusySlot> slots, LocalDateTime start, LocalDateTime end){
     if (slots == null || slots.isEmpty()){
-      return false;
+      return 0;
+    }
+    if (start == null || end == null || !start.isBefore(end)){
+      return 0;
+    }
+    long windowMillis = Math.max(1L, Duration.between(start, end).toMillis());
+    long overlapMillis = 0L;
+    for (BusySlot slot : slots){
+      if (slot == null || slot.start == null || slot.end == null){
+        continue;
+      }
+      LocalDateTime overlapStart = start.isAfter(slot.start) ? start : slot.start;
+      LocalDateTime overlapEnd = end.isBefore(slot.end) ? end : slot.end;
+      if (!overlapStart.isBefore(overlapEnd)){
+        continue;
+      }
+      long inter = Duration.between(overlapStart, overlapEnd).toMillis();
+      overlapMillis += inter;
+      if (overlapMillis >= windowMillis){
+        overlapMillis = windowMillis;
+        break;
+      }
+    }
+    return (int) Math.round(100.0 * overlapMillis / windowMillis);
+  }
+
+  private List<BusySlot> overlappingSlots(List<BusySlot> slots){
+    if (slots == null || slots.isEmpty()){
+      return Collections.emptyList();
     }
     if (plannedStart == null || plannedEnd == null){
-      return false;
+      return Collections.emptyList();
     }
+    List<BusySlot> overlapping = new ArrayList<>();
     for (BusySlot slot : slots){
       if (slot == null || slot.start == null || slot.end == null){
         continue;
       }
       if (plannedStart.isBefore(slot.end) && slot.start.isBefore(plannedEnd)){
-        return true;
+        overlapping.add(slot);
       }
     }
-    return false;
+    overlapping.sort(Comparator.comparing(slot -> slot.start));
+    return overlapping;
   }
 
   private void recomputeBusyMap(){
@@ -525,9 +594,10 @@ public class ResourcePickerPanel extends JPanel {
 
     ResourceCellRenderer(){
       super(new BorderLayout(6, 0));
-      bar.setPreferredSize(new Dimension(80, 8));
+      bar.setPreferredSize(new Dimension(92, 10));
       bar.setBorderPainted(false);
-      bar.setStringPainted(false);
+      bar.setStringPainted(true);
+      bar.setString("");
       add(left, BorderLayout.WEST);
       add(bar, BorderLayout.CENTER);
       add(right, BorderLayout.EAST);
@@ -546,11 +616,53 @@ public class ResourcePickerPanel extends JPanel {
       BigDecimal price = value != null ? value.getUnitPriceHt() : null;
       right.setText(price != null ? price.stripTrailingZeros().toPlainString() + " € HT" : "");
       List<BusySlot> slots = busyByResource.get(keyOf(value));
-      boolean conflict = hasOverlap(slots);
-      bar.setValue(conflict ? 100 : 0);
-      bar.setForeground(conflict ? new Color(0xE53935) : new Color(0x43A047));
+      int overlap = overlapPercent(slots);
+      bar.setValue(overlap);
+      Color color = overlap == 0 ? new Color(0x43A047) : overlap < 50 ? new Color(0xFB8C00) : new Color(0xE53935);
+      bar.setForeground(color);
+      String tooltipText;
+      if (overlap == 0){
+        tooltipText = "Aucun conflit sur le créneau";
+      } else {
+        StringBuilder tooltip = new StringBuilder("<html><b>Conflits (" + overlap + "%)</b><br/>");
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM HH:mm");
+        int shown = 0;
+        for (BusySlot slot : overlappingSlots(slots)){
+          if (shown >= 5){
+            tooltip.append("…");
+            break;
+          }
+          tooltip.append(formatter.format(slot.start)).append(" ➜ ")
+            .append(formatter.format(slot.end));
+          if (slot.label != null){
+            tooltip.append(" — ").append(escapeHtml(slot.label));
+          }
+          tooltip.append("<br/>");
+          shown++;
+        }
+        tooltip.append("</html>");
+        tooltipText = tooltip.toString();
+      }
+      bar.setToolTipText(tooltipText);
+      setToolTipText(tooltipText);
       return this;
     }
+  }
+
+  private static JComponent dot(Color color){
+    return new JComponent(){
+      {
+        setPreferredSize(new Dimension(12, 12));
+      }
+
+      @Override
+      protected void paintComponent(Graphics g){
+        g.setColor(color);
+        g.fillOval(0, 0, 12, 12);
+        g.setColor(Color.DARK_GRAY);
+        g.drawOval(0, 0, 12, 12);
+      }
+    };
   }
 
   private static class BusySlot {
