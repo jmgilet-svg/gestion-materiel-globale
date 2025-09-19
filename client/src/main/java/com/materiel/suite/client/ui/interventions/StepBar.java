@@ -6,15 +6,16 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.function.IntConsumer;
 
-/** Barre d'étapes interactive pour l'intervention (Général → Intervention → Devis → Facturation). */
+
+/** Barre d'étapes interactive pour le suivi Intervention → Devis → Facturation. */
 public class StepBar extends JPanel {
-  private final JLabel[] steps = new JLabel[4];
+  private final JLabel[] steps = new JLabel[3];
   private IntConsumer onNavigate;
 
   public StepBar(){
-    super(new GridLayout(1, 4, 8, 0));
+    super(new GridLayout(1, 3, 8, 0));
     setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
-    String[] labels = {"Général", "Intervention", "Devis", "Facturation"};
+    String[] labels = {"Intervention", "Devis", "Facturation"};
     for (int i = 0; i < steps.length; i++){
       JLabel label = new JLabel(labels[i], SwingConstants.CENTER);
       label.setOpaque(true);
@@ -31,16 +32,17 @@ public class StepBar extends JPanel {
       steps[i] = label;
       add(label);
     }
-    setState(0, false, false, false, false);
+    setState(0, false, false, false);
   }
 
   public void setOnNavigate(IntConsumer onNavigate){
     this.onNavigate = onNavigate;
   }
 
-  public void setState(int active, boolean generalDone, boolean detailsDone, boolean quoted, boolean billingReady){
+  public void setState(int active, boolean interventionReady, boolean quoteGenerated, boolean billingReady){
     int clamped = Math.max(0, Math.min(active, steps.length - 1));
-    boolean[] done = {generalDone, detailsDone, quoted, billingReady};
+    boolean[] done = {interventionReady, quoteGenerated, billingReady};
+
     for (int i = 0; i < steps.length; i++){
       JLabel label = steps[i];
       boolean isActive = i == clamped;
@@ -54,11 +56,9 @@ public class StepBar extends JPanel {
 
   private String stepLabel(int index, boolean done, boolean active){
     String base = switch (index){
-      case 0 -> "Général";
-      case 1 -> "Intervention";
-      case 2 -> "Devis";
-      case 3 -> "Facturation";
-      default -> "?";
+      case 0 -> "Intervention";
+      case 1 -> "Devis";
+      default -> "Facturation";
     };
     if (done){
       return base + " ✅";

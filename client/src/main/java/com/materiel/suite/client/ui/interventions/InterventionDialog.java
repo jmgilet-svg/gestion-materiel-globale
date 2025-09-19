@@ -132,6 +132,7 @@ public class InterventionDialog extends JDialog {
   }
 
   private void installWorkflowHooks(){
+    // Mapping étapes → onglets (ordre figé) : Intervention(1), Devis(3), Facturation(2)
     workflowStepBar.setOnNavigate(this::navigateToStep);
     ChangeListener spinnerListener = e -> refreshWorkflowState();
     startSpinner.addChangeListener(spinnerListener);
@@ -140,10 +141,16 @@ public class InterventionDialog extends JDialog {
   }
 
   private void navigateToStep(int index){
-    if (index < 0 || index >= tabs.getTabCount()){
+    int target = switch (index){
+      case 0 -> 1; // Intervention
+      case 1 -> 3; // Devis
+      case 2 -> 2; // Facturation
+      default -> 1;
+    };
+    if (target < 0 || target >= tabs.getTabCount()){
       return;
     }
-    tabs.setSelectedIndex(index);
+    tabs.setSelectedIndex(target);
   }
 
   private DocumentListener documentListener(Runnable action){
@@ -163,13 +170,19 @@ public class InterventionDialog extends JDialog {
       current.setGeneralDone(generalReady);
       current.setDetailsDone(detailsReady);
       current.setBillingReady(billingReady);
-      current.setWorkflowStage(billingReady ? "FACTURATION"
-          : quoted ? "DEVIS"
-          : detailsReady ? "INTERVENTION"
-          : "GÉNÉRAL");
+      // Étape courante (prochaine à faire) — ordre figé : Intervention → Devis → Facturation
+      String stage = !detailsReady ? "INTERVENTION" : (!quoted ? "DEVIS" : "FACTURATION");
+      current.setWorkflowStage(stage);
     }
-    int index = Math.max(0, tabs.getSelectedIndex());
-    workflowStepBar.setState(index, generalReady, detailsReady, quoted, billingReady);
+    // Peindre la barre (activeIndex selon l'onglet : Intervention(1)→0, Devis(3)→1, Facturation(2)→2)
+    int tabIdx = tabs.getSelectedIndex();
+    int active = switch (tabIdx){
+      case 1 -> 0;
+      case 3 -> 1;
+      case 2 -> 2;
+      default -> 0;
+    };
+    workflowStepBar.setState(active, detailsReady, quoted, billingReady);
     quoteSummaryLabel.setText(quoteStatusLabel.getText());
   }
 
