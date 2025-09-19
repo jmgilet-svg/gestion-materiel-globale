@@ -415,6 +415,12 @@ public class MockPlanningService implements PlanningService {
     resources.put(r.getId(), r);
     return r;
   }
+  @Override public Resource getResource(UUID id){
+    if (id == null){
+      return null;
+    }
+    return resources.get(id);
+  }
   @Override public void deleteResource(UUID id){ resources.remove(id); }
   @Override public List<ResourceType> listResourceTypes(){ return new ArrayList<>(resourceTypes.values()); }
   @Override public ResourceType createResourceType(ResourceType type){

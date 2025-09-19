@@ -15,6 +15,22 @@ import java.util.UUID;
 public interface PlanningService {
   List<Resource> listResources();
   Resource saveResource(Resource r);
+  /**
+   * Returns the {@link Resource} identified by the given id when available.
+   * The default implementation falls back to {@link #listResources()} to
+   * preserve compatibility with existing mock services.
+   */
+  default Resource getResource(UUID id){
+    if (id == null){
+      return null;
+    }
+    for (Resource resource : listResources()){
+      if (id.equals(resource.getId())){
+        return resource;
+      }
+    }
+    return null;
+  }
   void deleteResource(UUID id);
   default List<ResourceType> listResourceTypes(){ return List.of(); }
   default ResourceType createResourceType(ResourceType type){ throw new UnsupportedOperationException(); }
