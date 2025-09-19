@@ -18,8 +18,12 @@ import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.icons.IconRegistry;
 
 import javax.swing.*;
+import javax.swing.event.ChangeListener;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.*;
+import java.awt.event.ActionListener;
 import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -64,6 +68,9 @@ public class InterventionDialog extends JDialog {
   private final JTable billingTable = new JTable(billingModel);
   private final JLabel totalHtLabel = new JLabel();
   private final JLabel quoteStatusLabel = new JLabel("Aucun devis généré");
+  private final StepBar workflowStepBar = new StepBar();
+  private final JTabbedPane tabs = new JTabbedPane();
+  private final JLabel quoteSummaryLabel = new JLabel("Aucun devis généré");
   private final NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(Locale.FRANCE);
   private final JButton saveButton = new JButton("Enregistrer", IconRegistry.small("success"));
   private final JButton regenerateBillingButton = new JButton("Depuis ressources", IconRegistry.small("refresh"));
@@ -89,6 +96,7 @@ public class InterventionDialog extends JDialog {
     this.resourcePicker = new ResourcePickerPanel(planningService);
     this.readOnly = !AccessControl.canEditInterventions();
     this.resourcePicker.setSelectionListener(this::onResourceSelectionChanged);
+    this.contactPicker.setSelectionListener(this::refreshWorkflowState);
     saveButton.addActionListener(e -> onSave());
     regenerateBillingButton.addActionListener(e -> regenerateBillingFromResources());
     addBillingLineButton.addActionListener(e -> addManualBillingLine());
@@ -101,6 +109,8 @@ public class InterventionDialog extends JDialog {
     fullscreenButton.setToolTipText("Plein écran");
     reloadAvailableTypes();
     buildUI();
+    installWorkflowHooks();
+    refreshWorkflowState();
     setResizable(true);
     setMinimumSize(new Dimension(1180, 760));
     setLocationRelativeTo(owner);
@@ -109,13 +119,91 @@ public class InterventionDialog extends JDialog {
 
   private void buildUI(){
     setLayout(new BorderLayout(8, 8));
-    add(buildToolbar(), BorderLayout.NORTH);
+    add(buildNorthPanel(), BorderLayout.NORTH);
     add(buildTabs(), BorderLayout.CENTER);
     add(buildFooter(), BorderLayout.SOUTH);
     configureSpinners();
     configureBillingTable();
-    billingModel.addTableModelListener(e -> computeTotals());
+    billingModel.addTableModelListener(e -> {
+      computeTotals();
+      refreshWorkflowState();
+    });
     totalHtLabel.setText("Total HT : " + currencyFormat.format(BigDecimal.ZERO));
+  }
+
+  private void installWorkflowHooks(){
+    workflowStepBar.setOnNavigate(this::navigateToStep);
+    ChangeListener spinnerListener = e -> refreshWorkflowState();
+    startSpinner.addChangeListener(spinnerListener);
+    endSpinner.addChangeListener(spinnerListener);
+    titleField.getDocument().addDocumentListener(documentListener(this::refreshWorkflowState));
+  }
+
+  private void navigateToStep(int index){
+    if (index < 0 || index >= tabs.getTabCount()){
+      return;
+    }
+    tabs.setSelectedIndex(index);
+  }
+
+  private DocumentListener documentListener(Runnable action){
+    return new DocumentListener(){
+      @Override public void insertUpdate(DocumentEvent e){ action.run(); }
+      @Override public void removeUpdate(DocumentEvent e){ action.run(); }
+      @Override public void changedUpdate(DocumentEvent e){ action.run(); }
+    };
+  }
+
+  private void refreshWorkflowState(){
+    boolean generalReady = isGeneralSectionComplete();
+    boolean detailsReady = hasDetailsInformation();
+    boolean billingReady = isBillingSectionReady();
+    boolean quoted = current != null && current.hasQuote();
+    if (current != null){
+      current.setGeneralDone(generalReady);
+      current.setDetailsDone(detailsReady);
+      current.setBillingReady(billingReady);
+      current.setWorkflowStage(quoted ? "DEVIS"
+          : billingReady ? "FACTURATION"
+          : detailsReady ? "INTERVENTION"
+          : "GÉNÉRAL");
+    }
+    int index = Math.max(0, tabs.getSelectedIndex());
+    workflowStepBar.setState(index, generalReady, detailsReady, billingReady, quoted);
+    quoteSummaryLabel.setText(quoteStatusLabel.getText());
+  }
+
+  private boolean isGeneralSectionComplete(){
+    return notBlank(titleField.getText())
+        && clientCombo.getSelectedItem() instanceof Client
+        && hasSpinnerDate(startSpinner)
+        && hasSpinnerDate(endSpinner);
+  }
+
+  private boolean hasDetailsInformation(){
+    return !resourcePicker.getSelectedResourceRefs().isEmpty()
+        || !contactPicker.getSelectedContacts().isEmpty();
+  }
+
+  private boolean isBillingSectionReady(){
+    return billingModel.getLines().stream()
+        .anyMatch(line -> line != null && line.getTotalHt() != null && line.getTotalHt().signum() > 0);
+  }
+
+  private boolean hasSpinnerDate(JSpinner spinner){
+    Object value = spinner.getValue();
+    return value instanceof Date || value instanceof LocalDateTime;
+  }
+
+  private static boolean notBlank(String value){
+    return value != null && !value.isBlank();
+  }
+
+  private JComponent buildNorthPanel(){
+    JPanel north = new JPanel(new BorderLayout());
+    north.add(buildToolbar(), BorderLayout.NORTH);
+    north.add(workflowStepBar, BorderLayout.SOUTH);
+    return north;
   }
 
   private JComponent buildToolbar(){
@@ -218,10 +306,15 @@ public class InterventionDialog extends JDialog {
   }
 
   private JComponent buildTabs(){
-    JTabbedPane tabs = new JTabbedPane();
+    tabs.removeAll();
+    for (ChangeListener listener : tabs.getChangeListeners()){
+      tabs.removeChangeListener(listener);
+    }
     tabs.addTab("Général", IconRegistry.small("info"), buildGeneralTab());
     tabs.addTab("Intervention", IconRegistry.small("task"), buildInterventionTab());
     tabs.addTab("Facturation", IconRegistry.small("invoice"), buildFacturationTab());
+    tabs.addTab("Devis", IconRegistry.small("file"), buildQuoteTab());
+    tabs.addChangeListener(e -> refreshWorkflowState());
     return tabs;
   }
 
@@ -264,6 +357,25 @@ public class InterventionDialog extends JDialog {
     toolbar.add(totalHtLabel);
     panel.add(toolbar, BorderLayout.NORTH);
     panel.add(new JScrollPane(billingTable), BorderLayout.CENTER);
+    return panel;
+  }
+
+  private JComponent buildQuoteTab(){
+    JPanel panel = new JPanel(new BorderLayout(8, 8));
+    JPanel info = new JPanel();
+    info.setLayout(new BoxLayout(info, BoxLayout.Y_AXIS));
+    info.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+    JLabel title = new JLabel("Statut du devis lié :");
+    title.setAlignmentX(Component.LEFT_ALIGNMENT);
+    quoteSummaryLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+    info.add(title);
+    info.add(Box.createVerticalStrut(6));
+    info.add(quoteSummaryLabel);
+    info.add(Box.createVerticalStrut(12));
+    JLabel helper = new JLabel("Fonctionnalités de suivi du devis à venir.");
+    helper.setAlignmentX(Component.LEFT_ALIGNMENT);
+    info.add(helper);
+    panel.add(info, BorderLayout.NORTH);
     return panel;
   }
 
@@ -401,6 +513,7 @@ public class InterventionDialog extends JDialog {
   private void regenerateBillingFromResources(){
     syncAutoBillingLinesWithResources();
     Toasts.info(this, "Lignes générées depuis les ressources");
+    refreshWorkflowState();
   }
 
   private void addManualBillingLine(){
@@ -418,6 +531,7 @@ public class InterventionDialog extends JDialog {
       billingTable.requestFocusInWindow();
     }
     computeTotals();
+    refreshWorkflowState();
   }
 
   private void removeSelectedBillingLine(){
@@ -433,6 +547,7 @@ public class InterventionDialog extends JDialog {
     lines.remove(modelRow);
     billingModel.setLines(lines);
     computeTotals();
+    refreshWorkflowState();
   }
 
   private void generateQuoteFromPrebilling(){
@@ -484,6 +599,7 @@ public class InterventionDialog extends JDialog {
       } else if (planningService != null){
         planningService.saveIntervention(current);
       }
+      refreshWorkflowState();
     } catch (Exception ex){
       Toasts.error(this, "Échec de génération du devis : " + ex.getMessage());
     }
@@ -494,6 +610,7 @@ public class InterventionDialog extends JDialog {
       return;
     }
     syncAutoBillingLinesWithResources();
+    refreshWorkflowState();
   }
 
   private void syncAutoBillingLinesWithResources(){
@@ -541,6 +658,7 @@ public class InterventionDialog extends JDialog {
     }
     billingModel.setLines(updated);
     computeTotals();
+    refreshWorkflowState();
   }
 
   private String resourceKey(Resource resource){
@@ -642,6 +760,7 @@ public class InterventionDialog extends JDialog {
     syncAutoBillingLinesWithResources();
     computeTotals();
     updateQuoteBadge();
+    refreshWorkflowState();
   }
 
   private void populateTypes(){
@@ -699,7 +818,13 @@ public class InterventionDialog extends JDialog {
         return label;
       }
     });
-    clientCombo.addActionListener(e -> updateContactsForClient());
+    for (ActionListener listener : clientCombo.getActionListeners()){
+      clientCombo.removeActionListener(listener);
+    }
+    clientCombo.addActionListener(e -> {
+      updateContactsForClient();
+      refreshWorkflowState();
+    });
 
     UUID clientId = current != null ? current.getClientId() : null;
     if (clientId != null){
@@ -714,6 +839,7 @@ public class InterventionDialog extends JDialog {
       clientCombo.setSelectedIndex(0);
     }
     updateContactsForClient();
+    refreshWorkflowState();
   }
 
   private void updateContactsForClient(){
@@ -740,6 +866,7 @@ public class InterventionDialog extends JDialog {
     } else {
       contactPicker.setSelectedContacts(List.of());
     }
+    refreshWorkflowState();
   }
 
   private UUID selectedClientId(){
@@ -780,6 +907,8 @@ public class InterventionDialog extends JDialog {
       }
     }
     quoteStatusLabel.setText(text);
+    quoteSummaryLabel.setText(text);
+    refreshWorkflowState();
   }
 
   public Intervention collect(){
@@ -838,6 +967,7 @@ public class InterventionDialog extends JDialog {
     } else {
       current.setSignatureAt(null);
     }
+    refreshWorkflowState();
     return current;
   }
 
