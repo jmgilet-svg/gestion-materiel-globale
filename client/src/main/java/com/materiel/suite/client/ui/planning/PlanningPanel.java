@@ -580,6 +580,33 @@ public class PlanningPanel extends JPanel {
 
   }
 
+  public void actionFilterCycle(){
+    cycleQuoteFilter();
+  }
+
+  public int getSelectedCount(){
+    if (tabs == null || tableView == null){
+      return 0;
+    }
+    Component selectedComponent = tabs.getSelectedComponent();
+    if (selectedComponent != tableView.getComponent()){
+      return 0;
+    }
+    List<Intervention> selection = tableView.getSelection();
+    return selection == null ? 0 : selection.size();
+  }
+
+  public String getCurrentFilterLabel(){
+    if (quoteFilter == null){
+      return QuoteFilter.TOUS.toString();
+    }
+    Object value = quoteFilter.getSelectedItem();
+    if (value instanceof QuoteFilter filter){
+      return filter.toString();
+    }
+    return value != null ? value.toString() : QuoteFilter.TOUS.toString();
+  }
+
   private void refreshPlanning(){
     PlanningService planning = ServiceFactory.planning();
     if (planning == null){
