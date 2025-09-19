@@ -123,6 +123,18 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/InterventionV2'
+  /api/v2/intervention-templates:
+    get:
+      summary: Lister les modèles d'intervention (v2, mock)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InterventionTemplateV2'
   /api/v2/interventions/{id}:
     get:
       summary: Récupérer une intervention (v2)
@@ -600,6 +612,37 @@ components:
           type: array
           items:
             type: object
+    InterventionTemplateV2:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        defaultTypeId:
+          type: string
+        defaultDurationMinutes:
+          type: integer
+        suggestedResourceTypeIds:
+          type: array
+          items:
+            type: string
+        defaultLines:
+          type: array
+          items:
+            type: object
+            properties:
+              designation:
+                type: string
+              unit:
+                type: string
+              unitPriceHt:
+                type: number
+                format: double
+              quantity:
+                type: number
+                format: double
+                nullable: true
     UserV2:
       type: object
       properties:

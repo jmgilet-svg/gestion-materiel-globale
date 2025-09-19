@@ -506,7 +506,8 @@ public class AgendaBoard extends JComponent {
         SwingUtilities.getWindowAncestor(this),
         planning,
         ServiceFactory.clients(),
-        ServiceFactory.interventionTypes());
+        ServiceFactory.interventionTypes(),
+        ServiceFactory.templates());
     dialog.setOnSave(updated -> {
       planning.saveIntervention(updated);
       reload();
