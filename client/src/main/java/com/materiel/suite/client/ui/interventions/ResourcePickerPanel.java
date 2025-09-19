@@ -1,51 +1,62 @@
 package com.materiel.suite.client.ui.interventions;
 
-import com.materiel.suite.client.auth.AccessControl;
+import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.model.ResourceRef;
 import com.materiel.suite.client.model.ResourceType;
+import com.materiel.suite.client.model.Unavailability;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.PlanningService;
-import com.materiel.suite.client.service.ServiceLocator;
-import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.icons.IconRegistry;
-import com.materiel.suite.client.ui.resources.ResourcePriceEditorDialog;
 
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import javax.swing.table.AbstractTableModel;
-import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.*;
-import java.text.NumberFormat;
+import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.Optional;
 import java.util.UUID;
 
-/** Sélecteur ergonomique de ressources avec cases à cocher, filtre par type et recherche textuelle. */
+/**
+ * Sélecteur 3-pans : filtres (gauche) → résultats (centre) → sélection courante (droite).
+ * Affiche une mini timeline "conflits" selon le créneau de l'intervention.
+ */
 public class ResourcePickerPanel extends JPanel {
-  private static final String ALL_TYPES = "Tous les types";
-
   private final PlanningService planningService;
+  private final JTextField search = new JTextField();
   private final JComboBox<String> typeFilter = new JComboBox<>();
-  private final JTextField searchField = new JTextField();
-  private final JButton selectAllButton = new JButton("Tout");
-  private final JButton clearAllButton = new JButton("Aucun");
-  private final JButton editPriceButton = new JButton("Tarif…");
-  private final ResourceTableModel model = new ResourceTableModel();
-  private final JTable table = new JTable(model);
-  private final NumberFormat priceFormat = NumberFormat.getNumberInstance(Locale.FRANCE);
+  private final JComboBox<String> stateFilter = new JComboBox<>(new String[]{"(tous)", "DISPONIBLE", "OCCUPEE", "EN_MAINTENANCE"});
+  private final JCheckBox onlyAvailable = new JCheckBox("Disponibles sur le créneau");
+  private final DefaultListModel<Resource> resultsModel = new DefaultListModel<>();
+  private final JList<Resource> resultsList = new JList<>(resultsModel);
+  private final DefaultListModel<Resource> selectedModel = new DefaultListModel<>();
+  private final JList<Resource> selectedList = new JList<>(selectedModel);
+  private final JButton addButton = new JButton("Ajouter", IconRegistry.small("plus"));
+  private final JButton removeButton = new JButton("Retirer", IconRegistry.small("trash"));
 
   private final List<Resource> allResources = new ArrayList<>();
-  private final Map<UUID, Resource> resourceIndex = new LinkedHashMap<>();
-  private final LinkedHashMap<String, ResourceRef> selectedRefs = new LinkedHashMap<>();
-  private boolean readOnly;
+  private final Map<String, Resource> resourceIndex = new LinkedHashMap<>();
+  private Map<String, List<BusySlot>> busyByResource = new HashMap<>();
+  private LocalDateTime plannedStart;
+  private LocalDateTime plannedEnd;
+  private Intervention context;
   private Runnable selectionListener;
+  private boolean readOnly;
 
   public ResourcePickerPanel(){
     this(ServiceFactory.planning());
@@ -54,260 +65,314 @@ public class ResourcePickerPanel extends JPanel {
   public ResourcePickerPanel(PlanningService planningService){
     super(new BorderLayout(8, 8));
     this.planningService = planningService;
-    priceFormat.setMaximumFractionDigits(2);
-    priceFormat.setMinimumFractionDigits(0);
-    buildNorth();
-    buildTable();
-    installListeners();
-    rebuildTypeFilter();
-    applyFilter();
+    buildUI();
+    wireEvents();
+    resultsList.setCellRenderer(new ResourceCellRenderer());
+    selectedList.setCellRenderer(new ResourceCellRenderer());
+    resultsList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+    selectedList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+    typeFilter.addItem("(tous)");
   }
 
-  private void buildNorth(){
-    JPanel north = new JPanel(new BorderLayout(6, 0));
+  private void buildUI(){
+    JPanel filters = new JPanel(new GridBagLayout());
+    GridBagConstraints gc = new GridBagConstraints();
+    gc.insets = new Insets(4, 4, 4, 4);
+    gc.fill = GridBagConstraints.HORIZONTAL;
+    gc.anchor = GridBagConstraints.NORTHWEST;
+    int y = 0;
+    gc.gridx = 0; gc.gridy = y; filters.add(new JLabel("Recherche"), gc);
+    gc.gridx = 0; gc.gridy = ++y; filters.add(search, gc);
+    gc.gridx = 0; gc.gridy = ++y; filters.add(new JLabel("Type"), gc);
+    gc.gridx = 0; gc.gridy = ++y; filters.add(typeFilter, gc);
+    gc.gridx = 0; gc.gridy = ++y; filters.add(new JLabel("État"), gc);
+    gc.gridx = 0; gc.gridy = ++y; filters.add(stateFilter, gc);
+    gc.gridx = 0; gc.gridy = ++y; filters.add(onlyAvailable, gc);
+    gc.weighty = 1; gc.gridy = ++y; filters.add(Box.createVerticalGlue(), gc);
 
-    JPanel filters = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
-    filters.add(typeFilter);
-    filters.add(new JLabel(IconRegistry.small("search")));
-    searchField.setColumns(18);
-    filters.add(searchField);
+    JScrollPane center = new JScrollPane(resultsList);
 
-    JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
-    actions.add(editPriceButton);
-    actions.add(selectAllButton);
-    actions.add(clearAllButton);
+    JPanel right = new JPanel(new BorderLayout(4, 4));
+    JToolBar toolbar = new JToolBar();
+    toolbar.setFloatable(false);
+    toolbar.add(addButton);
+    toolbar.add(removeButton);
+    right.add(toolbar, BorderLayout.NORTH);
+    right.add(new JScrollPane(selectedList), BorderLayout.CENTER);
 
-    north.add(filters, BorderLayout.CENTER);
-    north.add(actions, BorderLayout.EAST);
-    add(north, BorderLayout.NORTH);
-  }
+    JSplitPane splitLeft = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, filters, center);
+    splitLeft.setResizeWeight(0.18);
+    JSplitPane splitMain = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, splitLeft, right);
+    splitMain.setResizeWeight(0.66);
+    add(splitMain, BorderLayout.CENTER);
 
-  private void buildTable(){
-    table.setFillsViewportHeight(true);
-    table.setRowHeight(24);
-    table.setAutoCreateRowSorter(true);
-    table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-    table.getColumnModel().getColumn(0).setMaxWidth(50);
-    table.getColumnModel().getColumn(1).setMaxWidth(36);
-    table.getColumnModel().getColumn(1).setCellRenderer(new IconRenderer());
-    if (table.getColumnModel().getColumnCount() > 4){
-      table.getColumnModel().getColumn(4).setPreferredWidth(90);
-      table.getColumnModel().getColumn(4).setCellRenderer(new PriceRenderer());
-    }
-    add(new JScrollPane(table), BorderLayout.CENTER);
-  }
-
-  private void installListeners(){
-    typeFilter.addActionListener(e -> applyFilter());
-    searchField.getDocument().addDocumentListener(new DocumentAdapter(){
-      @Override public void update(DocumentEvent e){ applyFilter(); }
-    });
-    selectAllButton.addActionListener(e -> selectFiltered(true));
-    clearAllButton.addActionListener(e -> selectFiltered(false));
-    editPriceButton.addActionListener(e -> {
-      if (readOnly){
-        Toasts.info(ResourcePickerPanel.this, "Lecture seule");
-        return;
-      }
-      if (!AccessControl.canEditResources()){
-        Toasts.error(ResourcePickerPanel.this, "Droit requis : édition Ressources");
-        return;
-      }
-      openPriceDialog();
-    });
-    table.getSelectionModel().addListSelectionListener(e -> {
-      if (!e.getValueIsAdjusting()){
-        updateEditPriceButtonState();
+    addButton.addActionListener(e -> moveSelected(resultsList, resultsModel, selectedModel));
+    removeButton.addActionListener(e -> moveSelected(selectedList, selectedModel, resultsModel));
+    resultsList.addMouseListener(new MouseAdapter(){
+      @Override public void mouseClicked(MouseEvent e){
+        if (e.getClickCount() == 2){
+          moveSelected(resultsList, resultsModel, selectedModel);
+        }
       }
     });
-    updateEditPriceButtonState();
-  }
-
-  private void selectFiltered(boolean select){
-    if (readOnly){
-      return;
-    }
-    List<Resource> visible = model.rows();
-    if (visible.isEmpty()){
-      return;
-    }
-    for (Resource resource : visible){
-      if (resource == null){
-        continue;
-      }
-      String key = keyOf(resource);
-      if (select){
-        ResourceRef ref = toRef(resource);
-        if (ref != null){
-          selectedRefs.put(key, ref);
-        }
-      } else {
-        selectedRefs.remove(key);
-      }
-    }
-    model.refreshAll();
-    notifySelectionChanged();
-  }
-
-  public void setResources(List<Resource> resources){
-    resourceIndex.clear();
-    allResources.clear();
-    if (resources != null){
-      for (Resource resource : resources){
-        if (resource == null){
-          continue;
-        }
-        allResources.add(resource);
-        if (resource.getId() != null){
-          resourceIndex.put(resource.getId(), resource);
+    selectedList.addMouseListener(new MouseAdapter(){
+      @Override public void mouseClicked(MouseEvent e){
+        if (e.getClickCount() == 2){
+          moveSelected(selectedList, selectedModel, resultsModel);
         }
       }
-    }
-    ensureSelectedResourcesPresent();
-    rebuildTypeFilter();
-    applyFilter();
+    });
   }
 
-  public void setSelectedResources(List<ResourceRef> refs){
-    selectedRefs.clear();
-    if (refs != null){
-      for (ResourceRef ref : refs){
-        if (ref == null){
-          continue;
-        }
-        ResourceRef copy = new ResourceRef(ref.getId(), ref.getName(), ref.getIcon());
-        selectedRefs.put(keyOf(copy), copy);
-      }
-    }
-    ensureSelectedResourcesPresent();
-    rebuildTypeFilter();
-    applyFilter();
-  }
-
-  public void setReadOnly(boolean readOnly){
-    this.readOnly = readOnly;
-    typeFilter.setEnabled(!readOnly);
-    searchField.setEditable(!readOnly);
-    searchField.setEnabled(!readOnly);
-    selectAllButton.setEnabled(!readOnly);
-    clearAllButton.setEnabled(!readOnly);
-    table.setEnabled(!readOnly);
-    table.setRowSelectionAllowed(!readOnly);
-    if (readOnly){
-      table.clearSelection();
-    }
-    updateEditPriceButtonState();
+  private void wireEvents(){
+    ActionListener refresh = e -> refreshResults();
+    typeFilter.addActionListener(refresh);
+    stateFilter.addActionListener(refresh);
+    onlyAvailable.addActionListener(refresh);
+    search.addActionListener(refresh);
+    search.getDocument().addDocumentListener(new SimpleDocListener(this::refreshResults));
   }
 
   public void setSelectionListener(Runnable listener){
     this.selectionListener = listener;
   }
 
-  private void notifySelectionChanged(){
-    if (selectionListener != null){
-      selectionListener.run();
+  public void setReadOnly(boolean readOnly){
+    this.readOnly = readOnly;
+    search.setEnabled(!readOnly);
+    search.setEditable(!readOnly);
+    typeFilter.setEnabled(!readOnly);
+    stateFilter.setEnabled(!readOnly);
+    onlyAvailable.setEnabled(!readOnly);
+    addButton.setEnabled(!readOnly);
+    removeButton.setEnabled(!readOnly);
+    resultsList.setEnabled(!readOnly);
+    selectedList.setEnabled(!readOnly);
+  }
+
+  public void setContext(Intervention context){
+    this.context = context;
+    recomputeBusyMap();
+  }
+
+  public void setPlannedWindow(LocalDateTime start, LocalDateTime end){
+    this.plannedStart = start;
+    this.plannedEnd = end;
+    recomputeBusyMap();
+    refreshResults();
+  }
+
+  public void setResources(List<Resource> resources){
+    allResources.clear();
+    resourceIndex.clear();
+    if (resources != null){
+      for (Resource resource : resources){
+        if (resource == null){
+          continue;
+        }
+        allResources.add(resource);
+        String key = keyOf(resource);
+        if (!key.isEmpty()){
+          resourceIndex.put(key, resource);
+        }
+      }
     }
+    alignSelectionWithIndex();
+    rebuildTypeFilter();
+    recomputeBusyMap();
+    refreshResults();
+  }
+
+  public void setSelectedResources(List<ResourceRef> refs){
+    selectedModel.clear();
+    if (refs != null){
+      for (ResourceRef ref : refs){
+        if (ref == null){
+          continue;
+        }
+        Resource resource = fromRef(ref);
+        if (resource != null && !contains(selectedModel, resource)){
+          selectedModel.addElement(resource);
+        }
+      }
+    }
+    if (context != null){
+      context.setResources(getSelectedResourceRefs());
+    }
+    refreshResults();
   }
 
   public List<Resource> getSelectedResources(){
     List<Resource> list = new ArrayList<>();
-    for (ResourceRef ref : selectedRefs.values()){
-      if (ref == null){
+    for (int i = 0; i < selectedModel.size(); i++){
+      Resource resource = selectedModel.get(i);
+      if (resource == null){
         continue;
       }
-      Resource resource = ref.getId() != null ? resourceIndex.get(ref.getId()) : findByName(ref.getName());
-      if (resource != null){
-        list.add(resource);
-      } else {
-        list.add(createPlaceholder(ref));
+      Resource resolved = resolve(resource);
+      if (resolved != null){
+        list.add(resolved);
       }
     }
     return list;
   }
 
   public List<ResourceRef> getSelectedResourceRefs(){
-    return new ArrayList<>(selectedRefs.values());
-  }
-
-  private void ensureSelectedResourcesPresent(){
-    for (ResourceRef ref : selectedRefs.values()){
-      if (ref == null){
+    List<ResourceRef> refs = new ArrayList<>();
+    for (int i = 0; i < selectedModel.size(); i++){
+      Resource resource = selectedModel.get(i);
+      if (resource == null){
         continue;
       }
-      Resource existing = ref.getId() != null ? resourceIndex.get(ref.getId()) : findByName(ref.getName());
-      if (existing == null){
-        Resource placeholder = createPlaceholder(ref);
-        allResources.add(placeholder);
-        if (placeholder.getId() != null){
-          resourceIndex.put(placeholder.getId(), placeholder);
-        }
+      refs.add(toRef(resource));
+    }
+    return refs;
+  }
+
+  private void alignSelectionWithIndex(){
+    for (int i = 0; i < selectedModel.size(); i++){
+      Resource current = selectedModel.get(i);
+      Resource resolved = resolve(current);
+      if (resolved != null && resolved != current){
+        selectedModel.set(i, resolved);
       }
     }
   }
 
-  private Resource createPlaceholder(ResourceRef ref){
-    Resource resource = new Resource(ref.getId(), ref.getName());
+  private Resource resolve(Resource resource){
+    if (resource == null){
+      return null;
+    }
+    String key = keyOf(resource);
+    Resource resolved = resourceIndex.get(key);
+    return resolved != null ? resolved : resource;
+  }
+
+  private Resource fromRef(ResourceRef ref){
+    String key = keyOf(ref);
+    Resource resource = key.isEmpty() ? null : resourceIndex.get(key);
+    if (resource != null){
+      return resource;
+    }
+    if (ref.getId() != null){
+      resource = new Resource(ref.getId(), ref.getName());
+    } else {
+      resource = new Resource(null, ref.getName());
+    }
     if (ref.getIcon() != null && !ref.getIcon().isBlank()){
       ResourceType type = new ResourceType();
       type.setIcon(ref.getIcon());
-      type.setLabel(ref.getName());
+      type.setName(ref.getName());
       resource.setType(type);
     }
     return resource;
   }
 
-  private Resource findByName(String name){
-    if (name == null){
-      return null;
+  private void notifySelectionChanged(){
+    if (context != null){
+      context.setResources(getSelectedResourceRefs());
     }
-    for (Resource resource : allResources){
-      if (resource != null && resource.getId() == null && Objects.equals(name, resource.getName())){
-        return resource;
+    if (selectionListener != null){
+      selectionListener.run();
+    }
+  }
+
+  private void moveSelected(JList<Resource> fromList, DefaultListModel<Resource> from, DefaultListModel<Resource> to){
+    if (readOnly){
+      return;
+    }
+    List<Resource> picked = fromList.getSelectedValuesList();
+    if (picked == null || picked.isEmpty()){
+      return;
+    }
+    boolean changed = false;
+    for (Resource resource : picked){
+      from.removeElement(resource);
+      if (to == selectedModel){
+        if (!contains(selectedModel, resource)){
+          selectedModel.addElement(resource);
+          changed = true;
+        }
+      } else {
+        changed = true;
       }
     }
-    return null;
+    if (changed){
+      notifySelectionChanged();
+      refreshResults();
+    }
+  }
+
+  private boolean contains(DefaultListModel<Resource> model, Resource resource){
+    String key = keyOf(resource);
+    for (int i = 0; i < model.size(); i++){
+      if (Objects.equals(key, keyOf(model.get(i)))){
+        return true;
+      }
+    }
+    return false;
   }
 
   private void rebuildTypeFilter(){
     Object previous = typeFilter.getSelectedItem();
     typeFilter.removeAllItems();
-    typeFilter.addItem(ALL_TYPES);
-    LinkedHashSet<String> labels = new LinkedHashSet<>();
+    typeFilter.addItem("(tous)");
+    Map<String, Boolean> seen = new LinkedHashMap<>();
     for (Resource resource : allResources){
-      String label = typeLabel(resource);
-      if (!label.isBlank()){
-        labels.add(label);
+      ResourceType type = resource != null ? resource.getType() : null;
+      String name = type != null ? type.getName() : null;
+      if (name != null && !name.isBlank() && seen.putIfAbsent(name, Boolean.TRUE) == null){
+        typeFilter.addItem(name);
       }
-    }
-    for (String label : labels){
-      typeFilter.addItem(label);
     }
     if (previous != null){
       typeFilter.setSelectedItem(previous);
     }
   }
 
-  private void applyFilter(){
-    String query = searchField.getText();
+  private void refreshResults(){
+    Set<String> selectedKeys = toIdSet(selectedModel);
+    String query = search.getText();
     String normalized = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
-    String selectedType = (String) typeFilter.getSelectedItem();
+    String type = (String) typeFilter.getSelectedItem();
+    String state = (String) stateFilter.getSelectedItem();
+    boolean availOnly = onlyAvailable.isSelected();
+
     List<Resource> filtered = new ArrayList<>();
     for (Resource resource : allResources){
       if (resource == null){
         continue;
       }
-      if (selectedType != null && !ALL_TYPES.equals(selectedType)){
-        if (!typeLabel(resource).equals(selectedType)){
+      String key = keyOf(resource);
+      if (selectedKeys.contains(key)){
+        continue;
+      }
+      if (type != null && !"(tous)".equals(type)){
+        ResourceType rt = resource.getType();
+        String name = rt != null ? rt.getName() : null;
+        if (name == null || !name.equals(type)){
           continue;
         }
       }
-      if (!normalized.isBlank() && !matches(resource, normalized)){
+      if (state != null && !"(tous)".equals(state)){
+        String current = resource.getState();
+        if (current == null || !current.equals(state)){
+          continue;
+        }
+      }
+      if (!normalized.isEmpty() && !matches(resource, normalized)){
+        continue;
+      }
+      if (availOnly && hasOverlap(busyByResource.get(key))){
         continue;
       }
       filtered.add(resource);
     }
-    model.setRows(filtered);
-    updateEditPriceButtonState();
+    filtered.sort(Comparator.comparing(r -> Optional.ofNullable(r.getName()).orElse("").toLowerCase(Locale.ROOT)));
+    resultsModel.clear();
+    for (Resource resource : filtered){
+      resultsModel.addElement(resource);
+    }
   }
 
   private boolean matches(Resource resource, String query){
@@ -318,8 +383,92 @@ public class ResourcePickerPanel extends JPanel {
     if (name != null && name.toLowerCase(Locale.ROOT).contains(query)){
       return true;
     }
-    String type = typeLabel(resource);
-    return !type.isBlank() && type.toLowerCase(Locale.ROOT).contains(query);
+    ResourceType type = resource.getType();
+    String typeName = type != null ? type.getName() : null;
+    return typeName != null && typeName.toLowerCase(Locale.ROOT).contains(query);
+  }
+  private boolean hasOverlap(List<BusySlot> slots){
+    if (slots == null || slots.isEmpty()){
+      return false;
+    }
+    if (plannedStart == null || plannedEnd == null){
+      return false;
+    }
+    for (BusySlot slot : slots){
+      if (slot == null || slot.start == null || slot.end == null){
+        continue;
+      }
+      if (plannedStart.isBefore(slot.end) && slot.start.isBefore(plannedEnd)){
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private void recomputeBusyMap(){
+    busyByResource = computeBusyMap(plannedStart, plannedEnd);
+  }
+
+  private Map<String, List<BusySlot>> computeBusyMap(LocalDateTime start, LocalDateTime end){
+    Map<String, List<BusySlot>> map = new HashMap<>();
+    if (planningService == null || start == null || end == null){
+      return map;
+    }
+    LocalDate from = start.toLocalDate().minusDays(1);
+    LocalDate to = end.toLocalDate().plusDays(1);
+    List<Intervention> interventions;
+    try {
+      interventions = planningService.listInterventions(from, to);
+    } catch (Exception ex){
+      return map;
+    }
+    UUID currentId = context != null ? context.getId() : null;
+    if (interventions != null){
+      for (Intervention intervention : interventions){
+        if (intervention == null){
+          continue;
+        }
+        if (currentId != null && currentId.equals(intervention.getId())){
+          continue;
+        }
+        LocalDateTime s = intervention.getDateHeureDebut();
+        LocalDateTime e = intervention.getDateHeureFin();
+        if (s == null || e == null){
+          continue;
+        }
+        for (ResourceRef ref : intervention.getResources()){
+          String key = keyOf(ref);
+          if (key.isEmpty()){
+            continue;
+          }
+          map.computeIfAbsent(key, k -> new ArrayList<>())
+             .add(new BusySlot(s, e, intervention.getLabel()));
+        }
+      }
+    }
+    for (Resource resource : allResources){
+      if (resource == null){
+        continue;
+      }
+      String key = keyOf(resource);
+      if (key.isEmpty()){
+        continue;
+      }
+      List<Unavailability> unavailabilities = resource.getUnavailabilities();
+      if (unavailabilities == null){
+        continue;
+      }
+      for (Unavailability unavailability : unavailabilities){
+        LocalDateTime s = unavailability.getStart();
+        LocalDateTime e = unavailability.getEnd();
+        if (s == null || e == null){
+          continue;
+        }
+        map.computeIfAbsent(key, k -> new ArrayList<>())
+           .add(new BusySlot(s, e, unavailability.getReason()));
+      }
+    }
+    return map;
   }
 
   private String keyOf(Resource resource){
@@ -346,177 +495,85 @@ public class ResourcePickerPanel extends JPanel {
     return name == null ? "" : name.trim().toLowerCase(Locale.ROOT);
   }
 
-  private boolean isSelected(Resource resource){
-    return selectedRefs.containsKey(keyOf(resource));
-  }
-
   private ResourceRef toRef(Resource resource){
     if (resource == null){
-      return null;
+      return new ResourceRef();
     }
-    return new ResourceRef(resource.getId(), resource.getName(), iconKey(resource));
+    ResourceType type = resource.getType();
+    return new ResourceRef(resource.getId(), resource.getName(), type != null ? type.getIconKey() : null);
   }
 
-  private Resource selectedResource(){
-    int viewRow = table.getSelectedRow();
-    if (viewRow < 0){
-      return null;
+  private Set<String> toIdSet(DefaultListModel<Resource> model){
+    Set<String> set = new java.util.HashSet<>();
+    for (int i = 0; i < model.size(); i++){
+      set.add(keyOf(model.get(i)));
     }
-    int modelRow = table.convertRowIndexToModel(viewRow);
-    return model.getAt(modelRow);
+    return set;
   }
 
-  private void openPriceDialog(){
-    Resource resource = selectedResource();
-    if (resource == null){
-      return;
-    }
-    Window owner = SwingUtilities.getWindowAncestor(this);
-    ResourcePriceEditorDialog dialog = new ResourcePriceEditorDialog(owner, resource);
-    dialog.setVisible(true);
-    if (resource.getId() != null){
-      resourceIndex.put(resource.getId(), resource);
-    }
-    model.refreshAll();
-    updateEditPriceButtonState();
-  }
-
-  private void updateEditPriceButtonState(){
-    boolean hasSelection = table.getSelectedRow() >= 0;
-    boolean canEdit = !readOnly && AccessControl.canEditResources() && ServiceLocator.resources().isAvailable();
-    editPriceButton.setEnabled(hasSelection && canEdit);
-  }
-
-  private static String typeLabel(Resource resource){
-    ResourceType type = resource != null ? resource.getType() : null;
-    if (type == null){
+  private static String escapeHtml(String value){
+    if (value == null){
       return "";
     }
-    if (type.getLabel() != null && !type.getLabel().isBlank()){
-      return type.getLabel();
-    }
-    return type.getCode() != null ? type.getCode() : "";
+    return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
   }
 
-  private static String iconKey(Resource resource){
-    ResourceType type = resource != null ? resource.getType() : null;
-    return type != null ? type.getIcon() : null;
-  }
+  private class ResourceCellRenderer extends JPanel implements ListCellRenderer<Resource> {
+    private final JLabel left = new JLabel();
+    private final JProgressBar bar = new JProgressBar(0, 100);
+    private final JLabel right = new JLabel();
 
-  private class ResourceTableModel extends AbstractTableModel {
-    private final List<Resource> rows = new ArrayList<>();
-    private final String[] columns = {"", "Icône", "Nom", "Type", "PU HT"};
-
-    @Override public int getRowCount(){ return rows.size(); }
-    @Override public int getColumnCount(){ return columns.length; }
-    @Override public String getColumnName(int column){ return columns[column]; }
-
-    @Override public Class<?> getColumnClass(int columnIndex){
-      return switch (columnIndex){
-        case 0 -> Boolean.class;
-        default -> Object.class;
-      };
+    ResourceCellRenderer(){
+      super(new BorderLayout(6, 0));
+      bar.setPreferredSize(new Dimension(80, 8));
+      bar.setBorderPainted(false);
+      bar.setStringPainted(false);
+      add(left, BorderLayout.WEST);
+      add(bar, BorderLayout.CENTER);
+      add(right, BorderLayout.EAST);
+      setBorder(new EmptyBorder(3, 6, 3, 6));
     }
 
-    @Override public boolean isCellEditable(int rowIndex, int columnIndex){
-      return !readOnly && columnIndex == 0;
-    }
-
-    @Override public Object getValueAt(int rowIndex, int columnIndex){
-      Resource resource = rows.get(rowIndex);
-      return switch (columnIndex){
-        case 0 -> isSelected(resource);
-        case 1 -> iconKey(resource);
-        case 2 -> resource != null ? resource.getName() : "";
-        case 3 -> typeLabel(resource);
-        case 4 -> resource != null ? resource.getUnitPriceHt() : null;
-        default -> "";
-      };
-    }
-
-    @Override public void setValueAt(Object aValue, int rowIndex, int columnIndex){
-      if (columnIndex != 0){
-        return;
-      }
-      Resource resource = rows.get(rowIndex);
-      boolean selected = Boolean.TRUE.equals(aValue);
-      String key = keyOf(resource);
-      if (selected){
-        ResourceRef ref = toRef(resource);
-        if (ref != null){
-          selectedRefs.put(key, ref);
-        }
-      } else {
-        selectedRefs.remove(key);
-      }
-      fireTableRowsUpdated(rowIndex, rowIndex);
-      notifySelectionChanged();
-    }
-
-    void setRows(List<Resource> list){
-      rows.clear();
-      if (list != null){
-        rows.addAll(list);
-      }
-      fireTableDataChanged();
-    }
-
-    List<Resource> rows(){
-      return List.copyOf(rows);
-    }
-
-    Resource getAt(int index){
-      if (index < 0 || index >= rows.size()){
-        return null;
-      }
-      return rows.get(index);
-    }
-
-    void refreshAll(){
-      if (!rows.isEmpty()){
-        fireTableRowsUpdated(0, rows.size() - 1);
-      }
-    }
-  }
-
-  private static class IconRenderer extends DefaultTableCellRenderer {
     @Override
-    public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column){
-      JLabel label = (JLabel) super.getTableCellRendererComponent(table, "", isSelected, hasFocus, row, column);
-      label.setHorizontalAlignment(SwingConstants.CENTER);
-      label.setIcon(null);
-      label.setText("");
-      if (value != null){
-        String key = value.toString();
-        Icon icon = IconRegistry.small(key);
-        if (icon != null){
-          label.setIcon(icon);
-        } else if (!key.isBlank()){
-          label.setText(key);
-        }
-      }
-      return label;
+    public Component getListCellRendererComponent(JList<? extends Resource> list, Resource value, int index, boolean isSelected, boolean cellHasFocus){
+      setOpaque(true);
+      setBackground(isSelected ? new Color(0xDCEAFB) : Color.WHITE);
+      ResourceType type = value != null ? value.getType() : null;
+      left.setIcon(type != null ? IconRegistry.small(type.getIconKey()) : null);
+      String name = value != null ? value.getName() : "";
+      String typeName = type != null ? Optional.ofNullable(type.getName()).orElse("") : "";
+      left.setText("<html>" + escapeHtml(name) + "<br/><span style='color:#607D8B;font-size:10px;'>" + escapeHtml(typeName) + "</span></html>");
+      BigDecimal price = value != null ? value.getUnitPriceHt() : null;
+      right.setText(price != null ? price.stripTrailingZeros().toPlainString() + " € HT" : "");
+      List<BusySlot> slots = busyByResource.get(keyOf(value));
+      boolean conflict = hasOverlap(slots);
+      bar.setValue(conflict ? 100 : 0);
+      bar.setForeground(conflict ? new Color(0xE53935) : new Color(0x43A047));
+      return this;
     }
   }
 
-  private class PriceRenderer extends DefaultTableCellRenderer {
-    @Override
-    public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column){
-      JLabel label = (JLabel) super.getTableCellRendererComponent(table, "", isSelected, hasFocus, row, column);
-      label.setHorizontalAlignment(SwingConstants.RIGHT);
-      if (value instanceof Number number){
-        label.setText(priceFormat.format(number));
-      } else {
-        label.setText("");
-      }
-      return label;
+  private static class BusySlot {
+    final LocalDateTime start;
+    final LocalDateTime end;
+    final String label;
+
+    BusySlot(LocalDateTime start, LocalDateTime end, String label){
+      this.start = start;
+      this.end = end;
+      this.label = label;
     }
   }
 
-  private abstract static class DocumentAdapter implements DocumentListener {
-    @Override public void insertUpdate(DocumentEvent e){ update(e); }
-    @Override public void removeUpdate(DocumentEvent e){ update(e); }
-    @Override public void changedUpdate(DocumentEvent e){ update(e); }
-    public abstract void update(DocumentEvent e);
+  private static class SimpleDocListener implements DocumentListener {
+    private final Runnable runnable;
+
+    SimpleDocListener(Runnable runnable){
+      this.runnable = runnable;
+    }
+
+    @Override public void insertUpdate(DocumentEvent e){ runnable.run(); }
+    @Override public void removeUpdate(DocumentEvent e){ runnable.run(); }
+    @Override public void changedUpdate(DocumentEvent e){ runnable.run(); }
   }
 }
