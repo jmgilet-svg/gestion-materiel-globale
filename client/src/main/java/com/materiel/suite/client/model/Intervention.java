@@ -33,6 +33,10 @@ public class Intervention {
   private final List<BillingLine> billingLines = new ArrayList<>();
   private UUID quoteId;
   private String quoteReference;
+  private String workflowStage;
+  private boolean generalDone;
+  private boolean detailsDone;
+  private boolean billingReady;
 
   // Champs enrichis pour rendu "carte"
   private String clientName;
@@ -307,6 +311,14 @@ public class Intervention {
   public void setQuoteId(UUID quoteId){ this.quoteId = quoteId; }
   public String getQuoteReference(){ return quoteReference; }
   public void setQuoteReference(String quoteReference){ this.quoteReference = quoteReference; }
+  public String getWorkflowStage(){ return workflowStage; }
+  public void setWorkflowStage(String workflowStage){ this.workflowStage = workflowStage; }
+  public boolean isGeneralDone(){ return generalDone; }
+  public void setGeneralDone(boolean generalDone){ this.generalDone = generalDone; }
+  public boolean isDetailsDone(){ return detailsDone; }
+  public void setDetailsDone(boolean detailsDone){ this.detailsDone = detailsDone; }
+  public boolean isBillingReady(){ return billingReady; }
+  public void setBillingReady(boolean billingReady){ this.billingReady = billingReady; }
   public boolean hasQuote(){
     if (quoteId != null){
       return true;

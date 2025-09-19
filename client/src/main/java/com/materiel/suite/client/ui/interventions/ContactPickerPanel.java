@@ -27,6 +27,7 @@ public class ContactPickerPanel extends JPanel {
   private final List<Contact> allContacts = new ArrayList<>();
   private final Map<String, Contact> selectedContacts = new LinkedHashMap<>();
   private boolean readOnly;
+  private Runnable selectionListener;
 
   public ContactPickerPanel(){
     super(new BorderLayout(8, 8));
@@ -88,6 +89,7 @@ public class ContactPickerPanel extends JPanel {
       }
     }
     model.refreshAll();
+    notifySelectionChanged();
   }
 
   public void setContacts(List<Contact> contacts){
@@ -102,6 +104,7 @@ public class ContactPickerPanel extends JPanel {
     }
     ensureSelectedContactsPresent();
     applyFilter();
+    notifySelectionChanged();
   }
 
   public void setSelectedContacts(List<Contact> contacts){
@@ -117,6 +120,17 @@ public class ContactPickerPanel extends JPanel {
     }
     ensureSelectedContactsPresent();
     applyFilter();
+    notifySelectionChanged();
+  }
+
+  public void setSelectionListener(Runnable listener){
+    this.selectionListener = listener;
+  }
+
+  private void notifySelectionChanged(){
+    if (selectionListener != null){
+      selectionListener.run();
+    }
   }
 
   public List<Contact> getSelectedContacts(){
@@ -289,6 +303,7 @@ public class ContactPickerPanel extends JPanel {
         selectedContacts.remove(key);
       }
       fireTableRowsUpdated(rowIndex, rowIndex);
+      notifySelectionChanged();
     }
 
     void setRows(List<Contact> list){
