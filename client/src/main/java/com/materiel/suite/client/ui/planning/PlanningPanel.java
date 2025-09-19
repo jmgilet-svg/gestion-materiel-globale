@@ -57,7 +57,7 @@ import com.materiel.suite.client.model.Conflict;
 import com.materiel.suite.client.model.DocumentLine;
 import com.materiel.suite.client.model.DocumentTotals;
 import com.materiel.suite.client.model.Intervention;
-import com.materiel.suite.client.model.Quote;
+import com.materiel.suite.client.model.QuoteV2;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.model.ResourceRef;
 import com.materiel.suite.client.net.ServiceFactory;
@@ -92,6 +92,7 @@ public class PlanningPanel extends JPanel {
   private final PlanningBoard board = new PlanningBoard();
   private final AgendaBoard agenda = new AgendaBoard();
   private final JButton bulkQuoteBtn = new JButton("Générer devis (sélection)", IconRegistry.small("file-plus"));
+  private final JButton dryRunBtn = new JButton("Prévisualiser", IconRegistry.small("info"));
   private final JComboBox<QuoteFilter> quoteFilter = new JComboBox<>(QuoteFilter.values());
   private JButton conflictsBtn;
   private JPanel ganttContainer;
@@ -280,8 +281,11 @@ public class PlanningPanel extends JPanel {
     bar.add(quoteFilterLabel);
     bar.add(quoteFilter);
     bar.add(Box.createHorizontalStrut(8));
+    bar.add(dryRunBtn);
+    bar.add(Box.createHorizontalStrut(6));
     bar.add(bulkQuoteBtn);
     bulkQuoteBtn.addActionListener(e -> generateQuotesForSelection());
+    dryRunBtn.addActionListener(e -> showDryRun());
     return bar;
   }
 
@@ -494,18 +498,13 @@ public class PlanningPanel extends JPanel {
   }
 
   private void generateQuotesForSelection(){
-    if (tabs == null || tabs.getSelectedComponent() != tableView.getComponent()){
-      Toasts.info(this, "Sélectionnez les interventions dans l'onglet Liste pour générer les devis.");
-      return;
-    }
-    List<Intervention> selection = tableView.getSelection();
+    List<Intervention> selection = selectedInterventionsForQuotes("générer les devis");
     if (selection.isEmpty()){
-      Toasts.info(this, "Aucune intervention sélectionnée");
       return;
     }
     PlanningService planning = ServiceFactory.planning();
-    var quoteService = ServiceFactory.quotes();
-    if (planning == null || quoteService == null){
+    SalesService sales = ServiceFactory.sales();
+    if (planning == null || sales == null){
       Toasts.error(this, "Service indisponible pour générer les devis");
       return;
     }
@@ -530,16 +529,12 @@ public class PlanningPanel extends JPanel {
           skipped++;
           continue;
         }
-        Quote draft = QuoteGenerator.buildQuoteFromIntervention(intervention, lines);
-        Quote createdQuote = quoteService.save(draft);
+        intervention.setBillingLines(lines);
+        QuoteV2 createdQuote = sales.createQuoteFromIntervention(intervention);
         if (createdQuote == null){
           throw new IllegalStateException("Réponse vide du service devis");
         }
-        intervention.setBillingLines(lines);
-        intervention.setQuoteDraft(QuoteGenerator.toDocumentLines(lines));
-        intervention.setQuoteId(createdQuote.getId());
-        intervention.setQuoteReference(createdQuote.getNumber());
-        intervention.setQuoteNumber(createdQuote.getNumber());
+        applyQuoteToIntervention(intervention, createdQuote, lines);
         planning.saveIntervention(intervention);
         created++;
       } catch (Exception ex){
@@ -582,6 +577,7 @@ public class PlanningPanel extends JPanel {
 
   public void actionReload(){
     reload();
+
   }
 
   private void refreshPlanning(){
