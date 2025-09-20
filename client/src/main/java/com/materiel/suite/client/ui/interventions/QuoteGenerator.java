@@ -5,6 +5,7 @@ import com.materiel.suite.client.model.Contact;
 import com.materiel.suite.client.model.DocumentLine;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Quote;
+import com.materiel.suite.client.util.Money;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -54,7 +55,7 @@ public final class QuoteGenerator {
       BigDecimal unitPrice = line.getUnitPriceHt();
       doc.setPrixUnitaireHT(unitPrice != null ? unitPrice.doubleValue() : 0d);
       doc.setRemisePct(0d);
-      doc.setTvaPct(0d);
+      doc.setTvaPct(Money.vatPercent().doubleValue());
       result.add(doc);
     }
     return result;

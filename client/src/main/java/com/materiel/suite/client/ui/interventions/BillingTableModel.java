@@ -1,8 +1,8 @@
 package com.materiel.suite.client.ui.interventions;
 
 import com.materiel.suite.client.model.BillingLine;
-
 import com.materiel.suite.client.ui.common.OverridableCellRenderers;
+import com.materiel.suite.client.util.Money;
 
 import javax.swing.table.AbstractTableModel;
 import java.math.BigDecimal;
@@ -10,8 +10,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 class BillingTableModel extends AbstractTableModel implements OverridableCellRenderers.ManualOverrideAware {
-  private static final String[] COLUMNS = {"Auto", "Désignation", "Qté", "Unité", "PU HT", "Total HT"};
-  private static final Class<?>[] TYPES = {Boolean.class, String.class, BigDecimal.class, String.class, BigDecimal.class, BigDecimal.class};
+  private static final String[] COLUMNS = {"Auto", "Désignation", "Qté", "Unité", "PU HT", "Total HT", "Conflit"};
+  private static final Class<?>[] TYPES = {Boolean.class, String.class, BigDecimal.class, String.class, BigDecimal.class, BigDecimal.class, String.class};
 
   private final List<BillingLine> rows = new ArrayList<>();
 
@@ -24,7 +24,7 @@ class BillingTableModel extends AbstractTableModel implements OverridableCellRen
     if (rowIndex < 0 || rowIndex >= rows.size()){
       return false;
     }
-    if (columnIndex == 0 || columnIndex == 5){
+    if (columnIndex == 0 || columnIndex == 5 || columnIndex == 6){
       return false;
     }
     BillingLine line = rows.get(rowIndex);
@@ -52,6 +52,7 @@ class BillingTableModel extends AbstractTableModel implements OverridableCellRen
       case 3 -> line.getUnit();
       case 4 -> line.getUnitPriceHt();
       case 5 -> line.getTotalHt();
+      case 6 -> null;
       default -> null;
     };
   }
@@ -119,6 +120,13 @@ class BillingTableModel extends AbstractTableModel implements OverridableCellRen
     fireTableRowsDeleted(row, row);
   }
 
+  BillingLine lineAt(int row){
+    if (row < 0 || row >= rows.size()){
+      return null;
+    }
+    return rows.get(row);
+  }
+
   void recalcAll(){
     if (rows.isEmpty()){
       return;
@@ -140,7 +148,7 @@ class BillingTableModel extends AbstractTableModel implements OverridableCellRen
         total = total.add(value);
       }
     }
-    return total;
+    return Money.round(total);
   }
 
   private void normalize(BillingLine line){
@@ -160,7 +168,7 @@ class BillingTableModel extends AbstractTableModel implements OverridableCellRen
     }
     line.setQuantity(quantity);
     line.setUnitPriceHt(unitPrice);
-    line.setTotalHt(unitPrice.multiply(quantity));
+    line.setTotalHt(Money.round(unitPrice.multiply(quantity)));
   }
 
   private BigDecimal parseDecimal(Object value, BigDecimal previous, BigDecimal fallback){

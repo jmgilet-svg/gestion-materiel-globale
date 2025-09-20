@@ -1,5 +1,6 @@
 package com.materiel.suite.client.util;
 
+import java.util.Locale;
 import java.util.prefs.Preferences;
 
 /** Accès simplifié aux préférences utilisateur côté client. */
@@ -23,6 +24,67 @@ public final class Prefs {
 
   public static void setAutosaveIntervalSeconds(int seconds){
     PREFS.putInt("autosave.interval.seconds", Math.max(5, seconds));
+  }
+
+  public static double getDefaultVatPercent(){
+    return PREFS.getDouble("billing.vat.default.percent", 20.0d);
+  }
+
+  public static void setDefaultVatPercent(Double value){
+    if (value == null){
+      PREFS.remove("billing.vat.default.percent");
+      return;
+    }
+    double sanitized = Math.max(0d, Math.min(100d, value));
+    PREFS.putDouble("billing.vat.default.percent", sanitized);
+  }
+
+  public static String getRoundingMode(){
+    String stored = readTrimmed("billing.rounding.mode");
+    if (stored == null){
+      return "HALF_UP";
+    }
+    String normalized = stored.toUpperCase(Locale.ROOT);
+    return switch (normalized){
+      case "HALF_DOWN", "HALF_EVEN", "HALF_UP" -> normalized;
+      default -> "HALF_UP";
+    };
+  }
+
+  public static void setRoundingMode(String mode){
+    if (mode == null){
+      PREFS.remove("billing.rounding.mode");
+      return;
+    }
+    String trimmed = mode.trim();
+    if (trimmed.isEmpty()){
+      PREFS.remove("billing.rounding.mode");
+      return;
+    }
+    String normalized = trimmed.toUpperCase(Locale.ROOT);
+    switch (normalized){
+      case "HALF_DOWN":
+      case "HALF_EVEN":
+      case "HALF_UP":
+        PREFS.put("billing.rounding.mode", normalized);
+        break;
+      default:
+        PREFS.put("billing.rounding.mode", "HALF_UP");
+        break;
+    }
+  }
+
+  public static int getRoundingScale(){
+    int stored = PREFS.getInt("billing.rounding.scale", 2);
+    if (stored < 0){
+      return 0;
+    }
+    return Math.min(stored, 6);
+  }
+
+  public static void setRoundingScale(int scale){
+    int sanitized = Math.max(0, Math.min(scale, 6));
+    PREFS.putInt("billing.rounding.scale", sanitized);
   }
 
   public static String getAgencyLogoPngBase64(){
