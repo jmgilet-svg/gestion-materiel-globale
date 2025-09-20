@@ -4,8 +4,6 @@ import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.settings.EmailSettings;
 import jakarta.mail.Authenticator;
 import jakarta.mail.Message;
-import jakarta.mail.MessagingException;
-import jakarta.mail.Multipart;
 import jakarta.mail.PasswordAuthentication;
 import jakarta.mail.Session;
 import jakarta.mail.Transport;
@@ -13,29 +11,40 @@ import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeBodyPart;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.internet.MimeMultipart;
+import org.apache.commons.text.StringEscapeUtils;
 
 import java.io.File;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
-/** Envoi SMTP simple basé sur les préférences locales. */
+/** Envoi SMTP (texte + HTML) basé sur les préférences locales. */
 public final class MailSender {
   private MailSender(){
   }
 
   public static void send(String to, String subject, String body, List<File> attachments) throws Exception {
-    send(to, null, subject, body, attachments);
+    send(to, null, subject, body, null, sanitizeAttachments(attachments));
   }
 
   public static void send(String to, String cc, String subject, String body, List<File> attachments) throws Exception {
+    send(to, cc, subject, body, null, sanitizeAttachments(attachments));
+  }
+
+  public static void send(String to, String cc, String subject, String bodyPlain, String bodyHtml, List<File> attachments)
+      throws Exception {
+    send(to, cc, subject, bodyPlain, bodyHtml, sanitizeAttachments(attachments));
+  }
+
+  public static void send(String toEmail, String ccEmail, String subject, String bodyPlain, String bodyHtml,
+                          File... attachments) throws Exception {
     EmailSettings settings = ServiceLocator.emailSettings();
     if (settings.getSmtpHost() == null || settings.getFromAddress() == null){
       throw new IllegalStateException("SMTP ou expéditeur non configuré (Paramètres > Email).");
     }
-    if (to == null || to.isBlank()){
+    if (toEmail == null || toEmail.isBlank()){
       throw new IllegalArgumentException("Adresse destinataire manquante");
     }
 
@@ -64,53 +73,66 @@ public final class MailSender {
     }
 
     MimeMessage message = new MimeMessage(session);
-    try {
-      message.setFrom(new InternetAddress(settings.getFromAddress(),
-          settings.getFromName() == null ? "" : settings.getFromName()));
-      message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(to));
-      String ccToUse = chooseCc(cc, settings.getCcAddress());
-      if (ccToUse != null && !ccToUse.isBlank()){
-        message.setRecipients(Message.RecipientType.CC, InternetAddress.parse(ccToUse));
-      }
-      message.setSubject(subject == null ? "" : subject, StandardCharsets.UTF_8.name());
+    message.setFrom(new InternetAddress(settings.getFromAddress(),
+        settings.getFromName() == null ? "" : settings.getFromName()));
+    message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(toEmail));
+    String ccToUse = chooseCc(ccEmail, settings.getCcAddress());
+    if (ccToUse != null && !ccToUse.isBlank()){
+      message.setRecipients(Message.RecipientType.CC, InternetAddress.parse(ccToUse));
+    }
+    message.setSubject(subject == null ? "" : subject, StandardCharsets.UTF_8.name());
 
-      MimeBodyPart textPart = new MimeBodyPart();
-      textPart.setText(body == null ? "" : body, StandardCharsets.UTF_8.name());
+    MimeMultipart mixed = new MimeMultipart("mixed");
+    message.setContent(mixed);
 
-      Multipart multipart = new MimeMultipart();
-      multipart.addBodyPart(textPart);
+    MimeBodyPart alternativeWrapper = new MimeBodyPart();
+    mixed.addBodyPart(alternativeWrapper);
+    MimeMultipart alternative = new MimeMultipart("alternative");
+    alternativeWrapper.setContent(alternative);
 
-      for (File file : safeList(attachments)){
-        if (file == null){
+    String plain = bodyPlain == null ? "" : bodyPlain;
+    String plainWithPixel = substitutePixel(plain, toEmail, false, settings);
+    MimeBodyPart textPart = new MimeBodyPart();
+    textPart.setText(plainWithPixel, StandardCharsets.UTF_8.name());
+    alternative.addBodyPart(textPart);
+
+    if (settings.isEnableHtml()){
+      String htmlCandidate = bodyHtml == null || bodyHtml.isBlank() ? htmlFromPlain(plain) : bodyHtml;
+      String htmlWithPixel = substitutePixel(htmlCandidate, toEmail, true, settings);
+      MimeBodyPart htmlPart = new MimeBodyPart();
+      htmlPart.setContent(htmlWithPixel, "text/html; charset=UTF-8");
+      alternative.addBodyPart(htmlPart);
+    }
+
+    if (attachments != null){
+      for (File attachment : attachments){
+        if (attachment == null){
           continue;
         }
-        MimeBodyPart attachment = new MimeBodyPart();
-        attachment.attachFile(file);
-        multipart.addBodyPart(attachment);
+        MimeBodyPart attachmentPart = new MimeBodyPart();
+        attachmentPart.attachFile(attachment);
+        mixed.addBodyPart(attachmentPart);
       }
-
-      message.setContent(multipart);
-      Transport.send(message);
-    } catch (MessagingException ex){
-      throw ex;
     }
+
+    Transport.send(message);
   }
 
   public static void testSend(String to) throws Exception {
-    send(to, null, "Test SMTP — Gestion Matériel", "Ceci est un test d'envoi.", List.of());
+    send(to, null, "Test SMTP — Gestion Matériel", "Ceci est un test d'envoi.", "<p>Ceci est un test d'envoi.</p>");
   }
 
-  private static List<File> safeList(List<File> files){
-    if (files == null || files.isEmpty()){
-      return Collections.emptyList();
+  private static File[] sanitizeAttachments(List<File> attachments){
+    if (attachments == null || attachments.isEmpty()){
+      return new File[0];
     }
-    List<File> copy = new ArrayList<>();
-    for (File file : files){
+    List<File> safe = new ArrayList<>();
+    for (File file : attachments){
       if (file != null){
-        copy.add(file);
+        safe.add(file);
       }
     }
-    return copy;
+    return safe.toArray(File[]::new);
   }
 
   private static String chooseCc(String preferred, String fallback){
@@ -121,5 +143,109 @@ public final class MailSender {
       return fallback;
     }
     return null;
+  }
+
+  private static String htmlFromPlain(String plain){
+    if (plain == null){
+      return "";
+    }
+    String escaped = StringEscapeUtils.escapeHtml4(plain);
+    return escaped.replace("\r", "").replace("\n", "<br/>");
+  }
+
+  private static String substitutePixel(String body, String toEmail, boolean html, EmailSettings settings){
+    if (body == null || body.isEmpty()){
+      return body == null ? "" : body;
+    }
+    if (!html){
+      return removePixelMarkers(body);
+    }
+    if (!settings.isEnableOpenTracking()){
+      return removePixelMarkers(body);
+    }
+    String base = settings.getTrackingBaseUrl();
+    if (base == null || base.isBlank()){
+      return removePixelMarkers(body);
+    }
+    String url = resolvePixelUrl(body, base, toEmail);
+    String replacement = "<img src=\"" + url + "\" width=\"1\" height=\"1\" style=\"display:none\" alt=\"\"/>";
+    String withExplicit = replaceExplicitPixel(body, replacement);
+    return withExplicit.replace("${pixel}", replacement);
+  }
+
+  private static String removePixelMarkers(String body){
+    if (body == null || body.isEmpty()){
+      return body == null ? "" : body;
+    }
+    String withoutSimple = body.replace("${pixel}", "");
+    return replaceExplicitPixel(withoutSimple, "");
+  }
+
+  private static String replaceExplicitPixel(String body, String replacement){
+    if (body == null || body.isEmpty()){
+      return body == null ? "" : body;
+    }
+    StringBuilder out = new StringBuilder();
+    int index = 0;
+    while (true){
+      int start = body.indexOf("${pixel(", index);
+      if (start < 0){
+        out.append(body.substring(index));
+        break;
+      }
+      out.append(body, index, start);
+      int end = body.indexOf(")}", start);
+      if (end < 0){
+        index = start + 8;
+        continue;
+      }
+      out.append(replacement);
+      index = end + 2;
+    }
+    return out.toString();
+  }
+
+  private static String resolvePixelUrl(String body, String base, String defaultTo){
+    int start = body == null ? -1 : body.indexOf("${pixel(");
+    if (start >= 0){
+      int end = body.indexOf(")}", start);
+      if (end > start){
+        String inside = body.substring(start + 8, end);
+        String ids = null;
+        String to = defaultTo;
+        for (String part : inside.split(",")){
+          String[] kv = part.split("=", 2);
+          if (kv.length < 2){
+            continue;
+          }
+          String key = kv[0].trim();
+          String value = kv[1].trim();
+          if (key.equalsIgnoreCase("ids")){
+            ids = value.replace('|', ',');
+          } else if (key.equalsIgnoreCase("to")){
+            to = value;
+          }
+        }
+        return buildPixelUrl(base, to, ids);
+      }
+    }
+    return buildPixelUrl(base, defaultTo, null);
+  }
+
+  private static String buildPixelUrl(String base, String to, String ids){
+    String normalizedBase = base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
+    StringBuilder url = new StringBuilder(normalizedBase).append("/api/v2/mail/open");
+    url.append("?to=").append(urlEncode(to));
+    if (ids != null && !ids.isBlank()){
+      url.append("&ids=").append(urlEncode(ids));
+    }
+    return url.toString();
+  }
+
+  private static String urlEncode(String value){
+    if (value == null){
+      return "";
+    }
+    return URLEncoder.encode(value, StandardCharsets.UTF_8);
   }
 }

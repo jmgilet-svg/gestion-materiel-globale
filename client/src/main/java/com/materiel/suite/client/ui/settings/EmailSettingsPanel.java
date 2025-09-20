@@ -22,6 +22,10 @@ public class EmailSettingsPanel extends JPanel {
   private final JTextField ccField = new JTextField();
   private final JTextField subjectField = new JTextField();
   private final JTextArea bodyArea = new JTextArea(8, 32);
+  private final JCheckBox htmlCheck = new JCheckBox("Envoyer en HTML (multipart)");
+  private final JTextArea htmlArea = new JTextArea(10, 32);
+  private final JCheckBox trackingCheck = new JCheckBox("Activer le tracking d'ouverture (pixel 1×1)");
+  private final JTextField trackingBaseField = new JTextField();
   private final JButton saveButton = new JButton("Enregistrer");
   private final JButton testButton = new JButton("Envoyer un email de test");
 
@@ -30,6 +34,8 @@ public class EmailSettingsPanel extends JPanel {
 
     bodyArea.setLineWrap(true);
     bodyArea.setWrapStyleWord(true);
+    htmlArea.setLineWrap(true);
+    htmlArea.setWrapStyleWord(true);
 
     JPanel form = new JPanel(new GridBagLayout());
     GridBagConstraints gc = new GridBagConstraints();
@@ -98,10 +104,34 @@ public class EmailSettingsPanel extends JPanel {
     row++;
     gc.gridx = 0; gc.gridy = row; gc.weightx = 0;
     gc.anchor = GridBagConstraints.NORTHWEST;
-    form.add(new JLabel("Corps (template)"), gc);
+    form.add(new JLabel("Corps TEXTE (template)"), gc);
     gc.gridx = 1; gc.weightx = 1;
     form.add(new JScrollPane(bodyArea), gc);
     gc.anchor = GridBagConstraints.WEST;
+
+    row++;
+    gc.gridx = 0; gc.gridy = row; gc.gridwidth = 2;
+    form.add(htmlCheck, gc);
+    gc.gridwidth = 1;
+
+    row++;
+    gc.gridx = 0; gc.gridy = row; gc.weightx = 0;
+    gc.anchor = GridBagConstraints.NORTHWEST;
+    form.add(new JLabel("Corps HTML (template)"), gc);
+    gc.gridx = 1; gc.weightx = 1;
+    form.add(new JScrollPane(htmlArea), gc);
+    gc.anchor = GridBagConstraints.WEST;
+
+    row++;
+    gc.gridx = 0; gc.gridy = row; gc.gridwidth = 2;
+    form.add(trackingCheck, gc);
+    gc.gridwidth = 1;
+
+    row++;
+    gc.gridx = 0; gc.gridy = row; gc.weightx = 0;
+    form.add(new JLabel("Tracking base URL"), gc);
+    gc.gridx = 1; gc.weightx = 1;
+    form.add(trackingBaseField, gc);
 
     add(form, BorderLayout.CENTER);
 
@@ -130,6 +160,10 @@ public class EmailSettingsPanel extends JPanel {
     ccField.setText(settings.getCcAddress() == null ? "" : settings.getCcAddress());
     subjectField.setText(settings.getSubjectTemplate());
     bodyArea.setText(settings.getBodyTemplate());
+    htmlCheck.setSelected(settings.isEnableHtml());
+    htmlArea.setText(settings.getHtmlTemplate());
+    trackingCheck.setSelected(settings.isEnableOpenTracking());
+    trackingBaseField.setText(settings.getTrackingBaseUrl() == null ? "" : settings.getTrackingBaseUrl());
   }
 
   private void configureAccess(){
@@ -146,6 +180,11 @@ public class EmailSettingsPanel extends JPanel {
     subjectField.setEnabled(canEdit);
     bodyArea.setEnabled(canEdit);
     bodyArea.setEditable(canEdit);
+    htmlCheck.setEnabled(canEdit);
+    htmlArea.setEnabled(canEdit);
+    htmlArea.setEditable(canEdit);
+    trackingCheck.setEnabled(canEdit);
+    trackingBaseField.setEnabled(canEdit);
     saveButton.setEnabled(canEdit);
     testButton.setEnabled(canEdit);
   }
@@ -163,6 +202,10 @@ public class EmailSettingsPanel extends JPanel {
     settings.setCcAddress(ccField.getText());
     settings.setSubjectTemplate(subjectField.getText());
     settings.setBodyTemplate(bodyArea.getText());
+    settings.setEnableHtml(htmlCheck.isSelected());
+    settings.setHtmlTemplate(htmlArea.getText());
+    settings.setEnableOpenTracking(trackingCheck.isSelected());
+    settings.setTrackingBaseUrl(trackingBaseField.getText());
     try {
       ServiceLocator.saveEmailSettings(settings);
       Toasts.success(this, "Paramètres email enregistrés");

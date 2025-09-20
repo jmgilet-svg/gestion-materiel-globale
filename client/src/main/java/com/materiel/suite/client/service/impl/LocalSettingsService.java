@@ -56,6 +56,13 @@ public class LocalSettingsService implements SettingsService {
     if (body != null){
       settings.setBodyTemplate(body);
     }
+    String html = Prefs.getMailHtmlTemplate();
+    if (html != null){
+      settings.setHtmlTemplate(html);
+    }
+    settings.setEnableHtml(Prefs.isMailHtmlEnabled());
+    settings.setEnableOpenTracking(Prefs.isMailTrackingEnabled());
+    settings.setTrackingBaseUrl(Prefs.getMailTrackingBaseUrl());
     return settings;
   }
 
@@ -75,5 +82,9 @@ public class LocalSettingsService implements SettingsService {
     Prefs.setMailCcAddress(settings.getCcAddress());
     Prefs.setMailSubjectTemplate(settings.getSubjectTemplate());
     Prefs.setMailBodyTemplate(settings.getBodyTemplate());
+    Prefs.setMailHtmlTemplate(settings.getHtmlTemplate());
+    Prefs.setMailHtmlEnabled(settings.isEnableHtml());
+    Prefs.setMailTrackingEnabled(settings.isEnableOpenTracking());
+    Prefs.setMailTrackingBaseUrl(settings.getTrackingBaseUrl());
   }
 }

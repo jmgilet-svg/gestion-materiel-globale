@@ -189,6 +189,47 @@ public final class Prefs {
     }
   }
 
+  public static String getMailHtmlTemplate(){
+    String value = PREFS.get("mail.body.html.template", null);
+    if (value == null){
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.isEmpty() ? null : value;
+  }
+
+  public static void setMailHtmlTemplate(String value){
+    if (value == null || value.isBlank()){
+      PREFS.remove("mail.body.html.template");
+    } else {
+      PREFS.put("mail.body.html.template", value);
+    }
+  }
+
+  public static boolean isMailHtmlEnabled(){
+    return PREFS.getBoolean("mail.body.html.enabled", true);
+  }
+
+  public static void setMailHtmlEnabled(boolean enabled){
+    PREFS.putBoolean("mail.body.html.enabled", enabled);
+  }
+
+  public static boolean isMailTrackingEnabled(){
+    return PREFS.getBoolean("mail.tracking.enabled", true);
+  }
+
+  public static void setMailTrackingEnabled(boolean enabled){
+    PREFS.putBoolean("mail.tracking.enabled", enabled);
+  }
+
+  public static String getMailTrackingBaseUrl(){
+    return readTrimmed("mail.tracking.base");
+  }
+
+  public static void setMailTrackingBaseUrl(String value){
+    writeTrimmed("mail.tracking.base", value);
+  }
+
   private static String readTrimmed(String key){
     String value = PREFS.get(key, null);
     if (value == null){

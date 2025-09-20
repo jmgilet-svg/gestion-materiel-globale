@@ -8,7 +8,7 @@ import java.util.List;
 
 /** Aperçu simple avant envoi des emails générés. */
 public class EmailPreviewDialog extends JDialog {
-  public record EmailJob(String to, String cc, String subject, String body, List<File> attachments){
+  public record EmailJob(String to, String cc, String subject, String body, String bodyHtml, List<File> attachments){
     public EmailJob{
       attachments = attachments == null ? List.of() : List.copyOf(attachments);
     }
@@ -97,7 +97,8 @@ public class EmailPreviewDialog extends JDialog {
       toLabel.setText(job.to());
       ccLabel.setText(job.cc() == null ? "" : job.cc());
       subjectField.setText(job.subject());
-      bodyArea.setText(job.body());
+      String preview = job.bodyHtml() != null && !job.bodyHtml().isBlank() ? job.bodyHtml() : job.body();
+      bodyArea.setText(preview);
       attachmentsModel.clear();
       for (File attachment : job.attachments()){
         attachmentsModel.addElement(attachment);
