@@ -23,6 +23,8 @@ import com.materiel.suite.client.service.TemplateService;
 import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.settings.GeneralSettings;
 import com.materiel.suite.client.ui.common.KeymapUtil;
+import com.materiel.suite.client.ui.common.OverridableCellRenderers;
+import com.materiel.suite.client.ui.common.ResourceChipsPanel;
 import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.icons.IconRegistry;
 
@@ -30,7 +32,6 @@ import javax.swing.*;
 import javax.swing.event.ChangeListener;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.*;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
@@ -106,6 +107,8 @@ public class InterventionDialog extends JDialog {
   private final JButton importSignatureButton = new JButton("Importer PNG…");
   private final JButton clearSignatureButton = new JButton("Effacer");
   private final JButton fullscreenButton = new JButton("", IconRegistry.small("maximize"));
+  private final ResourceChipsPanel billingResourceChips = new ResourceChipsPanel();
+  private final JPanel contentPanel = new JPanel(new BorderLayout(8, 8));
   private Rectangle previousBounds;
   private final boolean readOnly;
   private volatile boolean dirty;
@@ -124,6 +127,8 @@ public class InterventionDialog extends JDialog {
   private boolean saved;
   private String signatureBase64;
   private Consumer<Intervention> onSaveCallback;
+  private Component parentComponent;
+  private Runnable closeHandler;
 
   public InterventionDialog(Window owner,
                             PlanningService planningService,
@@ -131,12 +136,15 @@ public class InterventionDialog extends JDialog {
                             InterventionTypeService typeService,
                             TemplateService templateService){
     super(owner, "Intervention", ModalityType.APPLICATION_MODAL);
+    setContentPane(contentPanel);
     this.planningService = planningService;
     this.clientService = clientService;
     this.typeService = typeService;
     this.templateService = templateService;
     this.resourcePicker = new ResourcePickerPanel(planningService);
     this.readOnly = !AccessControl.canEditInterventions();
+    this.parentComponent = this;
+    this.closeHandler = this::dispose;
     this.resourcePicker.setSelectionListener(this::onResourceSelectionChanged);
     this.contactPicker.setSelectionListener(() -> {
       refreshWorkflowState();
@@ -165,6 +173,8 @@ public class InterventionDialog extends JDialog {
     fullscreenButton.addActionListener(e -> toggleFullscreen());
     fullscreenButton.setFocusPainted(false);
     fullscreenButton.setToolTipText("Plein écran");
+    billingResourceChips.setListener(this::onBillingResourceChip);
+    billingResourceChips.setBorder(BorderFactory.createEmptyBorder(4, 0, 4, 0));
     openQuoteButton.setEnabled(false);
     reloadAvailableTypes();
     buildUI();
@@ -178,13 +188,15 @@ public class InterventionDialog extends JDialog {
     setMinimumSize(new Dimension(1180, 760));
     setLocationRelativeTo(owner);
     applyReadOnly();
+    billingResourceChips.setEnabled(!readOnly);
   }
 
   private void buildUI(){
-    setLayout(new BorderLayout(8, 8));
-    add(buildNorthPanel(), BorderLayout.NORTH);
-    add(buildTabs(), BorderLayout.CENTER);
-    add(buildFooter(), BorderLayout.SOUTH);
+    contentPanel.removeAll();
+    contentPanel.setLayout(new BorderLayout(8, 8));
+    contentPanel.add(buildNorthPanel(), BorderLayout.NORTH);
+    contentPanel.add(buildTabs(), BorderLayout.CENTER);
+    contentPanel.add(buildFooter(), BorderLayout.SOUTH);
     configureSpinners();
     configureBillingTable();
     billingModel.addTableModelListener(e -> {
@@ -225,17 +237,20 @@ public class InterventionDialog extends JDialog {
   }
 
   private void buildShortcuts(){
-    JComponent root = getRootPane();
-    if (root == null){
+    installShortcutsOn(getRootPane());
+  }
+
+  public void installShortcutsOn(JComponent target){
+    if (target == null){
       return;
     }
-    KeymapUtil.bindGlobal(root, "intervention-gen-quote", KeymapUtil.ctrlG(), this::generateQuoteFromPrebilling);
-    KeymapUtil.bindGlobal(root, "intervention-regenerate", KeymapUtil.ctrlR(), this::regenerateBillingFromResources);
-    KeymapUtil.bindGlobal(root, "intervention-step-1", KeymapUtil.ctrlDigit(1), () -> selectTabSafe(1));
-    KeymapUtil.bindGlobal(root, "intervention-step-2", KeymapUtil.ctrlDigit(2), () -> selectTabSafe(3));
-    KeymapUtil.bindGlobal(root, "intervention-step-3", KeymapUtil.ctrlDigit(3), () -> selectTabSafe(2));
-    InputMap map = root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
-    ActionMap actions = root.getActionMap();
+    KeymapUtil.bindGlobal(target, "intervention-gen-quote", KeymapUtil.ctrlG(), this::generateQuoteFromPrebilling);
+    KeymapUtil.bindGlobal(target, "intervention-regenerate", KeymapUtil.ctrlR(), this::regenerateBillingFromResources);
+    KeymapUtil.bindGlobal(target, "intervention-step-1", KeymapUtil.ctrlDigit(1), () -> selectTabSafe(1));
+    KeymapUtil.bindGlobal(target, "intervention-step-2", KeymapUtil.ctrlDigit(2), () -> selectTabSafe(3));
+    KeymapUtil.bindGlobal(target, "intervention-step-3", KeymapUtil.ctrlDigit(3), () -> selectTabSafe(2));
+    InputMap map = target.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+    ActionMap actions = target.getActionMap();
     map.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, KeymapUtil.menuMask()), "intervention-undo");
     actions.put("intervention-undo", new AbstractAction(){
       @Override public void actionPerformed(java.awt.event.ActionEvent e){
@@ -309,7 +324,7 @@ public class InterventionDialog extends JDialog {
           return;
         }
         int choice = JOptionPane.showConfirmDialog(
-            InterventionDialog.this,
+            dialogParent(),
             "Des modifications n'ont pas été enregistrées. Enregistrer avant de fermer ?",
             "Fermer la fiche",
             JOptionPane.YES_NO_CANCEL_OPTION);
@@ -366,7 +381,7 @@ public class InterventionDialog extends JDialog {
         persisted = true;
       }
       if (toast && persisted){
-        Toasts.success(this, "Modifications enregistrées");
+        toastSuccess("Modifications enregistrées");
       }
       markSaved(toast && persisted ? "Modifications enregistrées" : "Brouillon enregistré");
     } catch (IllegalArgumentException ex){
@@ -627,6 +642,7 @@ public class InterventionDialog extends JDialog {
     billingTable.setRowSelectionAllowed(false);
     historyInput.setEditable(false);
     historySend.setEnabled(false);
+    billingResourceChips.setEnabled(false);
   }
 
   private void configureSpinners(){
@@ -641,9 +657,9 @@ public class InterventionDialog extends JDialog {
     billingTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
     billingTable.setAutoCreateRowSorter(true);
     billingTable.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
-    DefaultTableCellRenderer rightRenderer = new DefaultTableCellRenderer();
-    rightRenderer.setHorizontalAlignment(SwingConstants.RIGHT);
-    billingTable.setDefaultRenderer(BigDecimal.class, rightRenderer);
+    OverridableCellRenderers.ManualOverrideHighlightRenderer renderer =
+        new OverridableCellRenderers.ManualOverrideHighlightRenderer();
+    billingTable.setDefaultRenderer(BigDecimal.class, renderer);
     if (billingTable.getColumnModel().getColumnCount() > 0){
       billingTable.getColumnModel().getColumn(0).setMaxWidth(70);
       if (billingTable.getColumnModel().getColumnCount() > 2){
@@ -748,7 +764,10 @@ public class InterventionDialog extends JDialog {
     toolbar.add(quoteStatusLabel);
     toolbar.add(Box.createHorizontalStrut(12));
     toolbar.add(totalHtLabel);
-    panel.add(toolbar, BorderLayout.NORTH);
+    JPanel header = new JPanel(new BorderLayout(0, 4));
+    header.add(toolbar, BorderLayout.NORTH);
+    header.add(billingResourceChips, BorderLayout.CENTER);
+    panel.add(header, BorderLayout.NORTH);
     panel.add(new JScrollPane(billingTable), BorderLayout.CENTER);
     return panel;
   }
@@ -959,7 +978,7 @@ public class InterventionDialog extends JDialog {
   private JComponent buildFooter(){
     JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
     JButton cancel = new JButton("Fermer");
-    cancel.addActionListener(e -> dispose());
+    cancel.addActionListener(e -> closeDialog());
     panel.add(saveButton);
     panel.add(cancel);
     return panel;
@@ -967,7 +986,7 @@ public class InterventionDialog extends JDialog {
 
   private void importSignature(){
     JFileChooser chooser = new JFileChooser();
-    int result = chooser.showOpenDialog(this);
+    int result = chooser.showOpenDialog(dialogParent());
     if (result != JFileChooser.APPROVE_OPTION){
       return;
     }
@@ -976,10 +995,10 @@ public class InterventionDialog extends JDialog {
       byte[] data = Files.readAllBytes(file.toPath());
       signatureBase64 = Base64.getEncoder().encodeToString(data);
       signatureAtSpinner.setValue(new Date());
-      Toasts.success(this, "Signature importée");
+      toastSuccess("Signature importée");
     } catch (IOException ex){
       signatureBase64 = null;
-      Toasts.error(this, "Impossible de lire le fichier sélectionné");
+      toastError("Impossible de lire le fichier sélectionné");
     }
     updateSignaturePreview();
     markEdited();
@@ -1038,22 +1057,22 @@ public class InterventionDialog extends JDialog {
       }
       markSaved("Modifications enregistrées");
       saved = true;
-      dispose();
-      Toasts.success(this, "Intervention enregistrée");
+      closeDialog();
+      toastSuccess("Intervention enregistrée");
     } catch (IllegalArgumentException ex){
-      JOptionPane.showMessageDialog(this, ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
+      JOptionPane.showMessageDialog(dialogParent(), ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
     } catch (RuntimeException ex){
       String message = ex.getMessage();
       if (message == null || message.isBlank()){
         message = "Impossible d'enregistrer l'intervention.";
       }
-      JOptionPane.showMessageDialog(this, message, "Erreur", JOptionPane.ERROR_MESSAGE);
+      JOptionPane.showMessageDialog(dialogParent(), message, "Erreur", JOptionPane.ERROR_MESSAGE);
     }
   }
 
   private void regenerateBillingFromResources(){
     syncAutoBillingLinesWithResources();
-    Toasts.info(this, "Lignes générées depuis les ressources");
+    toastInfo("Lignes générées depuis les ressources");
     refreshWorkflowState();
   }
 
@@ -1063,7 +1082,7 @@ public class InterventionDialog extends JDialog {
     }
     InterventionTemplate template = (InterventionTemplate) templateCombo.getSelectedItem();
     if (template == null){
-      Toasts.info(this, "Aucun modèle sélectionné");
+      toastInfo("Aucun modèle sélectionné");
       return;
     }
     snapshotLinesForUndo();
@@ -1123,7 +1142,7 @@ public class InterventionDialog extends JDialog {
     }
     syncAutoBillingLinesWithResources();
     String name = template.getName();
-    Toasts.success(this, name == null || name.isBlank() ? "Modèle appliqué" : "Modèle appliqué : " + name);
+    toastSuccess(name == null || name.isBlank() ? "Modèle appliqué" : "Modèle appliqué : " + name);
     markEdited();
   }
 
@@ -1144,6 +1163,38 @@ public class InterventionDialog extends JDialog {
     }
     computeTotals();
     refreshWorkflowState();
+  }
+
+  private void onBillingResourceChip(Resource resource){
+    if (resource == null || readOnly){
+      return;
+    }
+    snapshotLinesForUndo();
+    List<BillingLine> generated = PreDevisUtil.fromResourcesWithWindow(List.of(resource),
+        spinnerDate(startSpinner),
+        spinnerDate(endSpinner));
+    BillingLine line = generated.isEmpty() ? null : generated.get(0);
+    if (line == null){
+      line = new BillingLine();
+      line.setId(UUID.randomUUID().toString());
+      line.setDesignation(resource != null && resource.getName() != null && !resource.getName().isBlank()
+          ? resource.getName()
+          : "Ressource");
+      line.setUnit("u");
+      line.setQuantity(BigDecimal.ONE);
+      line.setUnitPriceHt(BigDecimal.ZERO);
+      line.setTotalHt(BigDecimal.ZERO);
+    }
+    line.setAutoGenerated(false);
+    if (resource != null && resource.getId() != null){
+      line.setResourceId(resource.getId().toString());
+    }
+    List<BillingLine> lines = billingModel.getLines();
+    lines.add(line);
+    billingModel.setLines(lines);
+    computeTotals();
+    refreshWorkflowState();
+    markEdited();
   }
 
   private void removeSelectedBillingLine(){
@@ -1168,15 +1219,15 @@ public class InterventionDialog extends JDialog {
     computeTotals();
     List<BillingLine> lines = billingModel.getLines();
     if (lines.isEmpty()){
-      Toasts.info(this, "Aucune ligne de pré-devis à convertir");
+      toastInfo("Aucune ligne de pré-devis à convertir");
       return;
     }
     if (current == null){
-      Toasts.error(this, "Intervention introuvable");
+      toastError("Intervention introuvable");
       return;
     }
     if (current.hasQuote()){
-      int confirm = JOptionPane.showConfirmDialog(this,
+      int confirm = JOptionPane.showConfirmDialog(dialogParent(),
           "Un devis est déjà lié à cette intervention. Générer un nouveau devis ?",
           "Devis existant",
           JOptionPane.OK_CANCEL_OPTION,
@@ -1187,7 +1238,7 @@ public class InterventionDialog extends JDialog {
     }
     SalesService sales = ServiceLocator.sales();
     if (sales == null){
-      Toasts.error(this, "Service devis indisponible");
+      toastError("Service devis indisponible");
       return;
     }
     try {
@@ -1202,7 +1253,7 @@ public class InterventionDialog extends JDialog {
       if (ref == null || ref.isBlank()){
         ref = quote.getId() != null ? quote.getId() : "";
       }
-      Toasts.success(this, ref == null || ref.isBlank() ? "Devis créé" : "Devis créé — " + ref);
+      toastSuccess(ref == null || ref.isBlank() ? "Devis créé" : "Devis créé — " + ref);
       if (onSaveCallback != null){
         onSaveCallback.accept(current);
       } else if (planningService != null){
@@ -1215,7 +1266,7 @@ public class InterventionDialog extends JDialog {
           ? "Devis généré"
           : "Devis généré : " + finalRef);
     } catch (Exception ex){
-      Toasts.error(this, "Échec de génération du devis : " + ex.getMessage());
+      toastError("Échec de génération du devis : " + ex.getMessage());
       logEventAsync("SYSTEM", "Erreur génération devis : " + ex.getMessage());
     }
   }
@@ -1250,28 +1301,28 @@ public class InterventionDialog extends JDialog {
 
   private void openQuotePreview(){
     if (current == null || !current.hasQuote()){
-      Toasts.info(this, "Aucun devis lié à cette intervention.");
+      toastInfo("Aucun devis lié à cette intervention.");
       return;
     }
     SalesService sales = ServiceLocator.sales();
     if (sales == null){
-      Toasts.error(this, "Service devis indisponible");
+      toastError("Service devis indisponible");
       return;
     }
     UUID quoteId = current.getQuoteId();
     if (quoteId == null){
-      Toasts.error(this, "Identifiant de devis indisponible.");
+      toastError("Identifiant de devis indisponible.");
       return;
     }
     try {
       QuoteV2 quote = sales.getQuote(quoteId.toString());
       if (quote == null){
-        Toasts.error(this, "Devis introuvable côté service.");
+        toastError("Devis introuvable côté service.");
         return;
       }
-      new QuotePreviewDialog(this, quote).setVisible(true);
+      new QuotePreviewDialog(dialogWindow(), quote).setVisible(true);
     } catch (Exception ex){
-      Toasts.error(this, "Impossible d'ouvrir le devis : " + ex.getMessage());
+      toastError("Impossible d'ouvrir le devis : " + ex.getMessage());
     }
   }
 
@@ -1377,6 +1428,60 @@ public class InterventionDialog extends JDialog {
     }
     revalidate();
     repaint();
+  }
+
+  public void setParentComponent(Component parent){
+    this.parentComponent = parent != null ? parent : this;
+  }
+
+  public void setCloseHandler(Runnable handler){
+    this.closeHandler = handler != null ? handler : this::dispose;
+  }
+
+  public void setFullscreenButtonVisible(boolean visible){
+    fullscreenButton.setVisible(visible);
+  }
+
+  public JComponent detachContentPanel(){
+    Container parent = contentPanel.getParent();
+    if (parent != null){
+      parent.remove(contentPanel);
+      parent.revalidate();
+      parent.repaint();
+    }
+    return contentPanel;
+  }
+
+  private Component dialogParent(){
+    return parentComponent != null ? parentComponent : this;
+  }
+
+  private Window dialogWindow(){
+    Component parent = dialogParent();
+    if (parent instanceof Window window){
+      return window;
+    }
+    return SwingUtilities.getWindowAncestor(parent);
+  }
+
+  private void closeDialog(){
+    if (closeHandler != null){
+      closeHandler.run();
+    } else {
+      dispose();
+    }
+  }
+
+  private void toastSuccess(String message){
+    Toasts.success(dialogParent(), message);
+  }
+
+  private void toastInfo(String message){
+    Toasts.info(dialogParent(), message);
+  }
+
+  private void toastError(String message){
+    Toasts.error(dialogParent(), message);
   }
   private List<BillingLine> convertDocumentLines(List<DocumentLine> lines){
     List<BillingLine> result = new ArrayList<>();
