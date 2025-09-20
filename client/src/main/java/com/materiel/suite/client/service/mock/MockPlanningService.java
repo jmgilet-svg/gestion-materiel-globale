@@ -114,6 +114,7 @@ public class MockPlanningService implements PlanningService {
     resource.setTags(tagsFor(effectiveType, rnd));
     resource.setWeeklyUnavailability(weeklyPattern(rnd));
     resource.setColor(RESOURCE_COLORS[globalIndex % RESOURCE_COLORS.length]);
+    resource.setEmail(emailFor(resource));
     if (rnd.nextInt(4) == 0){
       LocalDate lastCheck = LocalDate.now().minusDays(rnd.nextInt(180));
       resource.setNotes("Dernier contrôle: " + lastCheck);
@@ -193,6 +194,22 @@ public class MockPlanningService implements PlanningService {
     int start2 = 13 + rnd.nextInt(3);
     int end2 = start2 + 3 + rnd.nextInt(2);
     return first + "; " + secondDay + " " + twoDigits(start2) + ":00-" + twoDigits(end2) + ":00";
+  }
+
+  private String emailFor(Resource resource){
+    if (resource == null){
+      return null;
+    }
+    String name = resource.getName();
+    if (name == null || name.isBlank()){
+      return null;
+    }
+    String normalized = name.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", ".");
+    normalized = normalized.replaceAll("^\\.+", "").replaceAll("\\.+$", "");
+    if (normalized.isBlank()){
+      normalized = "ressource";
+    }
+    return normalized + "@demo-ressources.local";
   }
 
   private String twoDigits(int value){

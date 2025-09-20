@@ -12,6 +12,7 @@ import java.awt.Graphics2D;
 import java.awt.FontMetrics;
 import java.awt.event.KeyEvent;
 import java.io.File;
+import java.io.PrintWriter;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
@@ -27,10 +28,13 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.nio.charset.StandardCharsets;
 
 import javax.swing.AbstractAction;
 import javax.swing.Box;
@@ -68,7 +72,11 @@ import com.materiel.suite.client.model.ResourceRef;
 import com.materiel.suite.client.model.TimelineEvent;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.PlanningService;
+import com.materiel.suite.client.service.SalesService;
+import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.service.TimelineService;
+import com.materiel.suite.client.settings.EmailSettings;
+import com.materiel.suite.client.ui.common.EmailPreviewDialog;
 import com.materiel.suite.client.ui.common.KeymapUtil;
 import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.commands.CommandBus;
@@ -77,6 +85,7 @@ import com.materiel.suite.client.ui.icons.IconRegistry;
 import com.materiel.suite.client.ui.interventions.InterventionDialog;
 import com.materiel.suite.client.ui.interventions.PreDevisUtil;
 import com.materiel.suite.client.ui.interventions.QuoteGenerator;
+import com.materiel.suite.client.util.MailSender;
 
 public class PlanningPanel extends JPanel {
   private enum QuoteFilter {
@@ -101,6 +110,7 @@ public class PlanningPanel extends JPanel {
   private final JButton bulkQuoteBtn = new JButton("Générer devis", IconRegistry.small("file-plus"));
   private final JButton exportIcsBtn = new JButton("Exporter .ics", IconRegistry.small("calendar"));
   private final JButton exportMissionBtn = new JButton("Ordre de mission (PDF)", IconRegistry.small("file"));
+  private final JButton sendBtn = new JButton("Envoyer aux ressources", IconRegistry.small("info"));
   private final JButton dryRunBtn = new JButton("Prévisualiser", IconRegistry.small("calculator"));
   private final JComboBox<QuoteFilter> quoteFilter = new JComboBox<>(QuoteFilter.values());
   private final JPanel bulkBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
@@ -195,17 +205,20 @@ public class PlanningPanel extends JPanel {
     bulkBar.add(bulkQuoteBtn);
     bulkBar.add(exportIcsBtn);
     bulkBar.add(exportMissionBtn);
+    bulkBar.add(sendBtn);
     bulkBar.setVisible(false);
     dryRunBtn.setEnabled(false);
     bulkQuoteBtn.setEnabled(false);
     exportIcsBtn.setEnabled(false);
     exportMissionBtn.setEnabled(false);
+    sendBtn.setEnabled(false);
     add(bulkBar, BorderLayout.SOUTH);
 
     bulkQuoteBtn.addActionListener(e -> generateQuotesForSelection());
     dryRunBtn.addActionListener(e -> showDryRun());
     exportIcsBtn.addActionListener(e -> exportIcs());
     exportMissionBtn.addActionListener(e -> exportMissionPdf());
+    sendBtn.addActionListener(e -> sendMissionOrders());
     updateSelectionUI(List.of());
 
     reload();
@@ -438,6 +451,7 @@ public class PlanningPanel extends JPanel {
     bulkQuoteBtn.setEnabled(active);
     exportIcsBtn.setEnabled(active);
     exportMissionBtn.setEnabled(active);
+    sendBtn.setEnabled(active);
     bulkBar.setVisible(active);
     revalidate();
     repaint();
@@ -634,6 +648,242 @@ public class PlanningPanel extends JPanel {
       Toasts.success(this, message);
     } else {
       Toasts.info(this, message);
+    }
+  }
+
+  private void maybeSaveLog(List<String[]> rows){
+    if (rows == null || rows.size() <= 1){
+      return;
+    }
+    int choice = JOptionPane.showConfirmDialog(
+        this,
+        "Enregistrer le journal d'envoi (CSV) ?",
+        "Journal",
+        JOptionPane.YES_NO_OPTION);
+    if (choice != JOptionPane.YES_OPTION){
+      return;
+    }
+    JFileChooser chooser = new JFileChooser();
+    String defaultName = "journal-envoi-"
+        + DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").format(LocalDateTime.now())
+        + ".csv";
+    chooser.setSelectedFile(new File(defaultName));
+    int result = chooser.showSaveDialog(this);
+    if (result != JFileChooser.APPROVE_OPTION){
+      return;
+    }
+    File destination = chooser.getSelectedFile();
+    try (PrintWriter writer = new PrintWriter(destination, StandardCharsets.UTF_8)){
+      for (String[] row : rows){
+        writer.println(csvRow(row));
+      }
+      Toasts.success(this, "Journal enregistré : " + destination.getName());
+    } catch (Exception ex){
+      Toasts.error(this, "Impossible d'enregistrer le journal : " + ex.getMessage());
+    }
+  }
+
+  private String timestamp(){
+    return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now());
+  }
+
+  private String renderSubject(List<Intervention> interventions, EmailSettings settings){
+    if (settings == null){
+      return "";
+    }
+    if (interventions == null || interventions.isEmpty()){
+      return settings.getSubjectTemplate();
+    }
+    return fillTemplate(settings.getSubjectTemplate(), interventions.get(0));
+  }
+
+  private String renderBody(List<Intervention> interventions, EmailSettings settings){
+    if (settings == null){
+      return "";
+    }
+    if (interventions == null || interventions.isEmpty()){
+      return "";
+    }
+    String template = settings.getBodyTemplate();
+    StringBuilder builder = new StringBuilder();
+    for (int i = 0; i < interventions.size(); i++){
+      if (i > 0){
+        builder.append("\n---\n");
+      }
+      builder.append(fillTemplate(template, interventions.get(i)));
+    }
+    return builder.toString();
+  }
+
+  private String fillTemplate(String template, Intervention intervention){
+    if (template == null){
+      return "";
+    }
+    if (intervention == null){
+      return template;
+    }
+    DateTimeFormatter dayFormat = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    DateTimeFormatter timeFormat = DateTimeFormatter.ofPattern("HH:mm");
+    LocalDateTime start = intervention.getDateHeureDebut();
+    LocalDateTime end = intervention.getDateHeureFin();
+    LocalDate startDate = intervention.getDateDebut();
+    LocalDate endDate = intervention.getDateFin();
+    String date;
+    if (start != null){
+      date = dayFormat.format(start);
+    } else if (startDate != null){
+      date = dayFormat.format(startDate);
+    } else {
+      date = "—";
+    }
+    String timeRange;
+    if (start != null && end != null){
+      timeRange = timeFormat.format(start) + "–" + timeFormat.format(end);
+    } else if (start != null){
+      timeRange = timeFormat.format(start) + "–";
+    } else if (end != null){
+      timeRange = "–" + timeFormat.format(end);
+    } else if (startDate != null && endDate != null){
+      timeRange = dayFormat.format(startDate) + "–" + dayFormat.format(endDate);
+    } else {
+      timeRange = "—";
+    }
+    String client = trimToEmpty(intervention.getClientName());
+    String clientLine = client.isBlank() ? "" : " pour " + client;
+    String address = trimToEmpty(intervention.getAddress());
+    if (address.isBlank()){
+      address = "—";
+    }
+    String title = trimToEmpty(intervention.getLabel());
+    if (title.isBlank()){
+      title = "Intervention";
+    }
+    String resources = resourceList(intervention.getResources());
+    return template
+        .replace("${date}", date)
+        .replace("${timeRange}", timeRange)
+        .replace("${client}", client)
+        .replace("${clientLine}", clientLine)
+        .replace("${address}", address)
+        .replace("${title}", title)
+        .replace("${resourceList}", resources);
+  }
+
+  private String resourceList(List<ResourceRef> refs){
+    if (refs == null || refs.isEmpty()){
+      return "—";
+    }
+    List<String> names = new ArrayList<>();
+    for (ResourceRef ref : refs){
+      if (ref == null){
+        continue;
+      }
+      String name = trimToEmpty(ref.getName());
+      if (name.isEmpty()){
+        if (ref.getId() != null){
+          name = ref.getId().toString();
+        } else {
+          name = "Ressource";
+        }
+      }
+      names.add(name);
+    }
+    return names.isEmpty() ? "—" : String.join(", ", names);
+  }
+
+  private String resolveResourceName(ResourceRef ref, Map<UUID, Resource> cache, PlanningService planning){
+    if (ref == null){
+      return "Ressource";
+    }
+    String name = trimToEmpty(ref.getName());
+    if (!name.isEmpty()){
+      return name;
+    }
+    UUID id = ref.getId();
+    if (id == null){
+      return "Ressource";
+    }
+    Resource resource = cache.computeIfAbsent(id, key -> {
+      try {
+        return planning.getResource(key);
+      } catch (Exception ex){
+        return null;
+      }
+    });
+    if (resource != null && resource.getName() != null && !resource.getName().isBlank()){
+      return resource.getName();
+    }
+    return id.toString();
+  }
+
+  private String resolveResourceEmail(ResourceRef ref, Map<UUID, Resource> cache, PlanningService planning){
+    if (ref == null){
+      return null;
+    }
+    UUID id = ref.getId();
+    if (id == null){
+      return null;
+    }
+    Resource resource = cache.computeIfAbsent(id, key -> {
+      try {
+        return planning.getResource(key);
+      } catch (Exception ex){
+        return null;
+      }
+    });
+    if (resource == null){
+      return null;
+    }
+    String email = resource.getEmail();
+    if (email == null){
+      return null;
+    }
+    String trimmed = email.trim();
+    return trimmed.contains("@") ? trimmed : null;
+  }
+
+  private static String formatCc(String cc){
+    String value = nz(cc);
+    return value.isEmpty() ? "" : " (cc " + value + ")";
+  }
+
+  private static String trimToEmpty(String value){
+    return value == null ? "" : value.trim();
+  }
+
+  private static String nz(String value){
+    return value == null ? "" : value.trim();
+  }
+
+  private static String csvRow(String[] values){
+    if (values == null || values.length == 0){
+      return "";
+    }
+    StringBuilder builder = new StringBuilder();
+    for (int i = 0; i < values.length; i++){
+      if (i > 0){
+        builder.append(',');
+      }
+      builder.append(csvCell(values[i]));
+    }
+    return builder.toString();
+  }
+
+  private static String csvCell(String value){
+    String data = value == null ? "" : value;
+    boolean needsQuote = data.contains(",") || data.contains("\"") || data.contains("\n") || data.contains("\r");
+    String escaped = data.replace("\"", "\"\"");
+    return needsQuote ? "\"" + escaped + "\"" : escaped;
+  }
+
+  private static final class Recipient {
+    final String name;
+    final String email;
+    final List<Intervention> interventions = new ArrayList<>();
+
+    Recipient(String name, String email){
+      this.name = name;
+      this.email = email;
     }
   }
 
@@ -948,6 +1198,155 @@ public class PlanningPanel extends JPanel {
       Toasts.success(this, "Export généré : " + destination.getName());
     } catch (Exception ex){
       Toasts.error(this, "Échec génération PDF : " + ex.getMessage());
+    }
+  }
+
+  private void sendMissionOrders(){
+    List<Intervention> selection = selectedInterventions();
+    if (selection == null || selection.isEmpty()){
+      Toasts.info(this, "Sélectionnez au moins une intervention.");
+      return;
+    }
+    EmailSettings settings = ServiceLocator.emailSettings();
+    if (settings == null
+        || settings.getSmtpHost() == null || settings.getSmtpHost().isBlank()
+        || settings.getFromAddress() == null || settings.getFromAddress().isBlank()){
+      JOptionPane.showMessageDialog(this,
+          "Configurez d'abord le serveur SMTP dans Paramètres > Email.",
+          "SMTP non configuré",
+          JOptionPane.WARNING_MESSAGE);
+      return;
+    }
+    int includeCgv = JOptionPane.showConfirmDialog(
+        this,
+        "Inclure les CGV (si configurées) ?",
+        "CGV",
+        JOptionPane.YES_NO_OPTION);
+    if (includeCgv == JOptionPane.CLOSED_OPTION){
+      return;
+    }
+    PlanningService planning = ServiceFactory.planning();
+    if (planning == null){
+      Toasts.error(this, "Service planning indisponible");
+      return;
+    }
+
+    Map<UUID, Resource> cache = new HashMap<>();
+    Map<String, Recipient> recipients = new LinkedHashMap<>();
+    int skipped = 0;
+
+    for (Intervention intervention : selection){
+      if (intervention == null){
+        continue;
+      }
+      List<ResourceRef> resources = intervention.getResources();
+      if (resources == null || resources.isEmpty()){
+        skipped++;
+        continue;
+      }
+      for (ResourceRef ref : resources){
+        String email = resolveResourceEmail(ref, cache, planning);
+        if (email == null){
+          skipped++;
+          continue;
+        }
+        String key = email.toLowerCase(Locale.ROOT);
+        Recipient recipient = recipients.computeIfAbsent(key,
+            k -> new Recipient(resolveResourceName(ref, cache, planning), email));
+        recipient.interventions.add(intervention);
+      }
+    }
+
+    if (recipients.isEmpty()){
+      Toasts.info(this, "Aucune ressource avec adresse email valide.");
+      return;
+    }
+
+    File tmpDir = new File(System.getProperty("java.io.tmpdir"));
+    List<File> cleanup = new ArrayList<>();
+    List<EmailPreviewDialog.EmailJob> jobs = new ArrayList<>();
+    for (Recipient recipient : recipients.values()){
+      try {
+        File pdf = File.createTempFile("ordre-mission-", ".pdf", tmpDir);
+        MissionOrderPdfExporter.export(pdf, recipient.interventions);
+        if (includeCgv == JOptionPane.YES_OPTION){
+          MissionOrderPdfExporter.appendCgvIfAny(pdf);
+        }
+        File ics = File.createTempFile("planning-", ".ics", tmpDir);
+        IcsExporter.exportSingle(ics, recipient.interventions);
+        cleanup.add(pdf);
+        cleanup.add(ics);
+        jobs.add(new EmailPreviewDialog.EmailJob(
+            recipient.email,
+            settings.getCcAddress(),
+            renderSubject(recipient.interventions, settings),
+            renderBody(recipient.interventions, settings),
+            List.of(pdf, ics)
+        ));
+      } catch (Exception ex){
+        cleanup.forEach(File::delete);
+        Toasts.error(this, "Échec préparation pièces jointes : " + ex.getMessage());
+        return;
+      }
+    }
+
+    EmailPreviewDialog preview = new EmailPreviewDialog(SwingUtilities.getWindowAncestor(this), jobs);
+    preview.setVisible(true);
+    if (!preview.isApproved()){
+      cleanup.forEach(File::delete);
+      return;
+    }
+
+    int sent = 0;
+    int failed = 0;
+    List<String[]> log = new ArrayList<>();
+    log.add(new String[]{"Date", "Destinataire", "Cc", "Sujet", "Fichiers", "Statut", "Message"});
+
+    TimelineService timeline = ServiceFactory.timeline();
+
+    for (EmailPreviewDialog.EmailJob job : jobs){
+      String key = job.to() == null ? "" : job.to().toLowerCase(Locale.ROOT);
+      Recipient recipient = recipients.get(key);
+      String attachmentNames = job.attachments().stream()
+          .map(File::getName)
+          .collect(Collectors.joining("; "));
+      try {
+        MailSender.send(job.to(), job.cc(), job.subject(), job.body(), job.attachments());
+        sent++;
+        log.add(new String[]{timestamp(), job.to(), nz(job.cc()), job.subject(), attachmentNames, "OK", ""});
+        if (timeline != null && recipient != null){
+          for (Intervention intervention : recipient.interventions){
+            if (intervention == null || intervention.getId() == null){
+              continue;
+            }
+            TimelineEvent event = new TimelineEvent();
+            event.setType("ACTION");
+            event.setMessage("Ordre de mission envoyé à " + job.to() + formatCc(job.cc()));
+            event.setTimestamp(Instant.now());
+            event.setAuthor(System.getProperty("user.name", "user"));
+            try {
+              timeline.append(intervention.getId().toString(), event);
+            } catch (Exception ignore){
+            }
+          }
+        }
+      } catch (Exception ex){
+        failed++;
+        log.add(new String[]{timestamp(), job.to(), nz(job.cc()), job.subject(), attachmentNames, "ERREUR",
+            ex.getMessage() == null ? "" : ex.getMessage()});
+      }
+    }
+
+    cleanup.forEach(File::delete);
+    maybeSaveLog(log);
+
+    String summary = String.format("Emails envoyés : %d • ignorés : %d • erreurs : %d", sent, skipped, failed);
+    if (failed > 0){
+      Toasts.error(this, summary);
+    } else if (sent > 0){
+      Toasts.success(this, summary);
+    } else {
+      Toasts.info(this, summary);
     }
   }
 

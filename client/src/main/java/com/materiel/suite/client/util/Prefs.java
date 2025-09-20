@@ -73,6 +73,122 @@ public final class Prefs {
     writeTrimmed("agency.cgv.text", value);
   }
 
+  public static String getMailHost(){
+    return readTrimmed("mail.smtp.host");
+  }
+
+  public static void setMailHost(String value){
+    writeTrimmed("mail.smtp.host", value);
+  }
+
+  public static int getMailPort(){
+    int port = PREFS.getInt("mail.smtp.port", 587);
+    return port > 0 ? port : 587;
+  }
+
+  public static void setMailPort(int port){
+    PREFS.putInt("mail.smtp.port", port > 0 ? port : 587);
+  }
+
+  public static boolean isMailStarttls(){
+    return PREFS.getBoolean("mail.smtp.starttls", true);
+  }
+
+  public static void setMailStarttls(boolean enabled){
+    PREFS.putBoolean("mail.smtp.starttls", enabled);
+  }
+
+  public static boolean isMailAuth(){
+    return PREFS.getBoolean("mail.smtp.auth", true);
+  }
+
+  public static void setMailAuth(boolean enabled){
+    PREFS.putBoolean("mail.smtp.auth", enabled);
+  }
+
+  public static String getMailUsername(){
+    return readTrimmed("mail.smtp.username");
+  }
+
+  public static void setMailUsername(String value){
+    writeTrimmed("mail.smtp.username", value);
+  }
+
+  public static String getMailPassword(){
+    String value = PREFS.get("mail.smtp.password", null);
+    if (value == null){
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  public static void setMailPassword(String value){
+    if (value == null || value.isBlank()){
+      PREFS.remove("mail.smtp.password");
+    } else {
+      PREFS.put("mail.smtp.password", value);
+    }
+  }
+
+  public static String getMailFromAddress(){
+    return readTrimmed("mail.from.address");
+  }
+
+  public static void setMailFromAddress(String value){
+    writeTrimmed("mail.from.address", value);
+  }
+
+  public static String getMailFromName(){
+    return readTrimmed("mail.from.name");
+  }
+
+  public static void setMailFromName(String value){
+    writeTrimmed("mail.from.name", value);
+  }
+
+  public static String getMailCcAddress(){
+    return readTrimmed("mail.cc.address");
+  }
+
+  public static void setMailCcAddress(String value){
+    writeTrimmed("mail.cc.address", value);
+  }
+
+  public static String getMailSubjectTemplate(){
+    String value = PREFS.get("mail.subject.template", null);
+    if (value == null){
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  public static void setMailSubjectTemplate(String value){
+    if (value == null || value.isBlank()){
+      PREFS.remove("mail.subject.template");
+    } else {
+      PREFS.put("mail.subject.template", value);
+    }
+  }
+
+  public static String getMailBodyTemplate(){
+    String value = PREFS.get("mail.body.template", null);
+    if (value == null){
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.isEmpty() ? null : value;
+  }
+
+  public static void setMailBodyTemplate(String value){
+    if (value == null || value.isBlank()){
+      PREFS.remove("mail.body.template");
+    } else {
+      PREFS.put("mail.body.template", value);
+    }
+  }
+
   private static String readTrimmed(String key){
     String value = PREFS.get(key, null);
     if (value == null){

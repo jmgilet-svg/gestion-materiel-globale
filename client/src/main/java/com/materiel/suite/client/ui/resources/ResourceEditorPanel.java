@@ -32,6 +32,7 @@ public class ResourceEditorPanel extends JPanel {
   private final PlanningService service;
   private final JTextField nameField = new JTextField(24);
   private final JTextField colorField = new JTextField(8);
+  private final JTextField emailField = new JTextField(24);
   private final JTextArea notesArea = new JTextArea(5, 30);
   private final JComboBox<ResourceType> typeCombo = new JComboBox<>();
   private final JFormattedTextField unitPriceField;
@@ -109,6 +110,12 @@ public class ResourceEditorPanel extends JPanel {
     form.add(new JLabel("Couleur (hex)"), gc);
     gc.gridx = 1;
     form.add(colorField, gc);
+
+    gc.gridx = 0;
+    gc.gridy++;
+    form.add(new JLabel("Email"), gc);
+    gc.gridx = 1;
+    form.add(emailField, gc);
 
     gc.gridx = 0;
     gc.gridy++;
@@ -212,6 +219,7 @@ public class ResourceEditorPanel extends JPanel {
       nameField.setText("");
       colorField.setText("");
       notesArea.setText("");
+      emailField.setText("");
       unitPriceField.setValue(null);
       unitPriceField.setText("");
       capacitySpinner.setValue(1);
@@ -225,6 +233,7 @@ public class ResourceEditorPanel extends JPanel {
     nameField.setText(current.getName() != null ? current.getName() : "");
     colorField.setText(current.getColor() != null ? current.getColor() : "");
     notesArea.setText(current.getNotes() != null ? current.getNotes() : "");
+    emailField.setText(current.getEmail() != null ? current.getEmail() : "");
     unitPriceField.setValue(current.getUnitPriceHt());
     Integer capacity = current.getCapacity();
     if (capacity == null || capacity < 1) {
@@ -324,6 +333,7 @@ public class ResourceEditorPanel extends JPanel {
     current.setName(nameField.getText().trim());
     current.setColor(colorField.getText().trim());
     current.setNotes(notesArea.getText());
+    current.setEmail(emailField.getText().trim());
     current.setType(resolveType());
     current.setUnitPriceHt(parseUnitPrice(unitPriceField));
 
@@ -423,6 +433,7 @@ public class ResourceEditorPanel extends JPanel {
     copy.setUnitPriceHt(source.getUnitPriceHt());
     copy.setColor(source.getColor());
     copy.setNotes(source.getNotes());
+    copy.setEmail(source.getEmail());
     copy.setState(source.getState());
     copy.setCapacity(source.getCapacity());
     copy.setTags(source.getTags());
