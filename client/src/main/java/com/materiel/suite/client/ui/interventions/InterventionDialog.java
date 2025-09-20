@@ -25,6 +25,7 @@ import com.materiel.suite.client.settings.GeneralSettings;
 import com.materiel.suite.client.ui.common.KeymapUtil;
 import com.materiel.suite.client.ui.common.OverridableCellRenderers;
 import com.materiel.suite.client.ui.common.ResourceChipsPanel;
+import com.materiel.suite.client.ui.common.TableUtils;
 import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.icons.IconRegistry;
 
@@ -32,6 +33,7 @@ import javax.swing.*;
 import javax.swing.event.ChangeListener;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.text.NumberFormatter;
 import java.awt.*;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
@@ -88,6 +90,8 @@ public class InterventionDialog extends JDialog {
   private final BillingTableModel billingModel = new BillingTableModel();
   private final JTable billingTable = new JTable(billingModel);
   private final JLabel totalHtLabel = new JLabel();
+  private final JLabel totalTvaLabel = new JLabel();
+  private final JLabel totalTtcLabel = new JLabel();
   private final JLabel quoteStatusLabel = new JLabel("Aucun devis généré");
   private final StepBar workflowStepBar = new StepBar();
   private final JTabbedPane tabs = new JTabbedPane();
@@ -204,7 +208,7 @@ public class InterventionDialog extends JDialog {
       computeTotals();
       refreshWorkflowState();
     });
-    totalHtLabel.setText("Total HT : " + currencyFormat.format(BigDecimal.ZERO));
+    computeTotals();
   }
 
   private void loadTemplates(){
@@ -652,7 +656,7 @@ public class InterventionDialog extends JDialog {
   }
 
   private void configureBillingTable(){
-    billingTable.setRowHeight(24);
+    billingTable.setRowHeight(26);
     billingTable.setFillsViewportHeight(true);
     billingTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
     billingTable.setAutoCreateRowSorter(true);
@@ -660,6 +664,7 @@ public class InterventionDialog extends JDialog {
     OverridableCellRenderers.ManualOverrideHighlightRenderer renderer =
         new OverridableCellRenderers.ManualOverrideHighlightRenderer();
     billingTable.setDefaultRenderer(BigDecimal.class, renderer);
+    installNumericEditors();
     if (billingTable.getColumnModel().getColumnCount() > 0){
       billingTable.getColumnModel().getColumn(0).setMaxWidth(70);
       if (billingTable.getColumnModel().getColumnCount() > 2){
@@ -675,6 +680,82 @@ public class InterventionDialog extends JDialog {
         billingTable.getColumnModel().getColumn(5).setPreferredWidth(120);
       }
     }
+    installBillingShortcuts();
+    TableUtils.persistColumnWidths(billingTable, "intervention.billing");
+  }
+
+  private void installNumericEditors(){
+    configureNumericEditor("Qté");
+    configureNumericEditor("Quantité");
+    configureNumericEditor("PU HT");
+    configureNumericEditor("PU");
+  }
+
+  private void configureNumericEditor(String columnName){
+    int index = findColumnIndexIgnoreCase(columnName);
+    if (index < 0){
+      return;
+    }
+    JFormattedTextField field = createDecimalField();
+    DefaultCellEditor editor = new DefaultCellEditor(field);
+    editor.setClickCountToStart(1);
+    billingTable.getColumnModel().getColumn(index).setCellEditor(editor);
+  }
+
+  private JFormattedTextField createDecimalField(){
+    NumberFormat format = NumberFormat.getNumberInstance(Locale.FRANCE);
+    format.setGroupingUsed(false);
+    NumberFormatter formatter = new NumberFormatter(format);
+    formatter.setAllowsInvalid(false);
+    formatter.setCommitsOnValidEdit(true);
+    formatter.setMinimum(0d);
+    JFormattedTextField field = new JFormattedTextField(formatter);
+    field.setColumns(8);
+    field.setFocusLostBehavior(JFormattedTextField.COMMIT_OR_REVERT);
+    return field;
+  }
+
+  private int findColumnIndexIgnoreCase(String name){
+    if (name == null || name.isBlank()){
+      return -1;
+    }
+    var columnModel = billingTable.getColumnModel();
+    for (int i = 0; i < columnModel.getColumnCount(); i++){
+      Object header = columnModel.getColumn(i).getHeaderValue();
+      if (header != null && header.toString().equalsIgnoreCase(name)){
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  private void installBillingShortcuts(){
+    InputMap map = billingTable.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
+    ActionMap actions = billingTable.getActionMap();
+    map.put(KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "billing-delete");
+    actions.put("billing-delete", new AbstractAction(){
+      @Override public void actionPerformed(java.awt.event.ActionEvent e){
+        removeSelectedBillingLine();
+      }
+    });
+    map.put(KeyStroke.getKeyStroke(KeyEvent.VK_D, KeymapUtil.menuMask()), "billing-duplicate");
+    actions.put("billing-duplicate", new AbstractAction(){
+      @Override public void actionPerformed(java.awt.event.ActionEvent e){
+        duplicateSelectedBillingLine();
+      }
+    });
+    map.put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, KeymapUtil.menuMask()), "billing-move-up");
+    actions.put("billing-move-up", new AbstractAction(){
+      @Override public void actionPerformed(java.awt.event.ActionEvent e){
+        moveSelectedBillingLine(-1);
+      }
+    });
+    map.put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, KeymapUtil.menuMask()), "billing-move-down");
+    actions.put("billing-move-down", new AbstractAction(){
+      @Override public void actionPerformed(java.awt.event.ActionEvent e){
+        moveSelectedBillingLine(1);
+      }
+    });
   }
 
   private JComponent buildHeader(){
@@ -762,13 +843,20 @@ public class InterventionDialog extends JDialog {
     toolbar.add(openQuoteButton);
     toolbar.add(Box.createHorizontalStrut(12));
     toolbar.add(quoteStatusLabel);
-    toolbar.add(Box.createHorizontalStrut(12));
-    toolbar.add(totalHtLabel);
     JPanel header = new JPanel(new BorderLayout(0, 4));
     header.add(toolbar, BorderLayout.NORTH);
     header.add(billingResourceChips, BorderLayout.CENTER);
     panel.add(header, BorderLayout.NORTH);
     panel.add(new JScrollPane(billingTable), BorderLayout.CENTER);
+    JPanel totals = new JPanel(new GridLayout(1, 0, 12, 0));
+    totals.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+    totalHtLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+    totalTvaLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+    totalTtcLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+    totals.add(totalHtLabel);
+    totals.add(totalTvaLabel);
+    totals.add(totalTtcLabel);
+    panel.add(totals, BorderLayout.SOUTH);
     return panel;
   }
 
@@ -1198,6 +1286,9 @@ public class InterventionDialog extends JDialog {
   }
 
   private void removeSelectedBillingLine(){
+    if (readOnly){
+      return;
+    }
     int viewRow = billingTable.getSelectedRow();
     if (viewRow < 0){
       return;
@@ -1208,10 +1299,93 @@ public class InterventionDialog extends JDialog {
       return;
     }
     snapshotLinesForUndo();
-    lines.remove(modelRow);
+    BillingLine removed = lines.remove(modelRow);
     billingModel.setLines(lines);
     computeTotals();
     refreshWorkflowState();
+    List<BillingLine> removedCopy = removed == null ? List.of() : deepCopyLines(List.of(removed));
+    if (!removedCopy.isEmpty()){
+      BillingLine toRestore = removedCopy.get(0);
+      Toasts.showWithAction(dialogParent(), "Ligne supprimée", "Annuler", () -> SwingUtilities.invokeLater(() -> {
+        if (readOnly){
+          return;
+        }
+        snapshotLinesForUndo();
+        List<BillingLine> current = billingModel.getLines();
+        int idx = Math.max(0, Math.min(modelRow, current.size()));
+        current.add(idx, toRestore);
+        billingModel.setLines(current);
+        computeTotals();
+        refreshWorkflowState();
+        int viewIndex = billingTable.convertRowIndexToView(idx);
+        if (viewIndex >= 0){
+          billingTable.getSelectionModel().setSelectionInterval(viewIndex, viewIndex);
+          billingTable.scrollRectToVisible(billingTable.getCellRect(viewIndex, 0, true));
+        }
+      }));
+    }
+  }
+
+  private void duplicateSelectedBillingLine(){
+    if (readOnly){
+      return;
+    }
+    int viewRow = billingTable.getSelectedRow();
+    if (viewRow < 0){
+      return;
+    }
+    int modelRow = billingTable.convertRowIndexToModel(viewRow);
+    List<BillingLine> lines = billingModel.getLines();
+    if (modelRow < 0 || modelRow >= lines.size()){
+      return;
+    }
+    snapshotLinesForUndo();
+    List<BillingLine> copies = deepCopyLines(List.of(lines.get(modelRow)));
+    if (copies.isEmpty()){
+      return;
+    }
+    BillingLine duplicate = copies.get(0);
+    duplicate.setId(UUID.randomUUID().toString());
+    duplicate.setAutoGenerated(false);
+    lines.add(modelRow + 1, duplicate);
+    billingModel.setLines(lines);
+    computeTotals();
+    refreshWorkflowState();
+    int viewTarget = billingTable.convertRowIndexToView(modelRow + 1);
+    if (viewTarget >= 0){
+      billingTable.getSelectionModel().setSelectionInterval(viewTarget, viewTarget);
+      billingTable.scrollRectToVisible(billingTable.getCellRect(viewTarget, 0, true));
+    }
+  }
+
+  private void moveSelectedBillingLine(int delta){
+    if (readOnly){
+      return;
+    }
+    int viewRow = billingTable.getSelectedRow();
+    if (viewRow < 0){
+      return;
+    }
+    int modelRow = billingTable.convertRowIndexToModel(viewRow);
+    List<BillingLine> lines = billingModel.getLines();
+    if (modelRow < 0 || modelRow >= lines.size()){
+      return;
+    }
+    int target = Math.max(0, Math.min(lines.size() - 1, modelRow + delta));
+    if (target == modelRow){
+      return;
+    }
+    snapshotLinesForUndo();
+    BillingLine moved = lines.remove(modelRow);
+    lines.add(target, moved);
+    billingModel.setLines(lines);
+    computeTotals();
+    refreshWorkflowState();
+    int viewTarget = billingTable.convertRowIndexToView(target);
+    if (viewTarget >= 0){
+      billingTable.getSelectionModel().setSelectionInterval(viewTarget, viewTarget);
+      billingTable.scrollRectToVisible(billingTable.getCellRect(viewTarget, 0, true));
+    }
   }
 
   private void generateQuoteFromPrebilling(){
@@ -1707,8 +1881,12 @@ public class InterventionDialog extends JDialog {
   }
 
   private void computeTotals(){
-    BigDecimal total = billingModel.totalHt();
-    totalHtLabel.setText("Total HT : " + currencyFormat.format(total));
+    BigDecimal totalHt = billingModel.totalHt();
+    BigDecimal totalTva = BigDecimal.ZERO;
+    BigDecimal totalTtc = totalHt;
+    totalHtLabel.setText("Total HT : " + currencyFormat.format(totalHt));
+    totalTvaLabel.setText("TVA : " + currencyFormat.format(totalTva));
+    totalTtcLabel.setText("Total TTC : " + currencyFormat.format(totalTtc));
   }
 
   private void updateQuoteBadge(){

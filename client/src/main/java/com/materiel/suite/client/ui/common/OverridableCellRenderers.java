@@ -4,6 +4,8 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableModel;
 import java.awt.*;
+import java.text.NumberFormat;
+import java.util.Locale;
 
 /** Renderers that highlight cells manually overridden by the user. */
 public final class OverridableCellRenderers {
@@ -16,6 +18,8 @@ public final class OverridableCellRenderers {
 
   /** Highlights cells when the underlying model marks them as manually overridden. */
   public static class ManualOverrideHighlightRenderer extends DefaultTableCellRenderer {
+    private final NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(Locale.FRANCE);
+
     public ManualOverrideHighlightRenderer(){
       setHorizontalAlignment(SwingConstants.RIGHT);
     }
@@ -38,6 +42,13 @@ public final class OverridableCellRenderers {
         int modelColumn = table.convertColumnIndexToModel(column);
         if (aware.isManualOverride(modelRow, modelColumn)){
           component.setBackground(new Color(0xFFF8E1));
+        }
+      }
+      String columnName = table.getColumnName(column);
+      if (value instanceof Number number && columnName != null){
+        String lower = columnName.toLowerCase(Locale.ROOT);
+        if (lower.contains("total") || lower.contains("pu") || lower.contains("prix")){
+          setText(currencyFormat.format(number.doubleValue()));
         }
       }
       return component;

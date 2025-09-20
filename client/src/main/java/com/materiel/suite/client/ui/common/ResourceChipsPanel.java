@@ -9,6 +9,8 @@ import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /** Sélecteur compact affichant les ressources sous forme de "chips" cliquables. */
@@ -19,6 +21,7 @@ public class ResourceChipsPanel extends JPanel {
 
   private final JTextField searchField = new JTextField();
   private final JPanel chipsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 6));
+  private final JComboBox<String> typeFilter = new JComboBox<>();
   private final List<Resource> resources;
   private Listener listener;
 
@@ -32,6 +35,23 @@ public class ResourceChipsPanel extends JPanel {
       @Override public void removeUpdate(DocumentEvent e){ refresh(); }
       @Override public void changedUpdate(DocumentEvent e){ refresh(); }
     });
+    searchField.addActionListener(e -> quickPickFirst());
+
+    typeFilter.setPrototypeDisplayValue("Type (tous)");
+    typeFilter.addItem("Tous");
+    Set<String> types = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+    for (Resource resource : resources){
+      if (resource != null){
+        String type = resource.getTypeName();
+        if (type != null && !type.isBlank()){
+          types.add(type);
+        }
+      }
+    }
+    for (String type : types){
+      typeFilter.addItem(type);
+    }
+    typeFilter.addActionListener(e -> refresh());
 
     chipsPanel.setOpaque(false);
 
@@ -40,7 +60,10 @@ public class ResourceChipsPanel extends JPanel {
     scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
     scroll.getVerticalScrollBar().setUnitIncrement(16);
 
-    add(searchField, BorderLayout.NORTH);
+    JPanel north = new JPanel(new BorderLayout(6, 0));
+    north.add(searchField, BorderLayout.CENTER);
+    north.add(typeFilter, BorderLayout.EAST);
+    add(north, BorderLayout.NORTH);
     add(scroll, BorderLayout.CENTER);
 
     refresh();
@@ -55,6 +78,7 @@ public class ResourceChipsPanel extends JPanel {
     super.setEnabled(enabled);
     searchField.setEnabled(enabled);
     searchField.setEditable(enabled);
+    typeFilter.setEnabled(enabled);
     for (Component component : chipsPanel.getComponents()){
       component.setEnabled(enabled);
     }
@@ -63,8 +87,9 @@ public class ResourceChipsPanel extends JPanel {
   private void refresh(){
     String query = searchField.getText();
     String normalized = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+    String selectedType = (String) typeFilter.getSelectedItem();
     List<Resource> filtered = resources.stream()
-        .filter(resource -> matches(resource, normalized))
+        .filter(resource -> matches(resource, normalized, selectedType))
         .limit(200)
         .collect(Collectors.toList());
     chipsPanel.removeAll();
@@ -75,12 +100,20 @@ public class ResourceChipsPanel extends JPanel {
     chipsPanel.repaint();
   }
 
-  private boolean matches(Resource resource, String query){
-    if (query.isBlank()){
-      return true;
-    }
+  private boolean matches(Resource resource, String query, String selectedType){
     if (resource == null){
       return false;
+    }
+    boolean typeMatches = true;
+    if (selectedType != null && !selectedType.isBlank() && !"Tous".equalsIgnoreCase(selectedType)){
+      String typeName = resource.getTypeName();
+      typeMatches = typeName != null && !typeName.isBlank() && typeName.equalsIgnoreCase(selectedType);
+    }
+    if (!typeMatches){
+      return false;
+    }
+    if (query.isBlank()){
+      return true;
     }
     String name = resource.getName() != null ? resource.getName() : "";
     String type = resource.getTypeName() != null ? resource.getTypeName() : "";
@@ -103,5 +136,14 @@ public class ResourceChipsPanel extends JPanel {
       }
     });
     return button;
+  }
+
+  private void quickPickFirst(){
+    for (Component component : chipsPanel.getComponents()){
+      if (component instanceof JButton button){
+        button.doClick();
+        return;
+      }
+    }
   }
 }
