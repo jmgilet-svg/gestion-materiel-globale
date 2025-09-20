@@ -13,6 +13,7 @@ import com.materiel.suite.client.ui.crm.ClientsPanel;
 import com.materiel.suite.client.ui.delivery.DeliveryNotesPanel;
 import com.materiel.suite.client.ui.invoices.InvoicesPanel;
 import com.materiel.suite.client.ui.auth.LoginDialog;
+import com.materiel.suite.client.ui.common.AutosaveIndicator;
 import com.materiel.suite.client.ui.common.CommandPalette;
 import com.materiel.suite.client.ui.common.KeymapUtil;
 import com.materiel.suite.client.ui.common.Toasts;
@@ -45,6 +46,7 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
   private final Map<String, SidebarButton> navButtons = new LinkedHashMap<>();
   private CollapsibleSidebar sidebar;
   private final CommandPalette commandPalette;
+  private final AutosaveIndicator autosaveIndicator = new AutosaveIndicator();
   private String currentCard;
   private JLabel userLabel;
   private JButton changePasswordButton;
@@ -129,6 +131,7 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
     });
     logoutButton = new JButton("Déconnexion", IconRegistry.small("lock"));
     logoutButton.addActionListener(e -> doLogout());
+    right.add(autosaveIndicator);
     right.add(userLabel);
     right.add(changePasswordButton);
     right.add(logoutButton);
@@ -213,6 +216,14 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
 
     KeymapUtil.bindGlobal(getRootPane(), "open-command-palette", KeymapUtil.ctrlK(),
         () -> commandPalette.open(provider, help, ok -> {}));
+  }
+
+  public void setSaving(boolean saving){
+    autosaveIndicator.setSaving(saving);
+  }
+
+  public void markSavedNow(){
+    autosaveIndicator.markSavedNow();
   }
 
   private PlanningPanel visiblePlanningPanel(){

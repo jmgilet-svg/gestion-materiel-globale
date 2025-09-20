@@ -117,6 +117,7 @@ public class PlanningPanel extends JPanel {
   private final JComboBox<QuoteFilter> quoteFilter = new JComboBox<>(QuoteFilter.values());
   private final JPanel bulkBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
   private final JLabel selCountLabel = new JLabel("0 interventions");
+  private final JLabel bulkBadges = new JLabel();
   private JButton conflictsBtn;
   private JPanel ganttContainer;
   private JTabbedPane tabs;
@@ -208,6 +209,9 @@ public class PlanningPanel extends JPanel {
     bulkBar.add(exportIcsBtn);
     bulkBar.add(exportMissionBtn);
     bulkBar.add(sendBtn);
+    bulkBar.add(Box.createHorizontalStrut(16));
+    bulkBar.add(bulkBadges);
+    bulkBadges.setText("");
     bulkBar.setVisible(false);
     dryRunBtn.setEnabled(false);
     bulkQuoteBtn.setEnabled(false);
@@ -455,12 +459,24 @@ public class PlanningPanel extends JPanel {
     exportMissionBtn.setEnabled(active);
     sendBtn.setEnabled(active);
     bulkBar.setVisible(active);
+    if (active){
+      long quoted = currentSelection.stream().filter(Intervention::hasQuote).count();
+      long pending = count - quoted;
+      bulkBadges.setText(badge("À deviser", (int) pending) + "  " + badge("Devisé", (int) quoted));
+    } else {
+      bulkBadges.setText("");
+    }
     revalidate();
     repaint();
   }
 
   private List<Intervention> selectedInterventions(){
     return currentSelection;
+  }
+
+  private static String badge(String label, int value){
+    return "<html><span style='background:#EEF3FE;border:1px solid #90CAF9;border-radius:9px;padding:2px 6px;font-size:11px'>"
+        + label + ": " + value + "</span></html>";
   }
 
   private List<Intervention> selectedInterventionsForQuotes(String action){
@@ -1216,10 +1232,130 @@ public class PlanningPanel extends JPanel {
 
   /* ---------- Raccourcis clavier locaux ---------- */
   private void installKeymap(){
-    KeymapUtil.bind(this, "planning-generate", KeyEvent.VK_D, 0, this::actionGenerateQuotes);
-    KeymapUtil.bind(this, "planning-preview", KeyEvent.VK_P, 0, this::actionDryRun);
-    KeymapUtil.bind(this, "planning-filter-cycle", KeyEvent.VK_F, 0, this::cycleQuoteFilter);
+    KeymapUtil.bind(this, "planning-new", KeyEvent.VK_N, KeymapUtil.menuMask(), this::shortcutCreateIntervention);
+    KeymapUtil.bind(this, "planning-edit", KeyEvent.VK_E, 0, this::shortcutEditSelection);
+    KeymapUtil.bind(this, "planning-duplicate", KeyEvent.VK_D, 0, this::shortcutDuplicateSelection);
+    KeymapUtil.bind(this, "planning-generate", KeyEvent.VK_G, 0, this::actionGenerateQuotes);
+    KeymapUtil.bind(this, "planning-preview", KeyEvent.VK_P, KeyEvent.SHIFT_DOWN_MASK, this::actionDryRun);
+    KeymapUtil.bind(this, "planning-export", KeyEvent.VK_P, 0, this::exportMissionPdf);
+    KeymapUtil.bind(this, "planning-send", KeyEvent.VK_M, 0, this::sendMissionOrders);
+    KeymapUtil.bind(this, "planning-filter-adeviser", KeyEvent.VK_F, 0, () -> setFilterADeviser(true));
+    KeymapUtil.bind(this, "planning-filter-cycle", KeyEvent.VK_F, KeyEvent.SHIFT_DOWN_MASK, this::cycleQuoteFilter);
+    KeymapUtil.bind(this, "planning-focus-search", KeyEvent.VK_SLASH, 0, this::focusSearch);
     KeymapUtil.bind(this, "planning-reload", KeyEvent.VK_R, 0, this::actionReload);
+  }
+
+  private void shortcutCreateIntervention(){
+    addInterventionDialog();
+  }
+
+  private void shortcutEditSelection(){
+    List<Intervention> selection = selectedInterventions();
+    if (selection.isEmpty()){
+      Toasts.info(this, "Sélectionnez au moins une intervention.");
+      return;
+    }
+    openInterventionEditor(selection.get(0));
+  }
+
+  private void shortcutDuplicateSelection(){
+    duplicateSelected();
+  }
+
+  private void setFilterADeviser(boolean only){
+    if (quoteFilter == null){
+      return;
+    }
+    quoteFilter.setSelectedItem(only ? QuoteFilter.A_DEVISER : QuoteFilter.TOUS);
+    updateFilteredSimpleViews();
+  }
+
+  private void focusSearch(){
+    requestFocusInWindow();
+  }
+
+  private void duplicateSelected(){
+    duplicateSelected(1);
+  }
+
+  private void duplicateSelected(int dayShift){
+    List<Intervention> selection = selectedInterventions();
+    if (selection.isEmpty()){
+      Toasts.info(this, "Sélectionnez au moins une intervention.");
+      return;
+    }
+    PlanningService planning = ServiceFactory.planning();
+    if (planning == null){
+      Toasts.error(this, "Service planning indisponible.");
+      return;
+    }
+    int created = 0;
+    int failed = 0;
+    for (Intervention original : selection){
+      if (original == null){
+        continue;
+      }
+      try {
+        Intervention copy = duplicateFrom(original, dayShift);
+        planning.saveIntervention(copy);
+        created++;
+      } catch (Exception ex){
+        failed++;
+      }
+    }
+    if (created > 0){
+      refreshPlanning();
+    }
+    if (failed > 0){
+      Toasts.error(this, String.format("Duplication : %d succès, %d échec(s)", created, failed));
+    } else if (created > 0){
+      Toasts.success(this, created == 1 ? "Intervention dupliquée" : created + " interventions dupliquées");
+    } else {
+      Toasts.info(this, "Aucune intervention dupliquée");
+    }
+  }
+
+  private Intervention duplicateFrom(Intervention source, int dayShift){
+    Intervention copy = new Intervention();
+    if (source.getResources() != null){
+      copy.setResources(new ArrayList<>(source.getResources()));
+    }
+    copy.setResourceId(source.getResourceId());
+    String label = source.getLabel();
+    copy.setLabel(label == null || label.isBlank() ? "Intervention (copie)" : label + " (copie)");
+    copy.setColor(source.getColor());
+    copy.setType(source.getType());
+    copy.setAddress(source.getAddress());
+    copy.setDescription(source.getDescription());
+    copy.setInternalNote(source.getInternalNote());
+    copy.setClosingNote(source.getClosingNote());
+    if (source.getContacts() != null){
+      copy.setContacts(new ArrayList<>(source.getContacts()));
+    }
+    if (source.getBillingLines() != null){
+      copy.setBillingLines(new ArrayList<>(source.getBillingLines()));
+    }
+    if (source.getQuoteDraft() != null){
+      copy.setQuoteDraft(new ArrayList<>(source.getQuoteDraft()));
+    }
+    copy.setClientId(source.getClientId());
+    copy.setClientName(source.getClientName());
+    copy.setStatus(source.getStatus());
+    copy.setFavorite(source.isFavorite());
+    copy.setLocked(source.isLocked());
+    if (source.getDateHeureDebut() != null){
+      copy.setDateHeureDebut(source.getDateHeureDebut().plusDays(dayShift));
+    }
+    if (source.getDateHeureFin() != null){
+      copy.setDateHeureFin(source.getDateHeureFin().plusDays(dayShift));
+    }
+    if (source.getDateDebut() != null){
+      copy.setDateDebut(source.getDateDebut().plusDays(dayShift));
+    }
+    if (source.getDateFin() != null){
+      copy.setDateFin(source.getDateFin().plusDays(dayShift));
+    }
+    return copy;
   }
 
   /* ---------- Export Ordre de mission (PDF) ---------- */
