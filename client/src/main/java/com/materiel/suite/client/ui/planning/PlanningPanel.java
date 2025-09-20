@@ -66,6 +66,7 @@ import com.materiel.suite.client.model.BillingLine;
 import com.materiel.suite.client.model.Conflict;
 import com.materiel.suite.client.model.DocumentLine;
 import com.materiel.suite.client.model.DocumentTotals;
+import com.materiel.suite.client.model.Invoice;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.QuoteV2;
 import com.materiel.suite.client.model.Resource;
@@ -124,6 +125,7 @@ public class PlanningPanel extends JPanel {
   private JTabbedPane tabs;
   private final InterventionView calendarView = new InterventionCalendarView();
   private final InterventionView tableView = new InterventionTableView();
+  private final KanbanPanel kanbanView = new KanbanPanel();
   private JToggleButton modeToggle;
   private boolean agendaMode;
   private boolean updatingModeToggle;
@@ -132,6 +134,7 @@ public class PlanningPanel extends JPanel {
   private boolean updatingSimpleRange;
   private List<Intervention> allInterventions = List.of();
   private List<Intervention> currentSelection = List.of();
+  private boolean kanbanHasError;
 
   public PlanningPanel(){
     super(new BorderLayout());
@@ -195,8 +198,22 @@ public class PlanningPanel extends JPanel {
     tabs.addTab("Planning", IconRegistry.small("task"), center);
     tabs.addTab("Calendrier", IconRegistry.small("calendar"), calendarView.getComponent());
     tabs.addTab("Liste", IconRegistry.small("file"), tableView.getComponent());
+    tabs.addTab("Pipeline", IconRegistry.small("invoice"), kanbanView);
     tabs.addChangeListener(e -> updateModeToggleState());
     add(tabs, BorderLayout.CENTER);
+    kanbanView.setListener(new KanbanPanel.Listener(){
+      @Override public void onOpen(Intervention intervention){
+        openInterventionEditor(intervention);
+      }
+
+      @Override public void onGenerateQuote(Intervention intervention){
+        generateQuoteFromKanban(intervention);
+      }
+
+      @Override public void onCreateInvoice(Intervention intervention){
+        createInvoiceFromKanban(intervention);
+      }
+    });
     updateModeToggleState();
 
     bulkBar.setBorder(new EmptyBorder(4, 8, 4, 8));
@@ -672,6 +689,129 @@ public class PlanningPanel extends JPanel {
     }
   }
 
+  private void generateQuoteFromKanban(Intervention intervention){
+    if (intervention == null){
+      return;
+    }
+    if (intervention.hasQuote()){
+      Toasts.info(this, "Un devis est déjà associé à cette intervention.");
+      return;
+    }
+    PlanningService planning = ServiceFactory.planning();
+    SalesService sales = ServiceFactory.sales();
+    TimelineService timeline = ServiceFactory.timeline();
+    if (planning == null || sales == null){
+      Toasts.error(this, "Service indisponible pour générer le devis");
+      return;
+    }
+    Map<UUID, Resource> catalog = new HashMap<>();
+    try {
+      for (Resource resource : planning.listResources()){
+        if (resource != null && resource.getId() != null){
+          catalog.put(resource.getId(), resource);
+        }
+      }
+    } catch (Exception ex){
+      Toasts.error(this, "Impossible de récupérer les ressources : " + ex.getMessage());
+      return;
+    }
+    try {
+      List<BillingLine> lines = ensureBillingLines(intervention, catalog);
+      if (lines.isEmpty()){
+        Toasts.info(this, "Aucune ligne de facturation pour générer un devis.");
+        return;
+      }
+      intervention.setBillingLines(lines);
+      QuoteV2 quote = sales.createQuoteFromIntervention(intervention);
+      if (quote == null){
+        throw new IllegalStateException("Réponse vide du service devis");
+      }
+      applyQuoteToIntervention(intervention, quote, lines);
+      planning.saveIntervention(intervention);
+      if (timeline != null && intervention.getId() != null){
+        try {
+          TimelineEvent event = new TimelineEvent();
+          event.setType("ACTION");
+          String reference = quote.getReference();
+          if (reference == null || reference.isBlank()){
+            reference = quote.getId();
+          }
+          event.setMessage(reference == null || reference.isBlank()
+              ? "Devis généré"
+              : "Devis généré : " + reference);
+          event.setTimestamp(Instant.now());
+          event.setAuthor(System.getProperty("user.name", "user"));
+          timeline.append(intervention.getId().toString(), event);
+        } catch (Exception ignore){
+        }
+      }
+      String reference = quote.getReference();
+      if (reference == null || reference.isBlank()){
+        reference = quote.getId();
+      }
+      if (reference == null || reference.isBlank()){
+        Toasts.success(this, "Devis généré");
+      } else {
+        Toasts.success(this, "Devis généré — " + reference);
+      }
+      refreshPlanning();
+    } catch (Exception ex){
+      Toasts.error(this, "Impossible de générer le devis : " + ex.getMessage());
+    }
+  }
+
+  private void createInvoiceFromKanban(Intervention intervention){
+    if (intervention == null){
+      return;
+    }
+    if (isInvoiced(intervention)){
+      Toasts.info(this, "Une facture est déjà associée à cette intervention.");
+      return;
+    }
+    if (!intervention.hasQuote()){
+      Toasts.info(this, "Générez un devis avant de créer la facture.");
+      return;
+    }
+    UUID quoteId = intervention.getQuoteId();
+    if (quoteId == null){
+      Toasts.info(this, "Identifiant de devis introuvable pour cette intervention.");
+      return;
+    }
+    var invoices = ServiceFactory.invoices();
+    PlanningService planning = ServiceFactory.planning();
+    if (invoices == null || planning == null){
+      Toasts.error(this, "Service facturation indisponible");
+      return;
+    }
+    try {
+      Invoice invoice = invoices.createFromQuote(quoteId);
+      if (invoice == null){
+        Toasts.error(this, "Le service n'a retourné aucune facture.");
+        return;
+      }
+      String number = invoice.getNumber();
+      if (number != null && !number.isBlank()){
+        intervention.setInvoiceNumber(number);
+      }
+      planning.saveIntervention(intervention);
+      String message = number == null || number.isBlank()
+          ? "Facture créée"
+          : "Facture créée — " + number;
+      Toasts.success(this, message);
+      refreshPlanning();
+    } catch (Exception ex){
+      Toasts.error(this, "Impossible de créer la facture : " + ex.getMessage());
+    }
+  }
+
+  private boolean isInvoiced(Intervention intervention){
+    if (intervention == null){
+      return false;
+    }
+    String invoiceNumber = intervention.getInvoiceNumber();
+    return invoiceNumber != null && !invoiceNumber.isBlank();
+  }
+
   private void maybeSaveLog(List<String[]> rows){
     if (rows == null || rows.size() <= 1){
       return;
@@ -1036,6 +1176,10 @@ public class PlanningPanel extends JPanel {
     if (planning == null){
       calendarView.setMode(isMonthSelected() ? "Mois" : "Semaine");
       allInterventions = List.of();
+      kanbanHasError = true;
+      kanbanView.showError("Service planning indisponible",
+          "Impossible de charger les interventions du pipeline.",
+          this::reload);
       updateFilteredSimpleViews();
       return;
     }
@@ -1049,6 +1193,10 @@ public class PlanningPanel extends JPanel {
     if (planning == null){
       calendarView.setMode(isMonthSelected() ? "Mois" : "Semaine");
       allInterventions = List.of();
+      kanbanHasError = true;
+      kanbanView.showError("Service planning indisponible",
+          "Impossible de charger les interventions du pipeline.",
+          this::reload);
       updateFilteredSimpleViews();
       return;
     }
@@ -1105,6 +1253,34 @@ public class PlanningPanel extends JPanel {
     List<BillingLine> generated = PreDevisUtil.fromResourceRefs(refs, catalog);
     intervention.setBillingLines(generated);
     return generated;
+  }
+
+  private void applyQuoteToIntervention(Intervention intervention, QuoteV2 quote, List<BillingLine> lines){
+    if (intervention == null || quote == null){
+      return;
+    }
+    if (lines != null){
+      intervention.setBillingLines(new ArrayList<>(lines));
+      intervention.setQuoteDraft(QuoteGenerator.toDocumentLines(lines));
+    }
+    String id = quote.getId();
+    if (id != null && !id.isBlank()){
+      try {
+        intervention.setQuoteId(UUID.fromString(id));
+      } catch (IllegalArgumentException ex){
+        intervention.setQuoteId(null);
+      }
+    } else {
+      intervention.setQuoteId(null);
+    }
+    String reference = quote.getReference();
+    if (reference != null && !reference.isBlank()){
+      intervention.setQuoteReference(reference);
+      intervention.setQuoteNumber(reference);
+    } else {
+      intervention.setQuoteReference(null);
+      intervention.setQuoteNumber(null);
+    }
   }
 
   private String displayName(Intervention intervention){
@@ -1172,6 +1348,7 @@ public class PlanningPanel extends JPanel {
     LocalDate[] range = currentSimpleRange();
     LocalDate from = range[0];
     LocalDate to = range[1];
+    kanbanHasError = false;
     try {
       List<Intervention> fetched = planning.listInterventions(from, to);
       if (fetched != null){
@@ -1180,6 +1357,11 @@ public class PlanningPanel extends JPanel {
     } catch (Exception ex){
       success = false;
       list = List.of();
+      kanbanHasError = true;
+      String message = ex.getMessage();
+      kanbanView.showError("Impossible de charger le pipeline",
+          message == null || message.isBlank() ? "Erreur inconnue." : message,
+          this::reload);
       Toasts.error(this, "Impossible de charger les interventions");
     }
     calendarView.setMode(isMonthSelected() ? "Mois" : "Semaine");
@@ -1209,28 +1391,34 @@ public class PlanningPanel extends JPanel {
     if (filter == null){
       filter = QuoteFilter.TOUS;
     }
+    List<Intervention> dataset;
     if (filter == QuoteFilter.TOUS){
+      dataset = base;
       calendarView.setData(base);
       tableView.setData(base);
-      return;
+    } else {
+      List<Intervention> filtered = new ArrayList<>();
+      for (Intervention intervention : base){
+        if (intervention == null){
+          continue;
+        }
+        boolean keep;
+        if (filter == QuoteFilter.A_DEVISER){
+          keep = !intervention.hasQuote();
+        } else {
+          keep = intervention.hasQuote();
+        }
+        if (keep){
+          filtered.add(intervention);
+        }
+      }
+      dataset = filtered;
+      calendarView.setData(filtered);
+      tableView.setData(filtered);
     }
-    List<Intervention> filtered = new ArrayList<>();
-    for (Intervention intervention : base){
-      if (intervention == null){
-        continue;
-      }
-      boolean keep;
-      if (filter == QuoteFilter.A_DEVISER){
-        keep = !intervention.hasQuote();
-      } else {
-        keep = intervention.hasQuote();
-      }
-      if (keep){
-        filtered.add(intervention);
-      }
+    if (!kanbanHasError){
+      kanbanView.setData(dataset);
     }
-    calendarView.setData(filtered);
-    tableView.setData(filtered);
   }
 
   /* ---------- Raccourcis clavier locaux ---------- */
