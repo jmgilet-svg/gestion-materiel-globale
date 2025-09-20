@@ -1,9 +1,17 @@
 package com.materiel.suite.client.settings;
 
+import java.util.Locale;
+
 /** Paramètres généraux côté client. */
 public class GeneralSettings {
   private int sessionTimeoutMinutes = 30;
   private int autosaveIntervalSeconds = 30;
+  /** TVA par défaut (%) appliquée si aucune valeur spécifique n'est fournie. */
+  private Double defaultVatPercent = 20.0;
+  /** Mode d'arrondi utilisé pour les montants monétaires. */
+  private String roundingMode = "HALF_UP";
+  /** Précision d'arrondi en nombre de décimales. */
+  private int roundingScale = 2;
   /** PNG encodé en Base64 (optionnel) utilisé en en-tête PDF (logo d’agence). */
   private String agencyLogoPngBase64;
   private String agencyName;
@@ -27,6 +35,60 @@ public class GeneralSettings {
 
   public void setAutosaveIntervalSeconds(int seconds){
     autosaveIntervalSeconds = Math.max(5, seconds);
+  }
+
+  public Double getDefaultVatPercent(){
+    return defaultVatPercent;
+  }
+
+  public void setDefaultVatPercent(Double percent){
+    if (percent == null){
+      defaultVatPercent = null;
+      return;
+    }
+    double value = Math.max(0d, Math.min(100d, percent));
+    defaultVatPercent = value;
+  }
+
+  public String getRoundingMode(){
+    return roundingMode;
+  }
+
+  public void setRoundingMode(String mode){
+    if (mode == null){
+      roundingMode = "HALF_UP";
+      return;
+    }
+    String normalized = mode.trim();
+    if (normalized.isEmpty()){
+      roundingMode = "HALF_UP";
+      return;
+    }
+    normalized = normalized.toUpperCase(Locale.ROOT);
+    switch (normalized){
+      case "HALF_DOWN":
+      case "HALF_EVEN":
+      case "HALF_UP":
+        roundingMode = normalized;
+        break;
+      default:
+        roundingMode = "HALF_UP";
+        break;
+    }
+  }
+
+  public int getRoundingScale(){
+    return roundingScale;
+  }
+
+  public void setRoundingScale(int scale){
+    if (scale < 0){
+      roundingScale = 0;
+    } else if (scale > 6){
+      roundingScale = 6;
+    } else {
+      roundingScale = scale;
+    }
   }
 
   public String getAgencyLogoPngBase64(){

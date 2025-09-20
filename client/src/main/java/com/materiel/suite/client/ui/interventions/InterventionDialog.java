@@ -28,6 +28,7 @@ import com.materiel.suite.client.ui.common.ResourceChipsPanel;
 import com.materiel.suite.client.ui.common.TableUtils;
 import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.icons.IconRegistry;
+import com.materiel.suite.client.util.Money;
 
 import javax.swing.*;
 import javax.swing.event.ChangeListener;
@@ -44,6 +45,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -54,13 +56,18 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Date;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
-import java.util.Deque;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 /** Fenêtre avancée pour créer ou modifier une intervention. */
@@ -79,6 +86,7 @@ public class InterventionDialog extends JDialog {
   private final JComboBox<InterventionTemplate> templateCombo = new JComboBox<>();
   private final JSpinner startSpinner = new JSpinner(new SpinnerDateModel());
   private final JSpinner endSpinner = new JSpinner(new SpinnerDateModel());
+  private final JTextField durationField = new JTextField(6);
   private final JTextArea descriptionArea = new JTextArea(4, 30);
   private final JTextArea internalNoteArea = new JTextArea(3, 30);
   private final JTextArea closingNoteArea = new JTextArea(3, 30);
@@ -100,7 +108,6 @@ public class InterventionDialog extends JDialog {
   private final JTextArea historyInput = new JTextArea(3, 20);
   private final JButton historySend = new JButton("Ajouter", IconRegistry.small("plus"));
   private final JLabel quoteSummaryLabel = new JLabel("Aucun devis généré");
-  private final NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(Locale.FRANCE);
   private final JButton saveButton = new JButton("Enregistrer", IconRegistry.small("success"));
   private final JButton applyTemplateButton = new JButton("Appliquer", IconRegistry.small("file-plus"));
   private final JButton regenerateBillingButton = new JButton("Depuis ressources", IconRegistry.small("refresh"));
@@ -125,6 +132,7 @@ public class InterventionDialog extends JDialog {
   private List<BillingLine> lastLinesSnapshot = new ArrayList<>();
   private boolean skipNextTableSnapshot;
   private boolean suppressDirtyEvents;
+  private boolean suppressDurationSync;
   private AutoCloseable settingsSubscription;
 
   private Intervention current;
@@ -133,6 +141,7 @@ public class InterventionDialog extends JDialog {
   private Consumer<Intervention> onSaveCallback;
   private Component parentComponent;
   private Runnable closeHandler;
+  private final AtomicLong conflictRefreshSeq = new AtomicLong();
 
   public InterventionDialog(Window owner,
                             PlanningService planningService,
@@ -207,6 +216,7 @@ public class InterventionDialog extends JDialog {
       handleBillingModelMutation();
       computeTotals();
       refreshWorkflowState();
+      refreshConflictsAsync();
     });
     computeTotals();
   }
@@ -231,9 +241,17 @@ public class InterventionDialog extends JDialog {
     // Mapping étapes → onglets (ordre figé) : Intervention(1), Devis(3), Facturation(2)
     workflowStepBar.setOnNavigate(this::navigateToStep);
     ChangeListener spinnerListener = e -> {
+      if (!suppressDurationSync){
+        if (e.getSource() == startSpinner){
+          recomputeEndFromDuration();
+        } else if (e.getSource() == endSpinner){
+          recomputeDurationFromEnd();
+        }
+      }
       updateResourcePickerWindow();
       refreshWorkflowState();
       markEdited();
+      refreshConflictsAsync();
     };
     startSpinner.addChangeListener(spinnerListener);
     endSpinner.addChangeListener(spinnerListener);
@@ -627,6 +645,8 @@ public class InterventionDialog extends JDialog {
     applyTemplateButton.setEnabled(false);
     startSpinner.setEnabled(false);
     endSpinner.setEnabled(false);
+    durationField.setEditable(false);
+    durationField.setEnabled(false);
     descriptionArea.setEditable(false);
     internalNoteArea.setEditable(false);
     closingNoteArea.setEditable(false);
@@ -653,6 +673,18 @@ public class InterventionDialog extends JDialog {
     startSpinner.setEditor(new JSpinner.DateEditor(startSpinner, "dd/MM/yyyy HH:mm"));
     endSpinner.setEditor(new JSpinner.DateEditor(endSpinner, "dd/MM/yyyy HH:mm"));
     signatureAtSpinner.setEditor(new JSpinner.DateEditor(signatureAtSpinner, "dd/MM/yyyy HH:mm"));
+    durationField.setText("1:00");
+    durationField.getDocument().addDocumentListener(new DocumentListener(){
+      @Override public void insertUpdate(DocumentEvent e){ onDurationFieldEdited(); }
+      @Override public void removeUpdate(DocumentEvent e){ onDurationFieldEdited(); }
+      @Override public void changedUpdate(DocumentEvent e){ onDurationFieldEdited(); }
+    });
+    JFormattedTextField endField = ((JSpinner.DefaultEditor) endSpinner.getEditor()).getTextField();
+    endField.getDocument().addDocumentListener(new DocumentListener(){
+      @Override public void insertUpdate(DocumentEvent e){ onEndSpinnerEdited(); }
+      @Override public void removeUpdate(DocumentEvent e){ onEndSpinnerEdited(); }
+      @Override public void changedUpdate(DocumentEvent e){ onEndSpinnerEdited(); }
+    });
   }
 
   private void configureBillingTable(){
@@ -661,25 +693,25 @@ public class InterventionDialog extends JDialog {
     billingTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
     billingTable.setAutoCreateRowSorter(true);
     billingTable.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
+    billingTable.putClientProperty("conflicts.map", Map.of());
     OverridableCellRenderers.ManualOverrideHighlightRenderer renderer =
         new OverridableCellRenderers.ManualOverrideHighlightRenderer();
     billingTable.setDefaultRenderer(BigDecimal.class, renderer);
     installNumericEditors();
-    if (billingTable.getColumnModel().getColumnCount() > 0){
-      billingTable.getColumnModel().getColumn(0).setMaxWidth(70);
-      if (billingTable.getColumnModel().getColumnCount() > 2){
-        billingTable.getColumnModel().getColumn(2).setPreferredWidth(80);
+    int conflictIndex = findColumnIndexIgnoreCase("Conflit");
+    if (conflictIndex >= 0){
+      billingTable.getColumnModel().getColumn(conflictIndex).setCellRenderer(new ConflictRenderer());
+      if (conflictIndex != 0){
+        billingTable.getColumnModel().moveColumn(conflictIndex, 0);
       }
-      if (billingTable.getColumnModel().getColumnCount() > 3){
-        billingTable.getColumnModel().getColumn(3).setPreferredWidth(80);
-      }
-      if (billingTable.getColumnModel().getColumnCount() > 4){
-        billingTable.getColumnModel().getColumn(4).setPreferredWidth(100);
-      }
-      if (billingTable.getColumnModel().getColumnCount() > 5){
-        billingTable.getColumnModel().getColumn(5).setPreferredWidth(120);
-      }
+      configureColumnWidth("Conflit", 70, 90);
     }
+    configureColumnWidth("Auto", 70, 90);
+    configureColumnWidth("Qté", 80, null);
+    configureColumnWidth("Quantité", 80, null);
+    configureColumnWidth("Unité", 80, null);
+    configureColumnWidth("PU HT", 110, null);
+    configureColumnWidth("Total HT", 140, null);
     installBillingShortcuts();
     TableUtils.persistColumnWidths(billingTable, "intervention.billing");
   }
@@ -700,6 +732,248 @@ public class InterventionDialog extends JDialog {
     DefaultCellEditor editor = new DefaultCellEditor(field);
     editor.setClickCountToStart(1);
     billingTable.getColumnModel().getColumn(index).setCellEditor(editor);
+  }
+
+  private void configureColumnWidth(String columnName, int preferred, Integer max){
+    int index = findColumnIndexIgnoreCase(columnName);
+    if (index < 0){
+      return;
+    }
+    var column = billingTable.getColumnModel().getColumn(index);
+    column.setPreferredWidth(preferred);
+    if (max != null){
+      column.setMaxWidth(max);
+    }
+  }
+
+  private void onDurationFieldEdited(){
+    if (suppressDurationSync){
+      return;
+    }
+    markEdited();
+    recomputeEndFromDuration();
+  }
+
+  private void onEndSpinnerEdited(){
+    if (suppressDurationSync){
+      return;
+    }
+    recomputeDurationFromEnd();
+    refreshConflictsAsync();
+  }
+
+  private void recomputeEndFromDuration(){
+    int[] parsed = parseDuration(durationField.getText());
+    if (parsed == null){
+      return;
+    }
+    LocalDateTime start = toLocalDateTime(startSpinner.getValue());
+    suppressDurationSync = true;
+    try {
+      LocalDateTime end = start.plusHours(parsed[0]).plusMinutes(parsed[1]);
+      endSpinner.setValue(toDate(end));
+    } finally {
+      suppressDurationSync = false;
+    }
+    updateResourcePickerWindow();
+    refreshWorkflowState();
+    refreshConflictsAsync();
+  }
+
+  private void recomputeDurationFromEnd(){
+    LocalDateTime start = toLocalDateTime(startSpinner.getValue());
+    LocalDateTime end = toLocalDateTime(endSpinner.getValue());
+    if (!end.isAfter(start)){
+      return;
+    }
+    long minutes = ChronoUnit.MINUTES.between(start, end);
+    long hours = minutes / 60;
+    long mins = minutes % 60;
+    suppressDurationSync = true;
+    try {
+      durationField.setText(hours + ":" + (mins < 10 ? "0" + mins : String.valueOf(mins)));
+    } finally {
+      suppressDurationSync = false;
+    }
+  }
+
+  private int[] parseDuration(String text){
+    if (text == null){
+      return null;
+    }
+    String trimmed = text.trim();
+    if (trimmed.isEmpty()){
+      return null;
+    }
+    String normalized = trimmed.replace(',', '.');
+    try {
+      if (normalized.matches("\\d+[:hH]\\d{1,2}")){
+        String[] parts = normalized.toLowerCase(Locale.ROOT).replace('h', ':').split(":");
+        int hours = Integer.parseInt(parts[0]);
+        int minutes = Integer.parseInt(parts[1]);
+        if (minutes >= 60){
+          hours += minutes / 60;
+          minutes = minutes % 60;
+        }
+        return new int[]{Math.max(0, hours), Math.max(0, minutes)};
+      }
+      double value = Double.parseDouble(normalized);
+      if (value < 0d){
+        value = 0d;
+      }
+      int hours = (int) Math.floor(value);
+      int minutes = (int) Math.round((value - hours) * 60d);
+      if (minutes == 60){
+        hours += 1;
+        minutes = 0;
+      }
+      return new int[]{hours, Math.max(0, minutes)};
+    } catch (NumberFormatException ex){
+      return null;
+    }
+  }
+
+  private void refreshConflictsAsync(){
+    if (billingTable == null){
+      return;
+    }
+    Set<String> resourceIds = collectBillingResourceIds();
+    if (resourceIds.isEmpty()){
+      conflictRefreshSeq.incrementAndGet();
+      billingTable.putClientProperty("conflicts.map", Map.of());
+      billingTable.repaint();
+      return;
+    }
+    if (planningService == null){
+      conflictRefreshSeq.incrementAndGet();
+      billingTable.putClientProperty("conflicts.map", Map.of());
+      billingTable.repaint();
+      return;
+    }
+    LocalDateTime start = toLocalDateTime(startSpinner.getValue());
+    LocalDateTime end = toLocalDateTime(endSpinner.getValue());
+    if (!end.isAfter(start)){
+      conflictRefreshSeq.incrementAndGet();
+      billingTable.putClientProperty("conflicts.map", Map.of());
+      billingTable.repaint();
+      return;
+    }
+    LocalDate from = start.toLocalDate().minusDays(1);
+    LocalDate to = end.toLocalDate().plusDays(1);
+    long token = conflictRefreshSeq.incrementAndGet();
+    CompletableFuture
+        .supplyAsync(() -> {
+          try {
+            List<Intervention> list = planningService.listInterventions(from, to);
+            return list != null ? list : List.<Intervention>of();
+          } catch (Exception ex){
+            return List.<Intervention>of();
+          }
+        })
+        .thenAccept(interventions -> SwingUtilities.invokeLater(() -> {
+          if (token != conflictRefreshSeq.get()){
+            return;
+          }
+          Map<String, String> conflicts = detectConflicts(interventions, start, end, resourceIds);
+          billingTable.putClientProperty("conflicts.map", conflicts);
+          billingTable.repaint();
+        }));
+  }
+
+  private Set<String> collectBillingResourceIds(){
+    Set<String> ids = new HashSet<>();
+    for (BillingLine line : billingModel.getLines()){
+      if (line == null){
+        continue;
+      }
+      String rid = line.getResourceId();
+      if (rid != null && !rid.isBlank()){
+        ids.add(rid);
+      }
+    }
+    return ids;
+  }
+
+  private Map<String, String> detectConflicts(List<Intervention> interventions,
+                                              LocalDateTime start,
+                                              LocalDateTime end,
+                                              Set<String> resourceIds){
+    Map<String, String> map = new HashMap<>();
+    if (interventions == null || interventions.isEmpty()){
+      return map;
+    }
+    String currentId = current != null && current.getId() != null ? current.getId().toString() : null;
+    DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM HH:mm");
+    for (Intervention other : interventions){
+      if (other == null){
+        continue;
+      }
+      if (other.getId() != null && Objects.equals(currentId, other.getId().toString())){
+        continue;
+      }
+      LocalDateTime otherStart = other.getDateHeureDebut();
+      LocalDateTime otherEnd = other.getDateHeureFin();
+      if (otherStart == null || otherEnd == null){
+        continue;
+      }
+      boolean overlap = otherStart.isBefore(end) && otherEnd.isAfter(start);
+      if (!overlap){
+        continue;
+      }
+      for (ResourceRef ref : other.getResources()){
+        if (ref == null || ref.getId() == null){
+          continue;
+        }
+        String rid = ref.getId().toString();
+        if (!resourceIds.contains(rid)){
+          continue;
+        }
+        if (map.containsKey(rid)){
+          continue;
+        }
+        String clientName = other.getClientName();
+        if (clientName == null || clientName.isBlank()){
+          clientName = other.getLabel();
+        }
+        String tooltip = "Chevauche " + fmt.format(otherStart) + "–" + fmt.format(otherEnd);
+        if (clientName != null && !clientName.isBlank()){
+          tooltip += " / " + clientName;
+        }
+        map.put(rid, tooltip);
+      }
+    }
+    return map;
+  }
+
+  private class ConflictRenderer extends DefaultTableCellRenderer {
+    ConflictRenderer(){
+      setHorizontalAlignment(CENTER);
+    }
+
+    @Override
+    public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column){
+      Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+      setText("");
+      setToolTipText(null);
+      setForeground(isSelected ? table.getSelectionForeground() : table.getForeground());
+      if (table == null){
+        return component;
+      }
+      int modelRow = table.convertRowIndexToModel(row);
+      if (modelRow < 0 || modelRow >= billingModel.getRowCount()){
+        return component;
+      }
+      BillingLine line = billingModel.lineAt(modelRow);
+      String rid = line != null ? line.getResourceId() : null;
+      @SuppressWarnings("unchecked")
+      Map<String, String> conflicts = (Map<String, String>) table.getClientProperty("conflicts.map");
+      if (rid != null && conflicts != null && conflicts.containsKey(rid)){
+        setText("⚠");
+        setForeground(isSelected ? table.getSelectionForeground() : new Color(0xB71C1C));
+        setToolTipText(conflicts.get(rid));
+      }
+      return component;
+    }
   }
 
   private JFormattedTextField createDecimalField(){
@@ -784,10 +1058,16 @@ public class InterventionDialog extends JDialog {
     gc.gridx = 3; panel.add(addressField, gc);
     y++;
 
-    gc.gridx = 0; gc.gridy = y; panel.add(new JLabel("Début"), gc);
-    gc.gridx = 1; panel.add(startSpinner, gc);
-    gc.gridx = 2; panel.add(new JLabel("Fin"), gc);
-    gc.gridx = 3; panel.add(endSpinner, gc);
+    JPanel datesRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+    datesRow.add(new JLabel("Début"));
+    datesRow.add(startSpinner);
+    datesRow.add(new JLabel("Durée (H:MM)"));
+    durationField.setColumns(6);
+    datesRow.add(durationField);
+    datesRow.add(new JLabel("Fin"));
+    datesRow.add(endSpinner);
+    gc.gridx = 0; gc.gridy = y; gc.gridwidth = 4; panel.add(datesRow, gc);
+    gc.gridwidth = 1;
     y++;
 
     return panel;
@@ -1510,6 +1790,7 @@ public class InterventionDialog extends JDialog {
     List<Resource> selected = resourcePicker.getSelectedResources();
     int count = selected == null ? 0 : selected.size();
     logEventAsync("ACTION", "Sélection de ressources mise à jour (" + count + ")");
+    refreshConflictsAsync();
   }
 
   private void syncAutoBillingLinesWithResources(){
@@ -1719,6 +2000,7 @@ public class InterventionDialog extends JDialog {
       }
       startSpinner.setValue(toDate(start));
       endSpinner.setValue(toDate(end));
+      recomputeDurationFromEnd();
 
       updateResourcePickerWindow();
       resourcePicker.setSelectedResources(current.getResources());
@@ -1730,6 +2012,7 @@ public class InterventionDialog extends JDialog {
       billingModel.setLines(lines);
       syncAutoBillingLinesWithResources();
       computeTotals();
+      refreshConflictsAsync();
       updateQuoteBadge();
       refreshWorkflowState();
     } finally {
@@ -1881,12 +2164,13 @@ public class InterventionDialog extends JDialog {
   }
 
   private void computeTotals(){
-    BigDecimal totalHt = billingModel.totalHt();
-    BigDecimal totalTva = BigDecimal.ZERO;
-    BigDecimal totalTtc = totalHt;
-    totalHtLabel.setText("Total HT : " + currencyFormat.format(totalHt));
-    totalTvaLabel.setText("TVA : " + currencyFormat.format(totalTva));
-    totalTtcLabel.setText("Total TTC : " + currencyFormat.format(totalTtc));
+    BigDecimal totalHt = Money.round(billingModel.totalHt());
+    BigDecimal totalTva = Money.round(totalHt.multiply(Money.vatRate()));
+    BigDecimal totalTtc = Money.round(totalHt.add(totalTva));
+    NumberFormat format = Money.currencyFormat();
+    totalHtLabel.setText("Total HT : " + format.format(totalHt));
+    totalTvaLabel.setText("TVA : " + format.format(totalTva));
+    totalTtcLabel.setText("Total TTC : " + format.format(totalTtc));
   }
 
   private void updateQuoteBadge(){

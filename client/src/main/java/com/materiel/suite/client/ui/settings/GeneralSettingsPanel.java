@@ -21,6 +21,9 @@ import java.util.Base64;
 public class GeneralSettingsPanel extends JPanel {
   private final JSpinner timeoutSpinner;
   private final JSpinner autosaveSpinner;
+  private final JSpinner defaultVatSpinner;
+  private final JComboBox<String> roundingModeCombo;
+  private final JSpinner roundingScaleSpinner;
   private final JLabel logoPreview;
   private String logoBase64;
   private final JTextField agencyNameField;
@@ -68,6 +71,36 @@ public class GeneralSettingsPanel extends JPanel {
     autosaveSpinner = new JSpinner(autosaveModel);
     gc.gridx = 1; gc.weightx = 1;
     form.add(autosaveSpinner, gc);
+
+    row++;
+    gc.gridx = 0; gc.gridy = row; gc.weightx = 0;
+    form.add(new JLabel("TVA par défaut (%)"), gc);
+    double vatValue = settings.getDefaultVatPercent() != null ? settings.getDefaultVatPercent() : 20.0;
+    SpinnerNumberModel vatModel = new SpinnerNumberModel(vatValue, 0.0, 100.0, 0.5);
+    defaultVatSpinner = new JSpinner(vatModel);
+    gc.gridx = 1; gc.weightx = 1;
+    form.add(defaultVatSpinner, gc);
+
+    row++;
+    gc.gridx = 0; gc.gridy = row; gc.weightx = 0;
+    form.add(new JLabel("Mode d'arrondi"), gc);
+    roundingModeCombo = new JComboBox<>(new String[]{"HALF_UP", "HALF_DOWN", "HALF_EVEN"});
+    String roundingMode = settings.getRoundingMode();
+    if (roundingMode != null && !roundingMode.isBlank()){
+      roundingModeCombo.setSelectedItem(roundingMode);
+    } else {
+      roundingModeCombo.setSelectedItem("HALF_UP");
+    }
+    gc.gridx = 1; gc.weightx = 1;
+    form.add(roundingModeCombo, gc);
+
+    row++;
+    gc.gridx = 0; gc.gridy = row; gc.weightx = 0;
+    form.add(new JLabel("Décimales d'arrondi"), gc);
+    SpinnerNumberModel scaleModel = new SpinnerNumberModel(Math.max(0, settings.getRoundingScale()), 0, 6, 1);
+    roundingScaleSpinner = new JSpinner(scaleModel);
+    gc.gridx = 1; gc.weightx = 1;
+    form.add(roundingScaleSpinner, gc);
 
     row++;
     gc.gridx = 0; gc.gridy = row; gc.weightx = 0;
@@ -128,6 +161,9 @@ public class GeneralSettingsPanel extends JPanel {
     boolean canEdit = AccessControl.canEditSettings();
     timeoutSpinner.setEnabled(canEdit);
     autosaveSpinner.setEnabled(canEdit);
+    defaultVatSpinner.setEnabled(canEdit);
+    roundingModeCombo.setEnabled(canEdit);
+    roundingScaleSpinner.setEnabled(canEdit);
     save.setEnabled(canEdit);
     chooseLogo.setEnabled(canEdit);
     clearLogo.setEnabled(canEdit);
@@ -167,10 +203,15 @@ public class GeneralSettingsPanel extends JPanel {
   private void saveSettings(){
     int minutes = ((Number) timeoutSpinner.getValue()).intValue();
     int autosave = ((Number) autosaveSpinner.getValue()).intValue();
+    double vat = ((Number) defaultVatSpinner.getValue()).doubleValue();
+    int scale = ((Number) roundingScaleSpinner.getValue()).intValue();
 
     GeneralSettings updated = new GeneralSettings();
     updated.setSessionTimeoutMinutes(minutes);
     updated.setAutosaveIntervalSeconds(autosave);
+    updated.setDefaultVatPercent(vat);
+    updated.setRoundingMode((String) roundingModeCombo.getSelectedItem());
+    updated.setRoundingScale(scale);
     updated.setAgencyLogoPngBase64(logoBase64);
     updated.setAgencyName(agencyNameField.getText());
     updated.setAgencyPhone(agencyPhoneField.getText());
@@ -183,6 +224,9 @@ public class GeneralSettingsPanel extends JPanel {
       SessionManager.setTimeoutMinutes(updated.getSessionTimeoutMinutes());
       timeoutSpinner.setValue(updated.getSessionTimeoutMinutes());
       autosaveSpinner.setValue(updated.getAutosaveIntervalSeconds());
+      defaultVatSpinner.setValue(updated.getDefaultVatPercent() != null ? updated.getDefaultVatPercent() : 20.0);
+      roundingModeCombo.setSelectedItem(updated.getRoundingMode());
+      roundingScaleSpinner.setValue(updated.getRoundingScale());
       AppEventBus.get().publish(new SettingsEvents.GeneralSaved(
           updated.getSessionTimeoutMinutes(),
           updated.getAutosaveIntervalSeconds()

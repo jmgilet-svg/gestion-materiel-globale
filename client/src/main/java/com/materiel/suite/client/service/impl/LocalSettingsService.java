@@ -12,6 +12,9 @@ public class LocalSettingsService implements SettingsService {
     GeneralSettings settings = new GeneralSettings();
     settings.setSessionTimeoutMinutes(Prefs.getSessionTimeoutMinutes());
     settings.setAutosaveIntervalSeconds(Prefs.getAutosaveIntervalSeconds());
+    settings.setDefaultVatPercent(Prefs.getDefaultVatPercent());
+    settings.setRoundingMode(Prefs.getRoundingMode());
+    settings.setRoundingScale(Prefs.getRoundingScale());
     settings.setAgencyLogoPngBase64(Prefs.getAgencyLogoPngBase64());
     settings.setAgencyName(Prefs.getAgencyName());
     settings.setAgencyPhone(Prefs.getAgencyPhone());
@@ -28,6 +31,9 @@ public class LocalSettingsService implements SettingsService {
     }
     Prefs.setSessionTimeoutMinutes(settings.getSessionTimeoutMinutes());
     Prefs.setAutosaveIntervalSeconds(settings.getAutosaveIntervalSeconds());
+    Prefs.setDefaultVatPercent(settings.getDefaultVatPercent());
+    Prefs.setRoundingMode(settings.getRoundingMode());
+    Prefs.setRoundingScale(settings.getRoundingScale());
     Prefs.setAgencyLogoPngBase64(settings.getAgencyLogoPngBase64());
     Prefs.setAgencyName(settings.getAgencyName());
     Prefs.setAgencyPhone(settings.getAgencyPhone());

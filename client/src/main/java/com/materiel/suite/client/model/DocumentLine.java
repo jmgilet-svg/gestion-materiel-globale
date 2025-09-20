@@ -1,7 +1,6 @@
 package com.materiel.suite.client.model;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
+import com.materiel.suite.client.util.Money;
 
 public class DocumentLine {
   private String designation;
@@ -32,19 +31,15 @@ public class DocumentLine {
 
   public double lineHT() {
     double base = quantite * prixUnitaireHT;
-    double remise = base * (remisePct/100.0);
+    double remise = base * (remisePct / 100.0);
     double ht = base - remise;
-    return round2(ht);
+    return Money.round(ht);
   }
   public double lineTVA() {
-    double v = lineHT() * (tvaPct/100.0);
-    return round2(v);
+    double v = lineHT() * (tvaPct / 100.0);
+    return Money.round(v);
   }
   public double lineTTC() {
-    return round2(lineHT() + lineTVA());
-  }
-
-  private static double round2(double d){
-    return new BigDecimal(d).setScale(2, RoundingMode.HALF_UP).doubleValue();
+    return Money.round(lineHT() + lineTVA());
   }
 }
