@@ -67,6 +67,7 @@ public class ApiPlanningService implements PlanningService {
       m.put("unitPriceHt", r.getUnitPriceHt());
       m.put("color", r.getColor());
       m.put("notes", r.getNotes());
+      m.put("email", r.getEmail());
       // === CRM-INJECT BEGIN: resource-api-write ===
       m.put("capacity", r.getCapacity());
       m.put("tags", r.getTags());
@@ -520,6 +521,7 @@ public class ApiPlanningService implements PlanningService {
     target.setColor(SimpleJson.str(data.get("color")));
     target.setNotes(SimpleJson.str(data.get("notes")));
     target.setState(SimpleJson.str(data.get("state")));
+    target.setEmail(SimpleJson.str(data.get("email")));
     // === CRM-INJECT BEGIN: resource-api-fill ===
     Object cap = data.get("capacity");
     if (cap instanceof Number n){

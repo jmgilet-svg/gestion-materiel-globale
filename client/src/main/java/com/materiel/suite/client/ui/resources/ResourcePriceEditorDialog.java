@@ -146,6 +146,7 @@ public class ResourcePriceEditorDialog extends JDialog {
     resource.setColor(source.getColor());
     resource.setNotes(source.getNotes());
     resource.setState(source.getState());
+    resource.setEmail(source.getEmail());
     resource.setCapacity(source.getCapacity());
     resource.setTags(source.getTags());
     resource.setWeeklyUnavailability(source.getWeeklyUnavailability());

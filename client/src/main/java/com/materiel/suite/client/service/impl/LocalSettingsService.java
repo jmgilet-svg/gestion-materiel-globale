@@ -1,6 +1,7 @@
 package com.materiel.suite.client.service.impl;
 
 import com.materiel.suite.client.service.SettingsService;
+import com.materiel.suite.client.settings.EmailSettings;
 import com.materiel.suite.client.settings.GeneralSettings;
 import com.materiel.suite.client.util.Prefs;
 
@@ -33,5 +34,46 @@ public class LocalSettingsService implements SettingsService {
     Prefs.setAgencyAddress(settings.getAgencyAddress());
     Prefs.setCgvPdfBase64(settings.getCgvPdfBase64());
     Prefs.setCgvText(settings.getCgvText());
+  }
+
+  @Override
+  public EmailSettings getEmail(){
+    EmailSettings settings = new EmailSettings();
+    settings.setSmtpHost(Prefs.getMailHost());
+    settings.setSmtpPort(Prefs.getMailPort());
+    settings.setStarttls(Prefs.isMailStarttls());
+    settings.setAuth(Prefs.isMailAuth());
+    settings.setUsername(Prefs.getMailUsername());
+    settings.setPassword(Prefs.getMailPassword());
+    settings.setFromAddress(Prefs.getMailFromAddress());
+    settings.setFromName(Prefs.getMailFromName());
+    settings.setCcAddress(Prefs.getMailCcAddress());
+    String subject = Prefs.getMailSubjectTemplate();
+    if (subject != null){
+      settings.setSubjectTemplate(subject);
+    }
+    String body = Prefs.getMailBodyTemplate();
+    if (body != null){
+      settings.setBodyTemplate(body);
+    }
+    return settings;
+  }
+
+  @Override
+  public void saveEmail(EmailSettings settings){
+    if (settings == null){
+      return;
+    }
+    Prefs.setMailHost(settings.getSmtpHost());
+    Prefs.setMailPort(settings.getSmtpPort());
+    Prefs.setMailStarttls(settings.isStarttls());
+    Prefs.setMailAuth(settings.isAuth());
+    Prefs.setMailUsername(settings.getUsername());
+    Prefs.setMailPassword(settings.getPassword());
+    Prefs.setMailFromAddress(settings.getFromAddress());
+    Prefs.setMailFromName(settings.getFromName());
+    Prefs.setMailCcAddress(settings.getCcAddress());
+    Prefs.setMailSubjectTemplate(settings.getSubjectTemplate());
+    Prefs.setMailBodyTemplate(settings.getBodyTemplate());
   }
 }

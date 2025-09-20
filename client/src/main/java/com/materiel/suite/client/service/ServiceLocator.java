@@ -6,6 +6,7 @@ import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.impl.LocalSettingsService;
 import com.materiel.suite.client.service.TimelineService;
+import com.materiel.suite.client.settings.EmailSettings;
 import com.materiel.suite.client.users.UserService;
 
 import java.util.List;
@@ -49,6 +50,14 @@ public final class ServiceLocator {
       SETTINGS = new LocalSettingsService();
     }
     return SETTINGS;
+  }
+
+  public static EmailSettings emailSettings(){
+    return settings().getEmail();
+  }
+
+  public static void saveEmailSettings(EmailSettings emailSettings){
+    settings().saveEmail(emailSettings);
   }
 
   public static TimelineService timeline(){
