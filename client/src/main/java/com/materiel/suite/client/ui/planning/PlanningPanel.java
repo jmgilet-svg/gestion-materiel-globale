@@ -113,6 +113,7 @@ public class PlanningPanel extends JPanel {
   private final JButton exportIcsBtn = new JButton("Exporter .ics", IconRegistry.small("calendar"));
   private final JButton exportMissionBtn = new JButton("Ordre de mission (PDF)", IconRegistry.small("file"));
   private final JButton sendBtn = new JButton("Envoyer aux ressources", IconRegistry.small("info"));
+  private final JButton dispatcherBtn = new JButton("Mode Dispatcher", IconRegistry.small("task"));
   private final JButton dryRunBtn = new JButton("Prévisualiser", IconRegistry.small("calculator"));
   private final JComboBox<QuoteFilter> quoteFilter = new JComboBox<>(QuoteFilter.values());
   private final JPanel bulkBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
@@ -209,6 +210,7 @@ public class PlanningPanel extends JPanel {
     bulkBar.add(exportIcsBtn);
     bulkBar.add(exportMissionBtn);
     bulkBar.add(sendBtn);
+    bulkBar.add(dispatcherBtn);
     bulkBar.add(Box.createHorizontalStrut(16));
     bulkBar.add(bulkBadges);
     bulkBadges.setText("");
@@ -225,6 +227,7 @@ public class PlanningPanel extends JPanel {
     exportIcsBtn.addActionListener(e -> exportIcs());
     exportMissionBtn.addActionListener(e -> exportMissionPdf());
     sendBtn.addActionListener(e -> sendMissionOrders());
+    dispatcherBtn.addActionListener(e -> openDispatcher());
     updateSelectionUI(List.of());
 
     reload();
@@ -1704,6 +1707,35 @@ public class PlanningPanel extends JPanel {
       it.setDateHeureFin(originalEnd);
       Toasts.error(this, "Impossible de mettre à jour la durée");
     }
+    refreshPlanning();
+  }
+
+  private void openDispatcher(){
+    List<Intervention> selection = selectedInterventions();
+    if (selection == null || selection.isEmpty()){
+      Toasts.info(this, "Sélectionnez une intervention à dispatcher.");
+      return;
+    }
+    PlanningService planning = ServiceFactory.planning();
+    if (planning == null){
+      Toasts.error(this, "Service planning indisponible");
+      return;
+    }
+    Intervention target = selection.get(0);
+    DispatcherSplitDialog dialog = new DispatcherSplitDialog(
+        SwingUtilities.getWindowAncestor(this),
+        planning,
+        ServiceFactory.clients(),
+        ServiceFactory.interventionTypes(),
+        ServiceFactory.templates(),
+        target);
+    dialog.setOnSave(updated -> {
+      if (updated != null){
+        planning.saveIntervention(updated);
+      }
+      refreshPlanning();
+    });
+    dialog.setVisible(true);
     refreshPlanning();
   }
 

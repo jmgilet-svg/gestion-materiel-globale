@@ -50,6 +50,16 @@ public class ResourceChipsPanel extends JPanel {
     this.listener = listener;
   }
 
+  @Override
+  public void setEnabled(boolean enabled){
+    super.setEnabled(enabled);
+    searchField.setEnabled(enabled);
+    searchField.setEditable(enabled);
+    for (Component component : chipsPanel.getComponents()){
+      component.setEnabled(enabled);
+    }
+  }
+
   private void refresh(){
     String query = searchField.getText();
     String normalized = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
@@ -86,6 +96,7 @@ public class ResourceChipsPanel extends JPanel {
     button.setFocusable(false);
     button.setMargin(new Insets(2, 8, 2, 8));
     button.putClientProperty("JButton.buttonType", "roundRect");
+    button.setEnabled(isEnabled());
     button.addActionListener(e -> {
       if (listener != null){
         listener.onPick(resource);
