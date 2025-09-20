@@ -23,6 +23,73 @@ public final class Toasts {
     show(parent, message, "error");
   }
 
+  /**
+   * Affiche un toast avec un bouton d'action sur la droite.
+   */
+  public static void showWithAction(Component parent, String message, String actionLabel, Runnable action){
+    if (message == null || message.isBlank()){
+      return;
+    }
+    Window owner = parent instanceof Window ? (Window) parent : SwingUtilities.getWindowAncestor(parent);
+    if (owner == null){
+      return;
+    }
+
+    JDialog dialog = new JDialog(owner);
+    dialog.setUndecorated(true);
+    dialog.setFocusableWindowState(false);
+    dialog.setType(Window.Type.POPUP);
+
+    JPanel panel = new JPanel(new BorderLayout(12, 0));
+    panel.setBorder(BorderFactory.createCompoundBorder(
+        BorderFactory.createLineBorder(new Color(0, 0, 0, 30)),
+        BorderFactory.createEmptyBorder(8, 12, 8, 12)
+    ));
+    panel.setBackground(new Color(0xE8F0FE));
+
+    JLabel textLabel = new JLabel(message);
+    textLabel.setForeground(new Color(0x0D47A1));
+    textLabel.setFont(textLabel.getFont().deriveFont(Font.PLAIN, 12f));
+
+    JButton button = new JButton(actionLabel == null || actionLabel.isBlank() ? "OK" : actionLabel);
+    button.setFocusable(false);
+
+    panel.add(textLabel, BorderLayout.CENTER);
+    panel.add(button, BorderLayout.EAST);
+
+    dialog.setContentPane(panel);
+    dialog.pack();
+
+    Rectangle screenBounds = owner.getGraphicsConfiguration() != null
+        ? owner.getGraphicsConfiguration().getBounds()
+        : owner.getBounds();
+    int x = screenBounds.x + screenBounds.width - dialog.getWidth() - 16;
+    int y = screenBounds.y + screenBounds.height - dialog.getHeight() - 16;
+    dialog.setLocation(x, y);
+    dialog.setAlwaysOnTop(true);
+
+    final Timer hideTimer = new Timer(5000, e -> {
+      dialog.setVisible(false);
+      dialog.dispose();
+    });
+    hideTimer.setRepeats(false);
+
+    button.addActionListener(e -> {
+      hideTimer.stop();
+      try {
+        if (action != null){
+          action.run();
+        }
+      } finally {
+        dialog.setVisible(false);
+        dialog.dispose();
+      }
+    });
+
+    dialog.setVisible(true);
+    hideTimer.start();
+  }
+
   public static void show(Component parent, String message, String iconKey){
     if (message == null || message.isBlank()){
       return;

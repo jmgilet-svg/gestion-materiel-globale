@@ -25,6 +25,7 @@ public class CollapsibleSidebar extends JPanel {
   private PinMode pinMode = PinMode.AUTO;
   private final JPanel itemsPanel = new JPanel();
   private final List<SidebarButton> buttons = new ArrayList<>();
+  private final Timer expandTimer;
   private final Timer collapseTimer;
   private final JToggleButton pinExpandToggle = new JToggleButton("📌");
   private final JToggleButton pinCompactToggle = new JToggleButton("📎");
@@ -57,13 +58,15 @@ public class CollapsibleSidebar extends JPanel {
       @Override
       public void mouseEntered(MouseEvent e) {
         if (pinMode == PinMode.AUTO) {
-          setExpanded(true);
+          collapseTimer.stop();
+          expandTimer.restart();
         }
       }
 
       @Override
       public void mouseExited(MouseEvent e) {
         if (pinMode == PinMode.AUTO) {
+          expandTimer.stop();
           scheduleCollapse();
         }
       }
@@ -72,6 +75,13 @@ public class CollapsibleSidebar extends JPanel {
     addMouseMotionListener(hover);
     itemsPanel.addMouseListener(hover);
     itemsPanel.addMouseMotionListener(hover);
+
+    expandTimer = new Timer(220, ev -> {
+      if (pinMode == PinMode.AUTO) {
+        setExpanded(true);
+      }
+    });
+    expandTimer.setRepeats(false);
 
     collapseTimer = new Timer(220, ev -> {
       if (pinMode == PinMode.AUTO && !isMouseInside()) {
@@ -130,6 +140,7 @@ public class CollapsibleSidebar extends JPanel {
     if (pinMode != PinMode.AUTO) {
       return;
     }
+    expandTimer.stop();
     collapseTimer.restart();
   }
 
@@ -224,13 +235,16 @@ public class CollapsibleSidebar extends JPanel {
       switch (mode) {
         case PIN_EXPANDED -> {
           collapseTimer.stop();
+          expandTimer.stop();
           setExpanded(true);
         }
         case PIN_COLLAPSED -> {
           collapseTimer.stop();
+          expandTimer.stop();
           setExpanded(false);
         }
         case AUTO -> {
+          expandTimer.stop();
           if (!isMouseInside()) {
             setExpanded(false);
           }
