@@ -9,30 +9,23 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
 @RequestMapping("/api/v2/interventions")
 public class InterventionTimelineV2Controller {
-  private final Map<String, List<TimelineEventV2Dto>> store = new ConcurrentHashMap<>();
+  private final TimelineEventStore store;
+
+  public InterventionTimelineV2Controller(TimelineEventStore store){
+    this.store = store;
+  }
 
   @GetMapping("/{id}/timeline")
   public ResponseEntity<List<TimelineEventV2Dto>> list(@PathVariable("id") String interventionId){
     if (interventionId == null || interventionId.isBlank()){
       return ResponseEntity.badRequest().build();
     }
-    List<TimelineEventV2Dto> events = store.getOrDefault(interventionId, List.of());
-    List<TimelineEventV2Dto> copy = new ArrayList<>(events);
-    copy.sort(Comparator.comparing(TimelineEventV2Dto::getTimestamp,
-        Comparator.nullsLast(Comparator.naturalOrder())));
-    return ResponseEntity.ok(copy);
+    return ResponseEntity.ok(store.list(interventionId));
   }
 
   @PostMapping("/{id}/timeline")
@@ -41,18 +34,10 @@ public class InterventionTimelineV2Controller {
     if (interventionId == null || interventionId.isBlank() || body == null){
       return ResponseEntity.badRequest().build();
     }
-    TimelineEventV2Dto event = new TimelineEventV2Dto();
-    event.setId(UUID.randomUUID().toString());
-    event.setInterventionId(interventionId);
-    Instant timestamp = body.getTimestamp() != null ? body.getTimestamp() : Instant.now();
-    event.setTimestamp(timestamp);
-    String type = body.getType();
-    event.setType(type == null || type.isBlank() ? "INFO" : type);
-    event.setMessage(body.getMessage());
-    event.setAuthor(body.getAuthor());
-    store.computeIfAbsent(interventionId,
-            key -> Collections.synchronizedList(new ArrayList<>()))
-        .add(event);
+    TimelineEventV2Dto event = store.append(interventionId, body);
+    if (event == null){
+      return ResponseEntity.badRequest().build();
+    }
     return ResponseEntity.ok(event);
   }
 }

@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 
 import javax.swing.AbstractAction;
 import javax.swing.Box;
@@ -86,6 +87,7 @@ import com.materiel.suite.client.ui.interventions.InterventionDialog;
 import com.materiel.suite.client.ui.interventions.PreDevisUtil;
 import com.materiel.suite.client.ui.interventions.QuoteGenerator;
 import com.materiel.suite.client.util.MailSender;
+import org.apache.commons.text.StringEscapeUtils;
 
 public class PlanningPanel extends JPanel {
   private enum QuoteFilter {
@@ -715,6 +717,47 @@ public class PlanningPanel extends JPanel {
     return builder.toString();
   }
 
+  private String renderBodyHtml(List<Intervention> interventions, EmailSettings settings, String toEmail){
+    if (settings == null){
+      return "";
+    }
+    if (interventions == null || interventions.isEmpty()){
+      return "";
+    }
+    String template = settings.getHtmlTemplate();
+    StringBuilder builder = new StringBuilder();
+    String ids = interventions.stream()
+        .map(Intervention::getId)
+        .filter(Objects::nonNull)
+        .map(UUID::toString)
+        .collect(Collectors.joining("|"));
+    for (int i = 0; i < interventions.size(); i++){
+      Intervention intervention = interventions.get(i);
+      String filled = fillTemplateHtml(template, intervention);
+      if (i == 0 && !filled.isBlank()){
+        String target = nz(toEmail);
+        String pixel;
+        if (ids.isBlank()){
+          pixel = "${pixel(to=" + target + ")}";
+        } else {
+          pixel = "${pixel(ids=" + ids + ",to=" + target + ")}";
+        }
+        if (filled.contains("${pixel}")){
+          filled = filled.replace("${pixel}", pixel);
+        } else {
+          filled = filled + pixel;
+        }
+      } else {
+        filled = filled.replace("${pixel}", "");
+      }
+      builder.append(filled);
+      if (i < interventions.size() - 1){
+        builder.append("<hr style=\"border:none;border-top:1px solid #ddd;margin:16px 0\"/>");
+      }
+    }
+    return builder.toString();
+  }
+
   private String fillTemplate(String template, Intervention intervention){
     if (template == null){
       return "";
@@ -722,6 +765,22 @@ public class PlanningPanel extends JPanel {
     if (intervention == null){
       return template;
     }
+    TemplateValues values = templateValues(intervention);
+    return applyTemplate(template, values, false);
+  }
+
+  private String fillTemplateHtml(String template, Intervention intervention){
+    if (template == null){
+      return "";
+    }
+    if (intervention == null){
+      return template;
+    }
+    TemplateValues values = templateValues(intervention);
+    return applyTemplate(template, values, true);
+  }
+
+  private TemplateValues templateValues(Intervention intervention){
     DateTimeFormatter dayFormat = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     DateTimeFormatter timeFormat = DateTimeFormatter.ofPattern("HH:mm");
     LocalDateTime start = intervention.getDateHeureDebut();
@@ -759,6 +818,17 @@ public class PlanningPanel extends JPanel {
       title = "Intervention";
     }
     String resources = resourceList(intervention.getResources());
+    return new TemplateValues(date, timeRange, client, clientLine, address, title, resources);
+  }
+
+  private String applyTemplate(String template, TemplateValues values, boolean html){
+    String date = html ? escapeHtml(values.date()) : values.date();
+    String timeRange = html ? escapeHtml(values.timeRange()) : values.timeRange();
+    String client = html ? escapeHtml(values.client()) : values.client();
+    String clientLine = html ? escapeHtml(values.clientLine()) : values.clientLine();
+    String address = html ? escapeHtml(values.address()) : values.address();
+    String title = html ? escapeHtml(values.title()) : values.title();
+    String resources = html ? escapeHtml(values.resourceList()) : values.resourceList();
     return template
         .replace("${date}", date)
         .replace("${timeRange}", timeRange)
@@ -767,6 +837,14 @@ public class PlanningPanel extends JPanel {
         .replace("${address}", address)
         .replace("${title}", title)
         .replace("${resourceList}", resources);
+  }
+
+  private String escapeHtml(String value){
+    return StringEscapeUtils.escapeHtml4(value == null ? "" : value);
+  }
+
+  private record TemplateValues(String date, String timeRange, String client, String clientLine,
+                               String address, String title, String resourceList) {
   }
 
   private String resourceList(List<ResourceRef> refs){
@@ -1281,6 +1359,7 @@ public class PlanningPanel extends JPanel {
             settings.getCcAddress(),
             renderSubject(recipient.interventions, settings),
             renderBody(recipient.interventions, settings),
+            renderBodyHtml(recipient.interventions, settings, recipient.email),
             List.of(pdf, ics)
         ));
       } catch (Exception ex){
@@ -1311,7 +1390,7 @@ public class PlanningPanel extends JPanel {
           .map(File::getName)
           .collect(Collectors.joining("; "));
       try {
-        MailSender.send(job.to(), job.cc(), job.subject(), job.body(), job.attachments());
+        MailSender.send(job.to(), job.cc(), job.subject(), job.body(), job.bodyHtml(), job.attachments());
         sent++;
         log.add(new String[]{timestamp(), job.to(), nz(job.cc()), job.subject(), attachmentNames, "OK", ""});
         if (timeline != null && recipient != null){

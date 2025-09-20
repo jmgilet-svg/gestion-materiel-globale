@@ -22,7 +22,20 @@ Intervention: ${title}
 Ressources associées: ${resourceList}
 
 — Ce message a été généré automatiquement par la planification.
+${pixel}
 """;
+  private String htmlTemplate = """
+<p>Bonjour,</p>
+<p>Veuillez trouver ci-joint votre ordre de mission pour <strong>${date}</strong> (<em>${timeRange}</em>)${clientLine}.<br/>
+Adresse : ${address}<br/>
+Intervention : ${title}</p>
+<p>Ressources associées : ${resourceList}</p>
+<p style="color:#666;font-size:12px">— Ce message a été généré automatiquement par la planification.</p>
+${pixel}
+""";
+  private boolean enableHtml = true;
+  private boolean enableOpenTracking = true;
+  private String trackingBaseUrl;
 
   public String getSmtpHost(){
     return smtpHost;
@@ -112,6 +125,38 @@ Ressources associées: ${resourceList}
     bodyTemplate = template == null || template.isBlank() ? defaultBody() : template;
   }
 
+  public String getHtmlTemplate(){
+    return htmlTemplate;
+  }
+
+  public void setHtmlTemplate(String template){
+    htmlTemplate = template == null || template.isBlank() ? defaultHtml() : template;
+  }
+
+  public boolean isEnableHtml(){
+    return enableHtml;
+  }
+
+  public void setEnableHtml(boolean enable){
+    enableHtml = enable;
+  }
+
+  public boolean isEnableOpenTracking(){
+    return enableOpenTracking;
+  }
+
+  public void setEnableOpenTracking(boolean enable){
+    enableOpenTracking = enable;
+  }
+
+  public String getTrackingBaseUrl(){
+    return trackingBaseUrl;
+  }
+
+  public void setTrackingBaseUrl(String value){
+    trackingBaseUrl = trimToNull(value);
+  }
+
   private static String trimToNull(String value){
     if (value == null){
       return null;
@@ -135,6 +180,19 @@ Intervention: ${title}
 Ressources associées: ${resourceList}
 
 — Ce message a été généré automatiquement par la planification.
+${pixel}
+""";
+  }
+
+  private static String defaultHtml(){
+    return """
+<p>Bonjour,</p>
+<p>Veuillez trouver ci-joint votre ordre de mission pour <strong>${date}</strong> (<em>${timeRange}</em>)${clientLine}.<br/>
+Adresse : ${address}<br/>
+Intervention : ${title}</p>
+<p>Ressources associées : ${resourceList}</p>
+<p style="color:#666;font-size:12px">— Ce message a été généré automatiquement par la planification.</p>
+${pixel}
 """;
   }
 }
