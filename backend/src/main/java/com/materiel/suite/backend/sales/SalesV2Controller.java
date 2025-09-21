@@ -12,17 +12,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
-import java.time.Year;
-import java.util.Map;
+import java.time.LocalDate;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @RestController
 public class SalesV2Controller {
-  private final AtomicInteger seq = new AtomicInteger(1);
-  /** stockage in-memory pour pouvoir récupérer un devis par ID (preview/ouverture) */
-  private final Map<String, QuoteV2Dto> store = new ConcurrentHashMap<>();
 
   @PostMapping("/api/v2/quotes/from-intervention")
   public ResponseEntity<QuoteV2Dto> createFromIntervention(@RequestBody CreateQuoteFromInterventionV2Request body){
@@ -52,17 +46,22 @@ public class SalesV2Controller {
     QuoteV2Dto out = new QuoteV2Dto();
     String id = UUID.randomUUID().toString();
     out.setId(id);
-    out.setReference(String.format("Q%s-%04d", Year.now(), seq.getAndIncrement()));
+    out.setReference(SalesMemoryStore.nextQuoteReference());
     out.setStatus("DRAFT");
+    out.setDate(LocalDate.now());
     out.setTotalHt(total);
     out.setTotalTtc(total); // TVA ignorée en v2 mock
-    store.put(id, out);
+    out.setClientId(itv.getClientId());
+    out.setClientName(itv.getTitle());
+    out.setAgencyId(itv.getAgencyId());
+    out.setSent(Boolean.FALSE);
+    SalesMemoryStore.putQuote(out);
     return ResponseEntity.ok(out);
   }
 
   @GetMapping("/api/v2/quotes/{id}")
   public ResponseEntity<QuoteV2Dto> getById(@PathVariable String id){
-    QuoteV2Dto q = store.get(id);
+    QuoteV2Dto q = SalesMemoryStore.getQuote(id);
     return q == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(q);
   }
 }
