@@ -1,6 +1,7 @@
 package com.materiel.suite.client;
 
 import com.formdev.flatlaf.FlatLightLaf;
+import com.materiel.suite.client.agency.AgencyContext;
 import com.materiel.suite.client.config.AppConfig;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.ui.MainFrame;
@@ -15,6 +16,7 @@ public class Launcher {
       FlatLightLaf.setup();
       AppConfig cfg = AppConfig.load();
       cfg = ModeChoiceDialog.chooseMode(cfg);
+      AgencyContext.loadLocalFallback();
       ServiceFactory.init(cfg);
       LoginDialog.require(null);
       new MainFrame(cfg).setVisible(true);

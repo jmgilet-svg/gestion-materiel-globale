@@ -1,5 +1,6 @@
 package com.materiel.suite.client.ui.interventions;
 
+import com.materiel.suite.client.agency.AgencyContext;
 import com.materiel.suite.client.auth.AccessControl;
 import com.materiel.suite.client.events.AppEventBus;
 import com.materiel.suite.client.events.SettingsEvents;
@@ -912,6 +913,9 @@ public class InterventionDialog extends JDialog {
     DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM HH:mm");
     for (Intervention other : interventions){
       if (other == null){
+        continue;
+      }
+      if (!AgencyContext.matchesCurrentAgency(other)){
         continue;
       }
       if (other.getId() != null && Objects.equals(currentId, other.getId().toString())){
@@ -2257,8 +2261,36 @@ public class InterventionDialog extends JDialog {
     } else {
       current.setSignatureAt(null);
     }
+    applyCurrentAgency(current);
     refreshWorkflowState();
     return current;
+  }
+
+  private void applyCurrentAgency(Intervention intervention){
+    if (intervention == null){
+      return;
+    }
+    String id = AgencyContext.agencyId();
+    String label = AgencyContext.agencyLabel();
+    if (label != null && !label.isBlank()){
+      intervention.setAgency(label);
+    } else if (id != null && !id.isBlank()){
+      intervention.setAgency(id);
+    }
+    if (id != null && !id.isBlank()){
+      invokeAgencySetter(intervention, "setAgencyId", id);
+      invokeAgencySetter(intervention, "setAgencyCode", id);
+    }
+    if (label != null && !label.isBlank()){
+      invokeAgencySetter(intervention, "setAgencyName", label);
+    }
+  }
+
+  private void invokeAgencySetter(Intervention intervention, String method, String value){
+    try {
+      intervention.getClass().getMethod(method, String.class).invoke(intervention, value);
+    } catch (Exception ignore){
+    }
   }
 
   public boolean isSaved(){

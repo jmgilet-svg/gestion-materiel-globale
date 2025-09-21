@@ -1,5 +1,6 @@
 package com.materiel.suite.client.ui.interventions;
 
+import com.materiel.suite.client.agency.AgencyContext;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.model.ResourceRef;
@@ -495,6 +496,9 @@ public class ResourcePickerPanel extends JPanel {
     if (interventions != null){
       for (Intervention intervention : interventions){
         if (intervention == null){
+          continue;
+        }
+        if (!AgencyContext.matchesCurrentAgency(intervention)){
           continue;
         }
         if (currentId != null && currentId.equals(intervention.getId())){

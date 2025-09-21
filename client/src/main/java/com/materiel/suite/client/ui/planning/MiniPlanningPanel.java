@@ -1,5 +1,6 @@
 package com.materiel.suite.client.ui.planning;
 
+import com.materiel.suite.client.agency.AgencyContext;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.service.PlanningService;
 
@@ -62,9 +63,10 @@ public class MiniPlanningPanel extends JPanel {
     try {
       List<Intervention> interventions = planningService.listInterventions(referenceDay, referenceDay);
       if (interventions != null){
-        interventions.sort(Comparator.comparing(Intervention::getDateHeureDebut,
+        List<Intervention> filtered = filterByAgency(interventions);
+        filtered.sort(Comparator.comparing(Intervention::getDateHeureDebut,
             Comparator.nullsLast(Comparator.naturalOrder())));
-        for (Intervention it : interventions){
+        for (Intervention it : filtered){
           model.addElement(new Entry(formatLine(it), isHighlighted(it)));
         }
       }
@@ -74,6 +76,22 @@ public class MiniPlanningPanel extends JPanel {
     } catch (Exception ex){
       model.addElement(new Entry("Impossible de charger le planning : " + ex.getMessage(), false));
     }
+  }
+
+  private List<Intervention> filterByAgency(List<Intervention> interventions){
+    if (interventions == null || interventions.isEmpty()){
+      return List.of();
+    }
+    List<Intervention> filtered = new ArrayList<>();
+    for (Intervention intervention : interventions){
+      if (intervention == null){
+        continue;
+      }
+      if (AgencyContext.matchesCurrentAgency(intervention)){
+        filtered.add(intervention);
+      }
+    }
+    return filtered.isEmpty() ? List.of() : List.copyOf(filtered);
   }
 
   private boolean isHighlighted(Intervention intervention){

@@ -65,6 +65,7 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
+import com.materiel.suite.client.agency.AgencyContext;
 import com.materiel.suite.client.model.BillingLine;
 import com.materiel.suite.client.model.Conflict;
 import com.materiel.suite.client.model.DocumentLine;
@@ -1397,7 +1398,7 @@ public class PlanningPanel extends JPanel {
     try {
       List<Intervention> fetched = planning.listInterventions(from, to);
       if (fetched != null){
-        list = fetched;
+        list = filterByAgency(fetched);
       }
     } catch (Exception ex){
       success = false;
@@ -1428,6 +1429,22 @@ public class PlanningPanel extends JPanel {
       }
     }
     return sanitized.isEmpty() ? List.of() : List.copyOf(sanitized);
+  }
+
+  private List<Intervention> filterByAgency(List<Intervention> list){
+    if (list == null || list.isEmpty()){
+      return List.of();
+    }
+    List<Intervention> filtered = new ArrayList<>();
+    for (Intervention intervention : list){
+      if (intervention == null){
+        continue;
+      }
+      if (AgencyContext.matchesCurrentAgency(intervention)){
+        filtered.add(intervention);
+      }
+    }
+    return filtered.isEmpty() ? List.of() : List.copyOf(filtered);
   }
 
   private void updateFilteredSimpleViews(){
