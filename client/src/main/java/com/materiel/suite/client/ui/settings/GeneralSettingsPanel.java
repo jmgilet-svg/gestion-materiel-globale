@@ -7,6 +7,7 @@ import com.materiel.suite.client.events.SettingsEvents;
 import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.settings.GeneralSettings;
 import com.materiel.suite.client.ui.common.Toasts;
+import com.materiel.suite.client.ui.theme.ThemeManager;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -24,6 +25,8 @@ public class GeneralSettingsPanel extends JPanel {
   private final JSpinner defaultVatSpinner;
   private final JComboBox<String> roundingModeCombo;
   private final JSpinner roundingScaleSpinner;
+  private final JSpinner uiScaleSpinner;
+  private final JCheckBox highContrastCheck;
   private final JLabel logoPreview;
   private String logoBase64;
   private final JTextField agencyNameField;
@@ -49,6 +52,10 @@ public class GeneralSettingsPanel extends JPanel {
     cgvTextArea = new JTextArea(settings.getCgvText() == null ? "" : settings.getCgvText(), 6, 24);
     cgvTextArea.setLineWrap(true);
     cgvTextArea.setWrapStyleWord(true);
+    int initialScale = Math.max(80, Math.min(130, settings.getUiScalePercent()));
+    uiScaleSpinner = new JSpinner(new SpinnerNumberModel(initialScale, 80, 130, 5));
+    highContrastCheck = new JCheckBox("Contraste élevé (focus renforcé)");
+    highContrastCheck.setSelected(settings.isHighContrast());
 
     JPanel form = new JPanel(new GridBagLayout());
     GridBagConstraints gc = new GridBagConstraints();
@@ -101,6 +108,16 @@ public class GeneralSettingsPanel extends JPanel {
     roundingScaleSpinner = new JSpinner(scaleModel);
     gc.gridx = 1; gc.weightx = 1;
     form.add(roundingScaleSpinner, gc);
+
+    row++;
+    gc.gridx = 0; gc.gridy = row; gc.weightx = 0;
+    form.add(new JLabel("Échelle interface (%)"), gc);
+    gc.gridx = 1; gc.weightx = 1;
+    form.add(uiScaleSpinner, gc);
+
+    row++;
+    gc.gridx = 1; gc.gridy = row; gc.weightx = 1;
+    form.add(highContrastCheck, gc);
 
     row++;
     gc.gridx = 0; gc.gridy = row; gc.weightx = 0;
@@ -164,6 +181,8 @@ public class GeneralSettingsPanel extends JPanel {
     defaultVatSpinner.setEnabled(canEdit);
     roundingModeCombo.setEnabled(canEdit);
     roundingScaleSpinner.setEnabled(canEdit);
+    uiScaleSpinner.setEnabled(canEdit);
+    highContrastCheck.setEnabled(canEdit);
     save.setEnabled(canEdit);
     chooseLogo.setEnabled(canEdit);
     clearLogo.setEnabled(canEdit);
@@ -205,6 +224,8 @@ public class GeneralSettingsPanel extends JPanel {
     int autosave = ((Number) autosaveSpinner.getValue()).intValue();
     double vat = ((Number) defaultVatSpinner.getValue()).doubleValue();
     int scale = ((Number) roundingScaleSpinner.getValue()).intValue();
+    int uiScale = ((Number) uiScaleSpinner.getValue()).intValue();
+    boolean highContrast = highContrastCheck.isSelected();
 
     GeneralSettings updated = new GeneralSettings();
     updated.setSessionTimeoutMinutes(minutes);
@@ -212,6 +233,8 @@ public class GeneralSettingsPanel extends JPanel {
     updated.setDefaultVatPercent(vat);
     updated.setRoundingMode((String) roundingModeCombo.getSelectedItem());
     updated.setRoundingScale(scale);
+    updated.setUiScalePercent(uiScale);
+    updated.setHighContrast(highContrast);
     updated.setAgencyLogoPngBase64(logoBase64);
     updated.setAgencyName(agencyNameField.getText());
     updated.setAgencyPhone(agencyPhoneField.getText());
@@ -227,9 +250,15 @@ public class GeneralSettingsPanel extends JPanel {
       defaultVatSpinner.setValue(updated.getDefaultVatPercent() != null ? updated.getDefaultVatPercent() : 20.0);
       roundingModeCombo.setSelectedItem(updated.getRoundingMode());
       roundingScaleSpinner.setValue(updated.getRoundingScale());
+      uiScaleSpinner.setValue(updated.getUiScalePercent());
+      highContrastCheck.setSelected(updated.isHighContrast());
+      ThemeManager.applyGeneralSettings(updated);
+      ThemeManager.refreshAllFrames();
       AppEventBus.get().publish(new SettingsEvents.GeneralSaved(
           updated.getSessionTimeoutMinutes(),
-          updated.getAutosaveIntervalSeconds()
+          updated.getAutosaveIntervalSeconds(),
+          updated.getUiScalePercent(),
+          updated.isHighContrast()
       ));
       Toasts.success(this, "Paramètres généraux mis à jour");
     } catch (RuntimeException ex){

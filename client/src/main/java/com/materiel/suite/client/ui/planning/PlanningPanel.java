@@ -81,6 +81,7 @@ import com.materiel.suite.client.service.SalesService;
 import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.service.TimelineService;
 import com.materiel.suite.client.settings.EmailSettings;
+import com.materiel.suite.client.ui.common.Accessible;
 import com.materiel.suite.client.ui.common.EmailPreviewDialog;
 import com.materiel.suite.client.ui.common.KeymapUtil;
 import com.materiel.suite.client.ui.common.Toasts;
@@ -115,9 +116,9 @@ public class PlanningPanel extends JPanel {
   private final AgendaBoard agenda = new AgendaBoard();
   private final JButton bulkQuoteBtn = new JButton("Générer devis", IconRegistry.small("file-plus"));
   private final JButton exportIcsBtn = new JButton("Exporter .ics", IconRegistry.small("calendar"));
-  private final JButton exportMissionBtn = new JButton("Ordre de mission (PDF)", IconRegistry.small("file"));
-  private final JButton sendBtn = new JButton("Envoyer aux ressources", IconRegistry.small("info"));
-  private final JButton dispatcherBtn = new JButton("Mode Dispatcher", IconRegistry.small("task"));
+  private final JButton exportMissionBtn = new JButton("Ordre de mission (PDF)", IconRegistry.colored("file"));
+  private final JButton sendBtn = new JButton("Envoyer aux ressources", IconRegistry.colored("info"));
+  private final JButton dispatcherBtn = new JButton("Mode Dispatcher", IconRegistry.colored("task"));
   private final JButton dryRunBtn = new JButton("Prévisualiser", IconRegistry.small("calculator"));
   private final JComboBox<QuoteFilter> quoteFilter = new JComboBox<>(QuoteFilter.values());
   private final JTextField search = new JTextField(18);
@@ -242,6 +243,18 @@ public class PlanningPanel extends JPanel {
     bulkBar.add(dryRunBtn);
     bulkBar.add(bulkQuoteBtn);
     bulkBar.add(exportIcsBtn);
+    exportMissionBtn.setToolTipText("Générer un ordre de mission PDF pour la sélection (P)");
+    sendBtn.setToolTipText("Envoyer les ordres de mission par email aux ressources (M)");
+    dispatcherBtn.setToolTipText("Ouvrir le mode Dispatcher (planification côte à côte)");
+    Accessible.a11y(exportMissionBtn,
+        "Exporter Ordre de Mission PDF",
+        "Génère un ordre de mission PDF pour les interventions sélectionnées.");
+    Accessible.a11y(sendBtn,
+        "Envoyer aux ressources",
+        "Envoie les ordres de mission aux ressources par email.");
+    Accessible.a11y(dispatcherBtn,
+        "Ouvrir le mode Dispatcher",
+        "Affiche le planning en mode Dispatcher pour répartir les ressources.");
     bulkBar.add(exportMissionBtn);
     bulkBar.add(sendBtn);
     bulkBar.add(dispatcherBtn);

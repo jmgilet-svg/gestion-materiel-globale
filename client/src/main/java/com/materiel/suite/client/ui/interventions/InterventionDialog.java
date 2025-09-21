@@ -22,6 +22,7 @@ import com.materiel.suite.client.service.SalesService;
 import com.materiel.suite.client.service.TemplateService;
 import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.settings.GeneralSettings;
+import com.materiel.suite.client.ui.common.Accessible;
 import com.materiel.suite.client.ui.common.KeymapUtil;
 import com.materiel.suite.client.ui.common.OverridableCellRenderers;
 import com.materiel.suite.client.ui.common.ResourceChipsPanel;
@@ -185,7 +186,10 @@ public class InterventionDialog extends JDialog {
     clearSignatureButton.addActionListener(e -> clearSignature());
     fullscreenButton.addActionListener(e -> toggleFullscreen());
     fullscreenButton.setFocusPainted(false);
-    fullscreenButton.setToolTipText("Plein écran");
+    fullscreenButton.setToolTipText("Basculer plein écran (Alt+Entrée)");
+    Accessible.a11y(fullscreenButton,
+        "Basculer plein écran",
+        "Affiche ou quitte le mode plein écran pour la fiche intervention.");
     billingResourceChips.setListener(this::onBillingResourceChip);
     billingResourceChips.setBorder(BorderFactory.createEmptyBorder(4, 0, 4, 0));
     openQuoteButton.setEnabled(false);
@@ -689,6 +693,8 @@ public class InterventionDialog extends JDialog {
 
   private void configureBillingTable(){
     billingTable.setRowHeight(26);
+    billingTable.setShowHorizontalLines(true);
+    billingTable.setGridColor(new Color(0xEEEEEE));
     billingTable.setFillsViewportHeight(true);
     billingTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
     billingTable.setAutoCreateRowSorter(true);

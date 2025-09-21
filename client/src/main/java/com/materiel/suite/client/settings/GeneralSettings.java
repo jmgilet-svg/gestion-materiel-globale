@@ -12,6 +12,10 @@ public class GeneralSettings {
   private String roundingMode = "HALF_UP";
   /** Précision d'arrondi en nombre de décimales. */
   private int roundingScale = 2;
+  /** Échelle d'interface (en %) comprise entre 80 et 130. */
+  private int uiScalePercent = 100;
+  /** Active un contraste renforcé (focus et couleurs plus marqués). */
+  private boolean highContrast;
   /** PNG encodé en Base64 (optionnel) utilisé en en-tête PDF (logo d’agence). */
   private String agencyLogoPngBase64;
   private String agencyName;
@@ -89,6 +93,23 @@ public class GeneralSettings {
     } else {
       roundingScale = scale;
     }
+  }
+
+  public int getUiScalePercent(){
+    return uiScalePercent;
+  }
+
+  public void setUiScalePercent(int percent){
+    int sanitized = Math.max(80, Math.min(130, percent));
+    uiScalePercent = sanitized;
+  }
+
+  public boolean isHighContrast(){
+    return highContrast;
+  }
+
+  public void setHighContrast(boolean highContrast){
+    this.highContrast = highContrast;
   }
 
   public String getAgencyLogoPngBase64(){
