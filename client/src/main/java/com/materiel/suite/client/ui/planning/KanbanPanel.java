@@ -3,6 +3,7 @@ package com.materiel.suite.client.ui.planning;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.ui.common.EmptyState;
 import com.materiel.suite.client.ui.common.Toasts;
+import com.materiel.suite.client.security.Security;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -45,7 +46,7 @@ public class KanbanPanel extends JPanel {
     default void onStatusChanged(Intervention intervention){}
   }
 
-  private enum Stage {
+  public enum Stage {
     TODO("À planifier"),
     TO_QUOTE("À deviser"),
     QUOTED("Devisé"),
@@ -322,6 +323,14 @@ public class KanbanPanel extends JPanel {
     render();
   }
 
+  private void denyDropFeedback(Stage target){
+    if (target == Stage.INVOICED){
+      Toasts.error(this, "Droit insuffisant : seuls ADMIN/SALES peuvent passer en \"Facturé\".");
+    } else {
+      Toasts.error(this, "Action non autorisée.");
+    }
+  }
+
   private static DataFlavor createFlavor(){
     try {
       return new DataFlavor(DataFlavor.javaJVMLocalObjectMimeType + ";class=" + KanbanTransferData.class.getName());
@@ -519,7 +528,14 @@ public class KanbanPanel extends JPanel {
     }
 
     private void updateHeader(){
-      header.setText(stage.label + " · " + cardCount);
+      String text = stage.label + " · " + cardCount;
+      if (stage == Stage.INVOICED && !Security.canDropTo(stage)){
+        text += "  🔒";
+        header.setToolTipText("Accès restreint : seuls ADMIN/SALES peuvent marquer \"Facturé\".");
+      } else {
+        header.setToolTipText(null);
+      }
+      header.setText(text);
     }
   }
 
@@ -531,11 +547,25 @@ public class KanbanPanel extends JPanel {
     }
 
     @Override public boolean canImport(TransferSupport support){
-      return support.isDataFlavorSupported(KANBAN_FLAVOR);
+      if (!support.isDataFlavorSupported(KANBAN_FLAVOR)){
+        return false;
+      }
+      if (!Security.canDropTo(targetStage)){
+        support.setShowDropLocation(false);
+        return false;
+      }
+      return true;
     }
 
     @Override public boolean importData(TransferSupport support){
-      if (!canImport(support)){
+      if (!support.isDrop()){
+        return false;
+      }
+      if (!Security.canDropTo(targetStage)){
+        denyDropFeedback(targetStage);
+        return false;
+      }
+      if (!support.isDataFlavorSupported(KANBAN_FLAVOR)){
         return false;
       }
       try {
