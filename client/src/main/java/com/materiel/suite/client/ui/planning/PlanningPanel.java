@@ -92,6 +92,7 @@ import com.materiel.suite.client.ui.icons.IconRegistry;
 import com.materiel.suite.client.ui.interventions.InterventionDialog;
 import com.materiel.suite.client.ui.interventions.PreDevisUtil;
 import com.materiel.suite.client.ui.interventions.QuoteGenerator;
+import com.materiel.suite.client.ui.theme.ThemeManager;
 import com.materiel.suite.client.util.MailSender;
 import org.apache.commons.text.StringEscapeUtils;
 
@@ -287,6 +288,15 @@ public class PlanningPanel extends JPanel {
   private JComponent buildToolbar(){
     JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT));
     bar.setBorder(new EmptyBorder(6,6,6,6));
+    try {
+      var settings = ServiceLocator.settings().getGeneral();
+      Color accent = ThemeManager.parseColorSafe(settings != null ? settings.getBrandSecondaryHex() : null, new Color(0xF4511E));
+      Color background = ThemeManager.lighten(accent, 0.9f);
+      if (background != null){
+        bar.setBackground(background);
+      }
+    } catch (RuntimeException ignore){
+    }
     JButton prev = new JButton("◀ Semaine");
     JButton next = new JButton("Semaine ▶");
     JButton today = new JButton("Aujourd'hui");

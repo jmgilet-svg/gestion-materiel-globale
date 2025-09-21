@@ -7,6 +7,7 @@ import com.materiel.suite.client.events.SettingsEvents;
 import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.settings.GeneralSettings;
 import com.materiel.suite.client.ui.common.Toasts;
+import com.materiel.suite.client.ui.theme.ThemeIO;
 import com.materiel.suite.client.ui.theme.ThemeManager;
 
 import javax.imageio.ImageIO;
@@ -29,6 +30,8 @@ public class GeneralSettingsPanel extends JPanel {
   private final JCheckBox highContrastCheck;
   private final JCheckBox dyslexiaCheck;
   private final JTextField brandPrimaryField;
+  private final JTextField brandSecondaryField;
+  private final JSpinner fontExtraSpinner;
   private final JLabel logoPreview;
   private String logoBase64;
   private final JTextField agencyNameField;
@@ -62,6 +65,10 @@ public class GeneralSettingsPanel extends JPanel {
     dyslexiaCheck.setSelected(settings.isDyslexiaMode());
     brandPrimaryField = new JTextField(settings.getBrandPrimaryHex() == null ? "" : settings.getBrandPrimaryHex(), 9);
     brandPrimaryField.setColumns(9);
+    brandSecondaryField = new JTextField(settings.getBrandSecondaryHex() == null ? "" : settings.getBrandSecondaryHex(), 9);
+    brandSecondaryField.setColumns(9);
+    int initialExtra = Math.max(0, Math.min(4, settings.getFontExtraPoints()));
+    fontExtraSpinner = new JSpinner(new SpinnerNumberModel(initialExtra, 0, 4, 1));
 
     JPanel form = new JPanel(new GridBagLayout());
     GridBagConstraints gc = new GridBagConstraints();
@@ -137,6 +144,29 @@ public class GeneralSettingsPanel extends JPanel {
 
     row++;
     gc.gridx = 0; gc.gridy = row; gc.weightx = 0;
+    form.add(new JLabel("Couleur secondaire (accent)"), gc);
+    gc.gridx = 1; gc.weightx = 1;
+    form.add(brandSecondaryField, gc);
+
+    row++;
+    gc.gridx = 0; gc.gridy = row; gc.weightx = 0;
+    form.add(new JLabel("Police supplémentaire (+pt)"), gc);
+    gc.gridx = 1; gc.weightx = 1;
+    form.add(fontExtraSpinner, gc);
+
+    row++;
+    gc.gridx = 0; gc.gridy = row; gc.weightx = 0;
+    form.add(new JLabel("Thème UI"), gc);
+    JPanel themeButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+    JButton exportThemeBtn = new JButton("Exporter thème…");
+    JButton importThemeBtn = new JButton("Importer thème…");
+    themeButtons.add(exportThemeBtn);
+    themeButtons.add(importThemeBtn);
+    gc.gridx = 1; gc.weightx = 1;
+    form.add(themeButtons, gc);
+
+    row++;
+    gc.gridx = 0; gc.gridy = row; gc.weightx = 0;
     form.add(new JLabel("Logo d'agence (PNG)"), gc);
     JPanel logoRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
     JButton chooseLogo = new JButton("Choisir…");
@@ -201,6 +231,8 @@ public class GeneralSettingsPanel extends JPanel {
     highContrastCheck.setEnabled(canEdit);
     dyslexiaCheck.setEnabled(canEdit);
     brandPrimaryField.setEnabled(canEdit);
+    brandSecondaryField.setEnabled(canEdit);
+    fontExtraSpinner.setEnabled(canEdit);
     save.setEnabled(canEdit);
     chooseLogo.setEnabled(canEdit);
     clearLogo.setEnabled(canEdit);
@@ -212,6 +244,7 @@ public class GeneralSettingsPanel extends JPanel {
     clearCgvPdf.setEnabled(canEdit);
     cgvTextArea.setEnabled(canEdit);
     cgvTextArea.setEditable(canEdit);
+    importThemeBtn.setEnabled(canEdit);
 
     JPanel south = new JPanel(new FlowLayout(FlowLayout.RIGHT));
     south.add(save);
@@ -224,6 +257,8 @@ public class GeneralSettingsPanel extends JPanel {
     clearLogo.addActionListener(e -> clearLogo());
     chooseCgvPdf.addActionListener(e -> chooseCgvPdf());
     clearCgvPdf.addActionListener(e -> clearCgvPdf());
+    exportThemeBtn.addActionListener(e -> exportTheme());
+    importThemeBtn.addActionListener(e -> importTheme());
   }
 
   private GeneralSettings loadSettings(){
@@ -246,6 +281,8 @@ public class GeneralSettingsPanel extends JPanel {
     boolean highContrast = highContrastCheck.isSelected();
     boolean dyslexia = dyslexiaCheck.isSelected();
     String brandPrimary = brandPrimaryField.getText();
+    String brandSecondary = brandSecondaryField.getText();
+    int extraPoints = ((Number) fontExtraSpinner.getValue()).intValue();
 
     GeneralSettings updated = new GeneralSettings();
     updated.setSessionTimeoutMinutes(minutes);
@@ -257,6 +294,8 @@ public class GeneralSettingsPanel extends JPanel {
     updated.setHighContrast(highContrast);
     updated.setDyslexiaMode(dyslexia);
     updated.setBrandPrimaryHex(brandPrimary);
+    updated.setBrandSecondaryHex(brandSecondary);
+    updated.setFontExtraPoints(extraPoints);
     updated.setAgencyLogoPngBase64(logoBase64);
     updated.setAgencyName(agencyNameField.getText());
     updated.setAgencyPhone(agencyPhoneField.getText());
@@ -276,6 +315,8 @@ public class GeneralSettingsPanel extends JPanel {
       highContrastCheck.setSelected(updated.isHighContrast());
       dyslexiaCheck.setSelected(updated.isDyslexiaMode());
       brandPrimaryField.setText(updated.getBrandPrimaryHex());
+      brandSecondaryField.setText(updated.getBrandSecondaryHex());
+      fontExtraSpinner.setValue(updated.getFontExtraPoints());
       ThemeManager.applyGeneralSettings(updated);
       ThemeManager.refreshAllFrames();
       AppEventBus.get().publish(new SettingsEvents.GeneralSaved(
@@ -289,6 +330,95 @@ public class GeneralSettingsPanel extends JPanel {
       Toasts.success(this, "Paramètres généraux mis à jour");
     } catch (RuntimeException ex){
       Toasts.error(this, "Échec de l'enregistrement des paramètres");
+    }
+  }
+
+  private void applyThemeSettings(GeneralSettings settings){
+    if (settings == null){
+      return;
+    }
+    double vatValue = settings.getDefaultVatPercent() != null ? settings.getDefaultVatPercent() : 20.0;
+    defaultVatSpinner.setValue(vatValue);
+    roundingModeCombo.setSelectedItem(settings.getRoundingMode());
+    roundingScaleSpinner.setValue(settings.getRoundingScale());
+    uiScaleSpinner.setValue(settings.getUiScalePercent());
+    highContrastCheck.setSelected(settings.isHighContrast());
+    dyslexiaCheck.setSelected(settings.isDyslexiaMode());
+    brandPrimaryField.setText(settings.getBrandPrimaryHex());
+    brandSecondaryField.setText(settings.getBrandSecondaryHex());
+    fontExtraSpinner.setValue(settings.getFontExtraPoints());
+  }
+
+  private void exportTheme(){
+    JFileChooser chooser = new JFileChooser();
+    chooser.setDialogTitle("Exporter le thème");
+    int result = chooser.showSaveDialog(this);
+    if (result != JFileChooser.APPROVE_OPTION){
+      return;
+    }
+    File file = chooser.getSelectedFile();
+    if (file == null){
+      return;
+    }
+    try {
+      GeneralSettings settings = ServiceLocator.settings().getGeneral();
+      ThemeIO.exportTheme(file, settings);
+      Toasts.success(this, "Thème exporté");
+    } catch (Exception ex){
+      JOptionPane.showMessageDialog(
+          this,
+          "Impossible d'exporter le thème : " + ex.getMessage(),
+          "Thème UI",
+          JOptionPane.ERROR_MESSAGE
+      );
+    }
+  }
+
+  private void importTheme(){
+    JFileChooser chooser = new JFileChooser();
+    chooser.setDialogTitle("Importer un thème");
+    int result = chooser.showOpenDialog(this);
+    if (result != JFileChooser.APPROVE_OPTION){
+      return;
+    }
+    File file = chooser.getSelectedFile();
+    if (file == null){
+      return;
+    }
+    try {
+      GeneralSettings imported = ThemeIO.importTheme(file);
+      GeneralSettings current = loadSettings();
+      GeneralSettings merged = current != null ? current : new GeneralSettings();
+      merged.setUiScalePercent(imported.getUiScalePercent());
+      merged.setHighContrast(imported.isHighContrast());
+      merged.setDyslexiaMode(imported.isDyslexiaMode());
+      merged.setFontExtraPoints(imported.getFontExtraPoints());
+      merged.setBrandPrimaryHex(imported.getBrandPrimaryHex());
+      merged.setBrandSecondaryHex(imported.getBrandSecondaryHex());
+      merged.setDefaultVatPercent(imported.getDefaultVatPercent());
+      merged.setRoundingMode(imported.getRoundingMode());
+      merged.setRoundingScale(imported.getRoundingScale());
+      ServiceLocator.settings().saveGeneral(merged);
+      SessionManager.setTimeoutMinutes(merged.getSessionTimeoutMinutes());
+      applyThemeSettings(merged);
+      ThemeManager.applyGeneralSettings(merged);
+      ThemeManager.refreshAllFrames();
+      AppEventBus.get().publish(new SettingsEvents.GeneralSaved(
+          merged.getSessionTimeoutMinutes(),
+          merged.getAutosaveIntervalSeconds(),
+          merged.getUiScalePercent(),
+          merged.isHighContrast(),
+          merged.isDyslexiaMode(),
+          merged.getBrandPrimaryHex()
+      ));
+      Toasts.success(this, "Thème importé et appliqué");
+    } catch (Exception ex){
+      JOptionPane.showMessageDialog(
+          this,
+          "Impossible d'importer le thème : " + ex.getMessage(),
+          "Thème UI",
+          JOptionPane.ERROR_MESSAGE
+      );
     }
   }
 

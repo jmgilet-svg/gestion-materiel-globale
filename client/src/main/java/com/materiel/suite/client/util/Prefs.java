@@ -138,6 +138,35 @@ public final class Prefs {
     }
   }
 
+  public static String getUiBrandSecondaryHex(){
+    String stored = readTrimmed("ui.brand.secondary.hex");
+    return stored != null ? stored : GeneralSettings.DEFAULT_BRAND_SECONDARY_HEX;
+  }
+
+  public static void setUiBrandSecondaryHex(String value){
+    if (value == null || value.isBlank()){
+      prefs().remove("ui.brand.secondary.hex");
+    } else {
+      prefs().put("ui.brand.secondary.hex", value.trim());
+    }
+  }
+
+  public static int getUiFontExtraPoints(){
+    int stored = readInt("ui.font.extra.points", 0);
+    if (stored < 0){
+      return 0;
+    }
+    if (stored > 4){
+      return 4;
+    }
+    return stored;
+  }
+
+  public static void setUiFontExtraPoints(int value){
+    int sanitized = Math.max(0, Math.min(value, 4));
+    prefs().putInt("ui.font.extra.points", sanitized);
+  }
+
   public static String getAgencyLogoPngBase64(){
     return readTrimmed("agency.logo.png.base64");
   }
