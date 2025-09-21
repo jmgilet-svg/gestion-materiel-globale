@@ -1,5 +1,7 @@
 package com.materiel.suite.client.net;
 
+import com.materiel.suite.client.agency.AgencyHttp;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -62,9 +64,11 @@ public class RestClient {
 	private String request(String method, String path, String json, Map<String, String> headers)
 			throws IOException, InterruptedException {
 
-		final HttpRequest.Builder b = HttpRequest.newBuilder()
-				.uri(URI.create(baseUrl + path))
-				.header("Accept", "application/json");
+                final HttpRequest.Builder b = HttpRequest.newBuilder()
+                                .uri(URI.create(baseUrl + path))
+                                .header("Accept", "application/json");
+
+                AgencyHttp.apply(b);
 
 		switch (method) {
 		case "GET"     -> b.GET();

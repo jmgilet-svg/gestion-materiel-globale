@@ -68,6 +68,7 @@ public class ApiPlanningService implements PlanningService {
       m.put("color", r.getColor());
       m.put("notes", r.getNotes());
       m.put("email", r.getEmail());
+      m.put("agencyId", r.getAgencyId());
       // === CRM-INJECT BEGIN: resource-api-write ===
       m.put("capacity", r.getCapacity());
       m.put("tags", r.getTags());
@@ -304,6 +305,7 @@ public class ApiPlanningService implements PlanningService {
     }
     // === CRM-INJECT BEGIN: planning-api-client-id ===
     m.put("clientId", it.getClientId()!=null? it.getClientId().toString() : null);
+    m.put("agencyId", it.getAgencyId());
     // === CRM-INJECT END ===
     m.put("label", it.getLabel());
     m.put("color", it.getColor());
@@ -365,6 +367,10 @@ public class ApiPlanningService implements PlanningService {
     if (cid!=null && !cid.isBlank()) it.setClientId(UUID.fromString(cid));
     String cname = SimpleJson.str(m.get("clientName"));
     if (cname!=null) it.setClientName(cname);
+    String agencyId = SimpleJson.str(m.get("agencyId"));
+    if (agencyId!=null) it.setAgencyId(agencyId);
+    String agencyLabel = SimpleJson.str(m.get("agency"));
+    if (agencyLabel!=null) it.setAgency(agencyLabel);
     // === CRM-INJECT END ===
     it.setLabel(SimpleJson.str(m.get("label")));
     it.setColor(SimpleJson.str(m.get("color")));
@@ -522,6 +528,7 @@ public class ApiPlanningService implements PlanningService {
     target.setNotes(SimpleJson.str(data.get("notes")));
     target.setState(SimpleJson.str(data.get("state")));
     target.setEmail(SimpleJson.str(data.get("email")));
+    target.setAgencyId(SimpleJson.str(data.get("agencyId")));
     // === CRM-INJECT BEGIN: resource-api-fill ===
     Object cap = data.get("capacity");
     if (cap instanceof Number n){

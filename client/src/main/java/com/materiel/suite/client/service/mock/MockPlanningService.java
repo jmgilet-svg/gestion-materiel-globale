@@ -30,6 +30,7 @@ public class MockPlanningService implements PlanningService {
   private static final String[] RESOURCE_COLORS = { "#5E81AC", "#A3BE8C", "#EBCB8B", "#D08770", "#88C0D0", "#B48EAD", "#BF616A" };
   private static final String[] INTERVENTION_STATUSES = { "PLANNED", "CONFIRMED", "TENTATIVE", "DONE" };
   private static final String[] INTERVENTION_AGENCIES = { "Agence Lyon", "Agence Paris" };
+  private static final String[] INTERVENTION_AGENCY_IDS = { "A1", "A2" };
   private static final String[] CLIENT_NAMES = { "Durand BTP", "MontBlanc Levage", "Atelier Urbain", "Sogena Logistique", "Structura", "BTP Horizon", "EuroChantier" };
   private static final String[] SITE_KINDS = { "Chantier", "Zone logistique", "Usine", "Site portuaire", "Parc expo", "Plateforme" };
   private static final String[] CITY_NAMES = { "Lyon", "Villeurbanne", "Grenoble", "Saint-Étienne", "Valence", "Chambéry", "Dijon", "Annecy" };
@@ -115,6 +116,9 @@ public class MockPlanningService implements PlanningService {
     resource.setWeeklyUnavailability(weeklyPattern(rnd));
     resource.setColor(RESOURCE_COLORS[globalIndex % RESOURCE_COLORS.length]);
     resource.setEmail(emailFor(resource));
+    if (INTERVENTION_AGENCY_IDS.length > 0){
+      resource.setAgencyId(INTERVENTION_AGENCY_IDS[globalIndex % INTERVENTION_AGENCY_IDS.length]);
+    }
     if (rnd.nextInt(4) == 0){
       LocalDate lastCheck = LocalDate.now().minusDays(rnd.nextInt(180));
       resource.setNotes("Dernier contrôle: " + lastCheck);
@@ -276,7 +280,11 @@ public class MockPlanningService implements PlanningService {
     intervention.setClientName(client);
     intervention.setSiteLabel(site);
     intervention.setAddress(sampleAddress(rnd, city));
-    intervention.setAgency(INTERVENTION_AGENCIES[rnd.nextInt(INTERVENTION_AGENCIES.length)]);
+    int agencyIndex = rnd.nextInt(INTERVENTION_AGENCIES.length);
+    intervention.setAgency(INTERVENTION_AGENCIES[agencyIndex]);
+    if (INTERVENTION_AGENCY_IDS.length > 0){
+      intervention.setAgencyId(INTERVENTION_AGENCY_IDS[agencyIndex % INTERVENTION_AGENCY_IDS.length]);
+    }
     String status = INTERVENTION_STATUSES[rnd.nextInt(INTERVENTION_STATUSES.length)];
     intervention.setStatus(status);
     intervention.setDescription("Opération " + type.getLabel() + " pour " + client + ".");

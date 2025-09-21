@@ -12,6 +12,7 @@ public class Client {
   private String billingAddress;
   private String shippingAddress;
   private String notes;
+  private String agencyId;
 
   public UUID getId(){ return id; }
   public void setId(UUID id){ this.id=id; }
@@ -31,6 +32,8 @@ public class Client {
   public void setShippingAddress(String a){ this.shippingAddress=a; }
   public String getNotes(){ return notes; }
   public void setNotes(String notes){ this.notes=notes; }
+  public String getAgencyId(){ return agencyId; }
+  public void setAgencyId(String agencyId){ this.agencyId = agencyId; }
   @Override public String toString(){ return name; }
 }
 

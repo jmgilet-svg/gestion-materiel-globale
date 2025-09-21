@@ -48,6 +48,7 @@ public class MockClientService implements ClientService {
       "Martin", "Bernard", "Thomas", "Petit", "Robert", "Richard", "Durand", "Dubois", "Moreau", "Laurent",
       "Simon", "Michel", "Lefebvre", "Leroy", "Roux", "David", "Bertrand", "Morel", "Fournier", "Girard"
   };
+  private static final String[] AGENCY_IDS = { "A1", "A2" };
 
   private final Map<UUID, Client> clients = new ConcurrentHashMap<>();
   private final Map<UUID, Map<UUID, Contact>> contacts = new ConcurrentHashMap<>();
@@ -126,6 +127,9 @@ public class MockClientService implements ClientService {
       client.setBillingAddress(address);
       client.setShippingAddress(address);
       client.setNotes(pick(rnd, COMPANY_NOTES));
+      if (AGENCY_IDS.length > 0){
+        client.setAgencyId(AGENCY_IDS[i % AGENCY_IDS.length]);
+      }
       clients.put(client.getId(), client);
 
       Map<UUID, Contact> map = ctMap(client.getId());

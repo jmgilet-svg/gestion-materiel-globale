@@ -14,6 +14,7 @@ public class Resource {
   private String notes;
   private String state;
   private String email;
+  private String agencyId;
   private final List<Unavailability> unavailabilities = new ArrayList<>();
   // === CRM-INJECT BEGIN: resource-advanced-fields ===
   private Integer capacity = 1;
@@ -39,6 +40,8 @@ public class Resource {
   public void setState(String state){ this.state=state; }
   public String getEmail(){ return email; }
   public void setEmail(String email){ this.email=email; }
+  public String getAgencyId(){ return agencyId; }
+  public void setAgencyId(String agencyId){ this.agencyId = agencyId; }
   public List<Unavailability> getUnavailabilities(){ return unavailabilities; }
   public void setUnavailabilities(List<Unavailability> list){
     unavailabilities.clear();
