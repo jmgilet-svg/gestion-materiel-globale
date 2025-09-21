@@ -25,6 +25,7 @@ public class ServiceFactory {
   private static TimelineService timelineService;
   private static AuthService authService;
   private static UserService userService;
+  private static MailService mailService;
 
   public static void init(AppConfig c) {
     cfg = c;
@@ -34,6 +35,7 @@ public class ServiceFactory {
     templateService = null;
     salesService = null;
     timelineService = null;
+    mailService = null;
     switch (cfg.getMode()) {
       case "mock" -> initMock();
       case "backend" -> initBackend();
@@ -56,6 +58,7 @@ public class ServiceFactory {
     resourceTypeService = new MockResourceTypeService();
     templateService = new MockTemplateService();
     timelineService = new MockTimelineService();
+    mailService = new MockMailService();
     MockUserService mockUsers = new MockUserService();
     userService = mockUsers;
     authService = new MockAuthService(mockUsers);
@@ -79,6 +82,7 @@ public class ServiceFactory {
     resourceTypeService = new ApiResourceTypeService(rc, new MockResourceTypeService());
     templateService = new ApiTemplateService(rc, new MockTemplateService());
     timelineService = new ApiTimelineService(rc, new MockTimelineService());
+    mailService = new ApiMailService(rc, new MockMailService());
     MockUserService mockUsers = new MockUserService();
     userService = new ApiUserService(rc, mockUsers);
     authService = new ApiAuthService(rc, new MockAuthService(mockUsers));
@@ -96,6 +100,7 @@ public class ServiceFactory {
   public static ResourceTypeService resourceTypes(){ return resourceTypeService; }
   public static TemplateService templates(){ return templateService; }
   public static TimelineService timeline(){ return timelineService; }
+  public static MailService mail(){ return mailService; }
   public static RestClient http(){ return restClient; }
   public static AuthService auth(){ return authService; }
   public static UserService users(){ return userService; }
