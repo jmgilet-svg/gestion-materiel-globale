@@ -20,6 +20,7 @@ final class ApiSupport {
     q.setId(parseUUID(m.get("id")));
     q.setNumber(SimpleJson.str(m.get("number")));
     q.setCustomerName(SimpleJson.str(m.get("customerName")));
+    setAgency(q, m);
     // === CRM-INJECT BEGIN: quote-client-mapping ===
     q.setClientId(parseUUID(m.get("clientId")));
     q.setContactId(parseUUID(m.get("contactId")));
@@ -44,6 +45,7 @@ final class ApiSupport {
     o.setId(parseUUID(m.get("id")));
     setIfPresent(o, "setNumber", m.get("number"));
     setIfPresent(o, "setCustomerName", m.get("customerName"));
+    setAgency(o, m);
     // === CRM-INJECT BEGIN: order-client-mapping ===
     setIfPresent(o, "setClientId", parseUUID(m.get("clientId")));
     setIfPresent(o, "setContactId", parseUUID(m.get("contactId")));
@@ -61,6 +63,7 @@ final class ApiSupport {
     d.setId(parseUUID(m.get("id")));
     setIfPresent(d, "setNumber", m.get("number"));
     setIfPresent(d, "setCustomerName", m.get("customerName"));
+    setAgency(d, m);
     // === CRM-INJECT BEGIN: delivery-client-mapping ===
     setIfPresent(d, "setClientId", parseUUID(m.get("clientId")));
     setIfPresent(d, "setContactId", parseUUID(m.get("contactId")));
@@ -78,6 +81,7 @@ final class ApiSupport {
     i.setId(parseUUID(m.get("id")));
     setIfPresent(i, "setNumber", m.get("number"));
     setIfPresent(i, "setCustomerName", m.get("customerName"));
+    setAgency(i, m);
     // === CRM-INJECT BEGIN: invoice-client-mapping ===
     setIfPresent(i, "setClientId", parseUUID(m.get("clientId")));
     setIfPresent(i, "setContactId", parseUUID(m.get("contactId")));
@@ -130,6 +134,7 @@ final class ApiSupport {
     sb.append("{");
     field(sb,"id", q.getId()==null? null : q.getId().toString()); comma(sb);
     field(sb,"number", q.getNumber()); comma(sb);
+    field(sb,"agencyId", readString(q,"getAgencyId","getAgency","getAgencyCode")); comma(sb);
     // === CRM-INJECT BEGIN: quote-client-json ===
     field(sb,"clientId", q.getClientId()==null? null : q.getClientId().toString()); comma(sb);
     field(sb,"contactId", q.getContactId()==null? null : q.getContactId().toString()); comma(sb);
@@ -152,6 +157,7 @@ final class ApiSupport {
     sb.append("{");
     field(sb,"id", o.getId()==null? null : o.getId().toString()); comma(sb);
     field(sb,"number", o.getNumber()); comma(sb);
+    field(sb,"agencyId", readString(o,"getAgencyId","getAgency","getAgencyCode")); comma(sb);
     // === CRM-INJECT BEGIN: order-client-json ===
     field(sb,"clientId", o.getClientId()==null? null : o.getClientId().toString()); comma(sb);
     field(sb,"contactId", o.getContactId()==null? null : o.getContactId().toString()); comma(sb);
@@ -172,6 +178,7 @@ final class ApiSupport {
     sb.append("{");
     field(sb,"id", d.getId()==null? null : d.getId().toString()); comma(sb);
     field(sb,"number", d.getNumber()); comma(sb);
+    field(sb,"agencyId", readString(d,"getAgencyId","getAgency","getAgencyCode")); comma(sb);
     // === CRM-INJECT BEGIN: delivery-client-json ===
     field(sb,"clientId", d.getClientId()==null? null : d.getClientId().toString()); comma(sb);
     field(sb,"contactId", d.getContactId()==null? null : d.getContactId().toString()); comma(sb);
@@ -192,6 +199,7 @@ final class ApiSupport {
     sb.append("{");
     field(sb,"id", i.getId()==null? null : i.getId().toString()); comma(sb);
     field(sb,"number", i.getNumber()); comma(sb);
+    field(sb,"agencyId", readString(i,"getAgencyId","getAgency","getAgencyCode")); comma(sb);
     // === CRM-INJECT BEGIN: invoice-client-json ===
     field(sb,"clientId", i.getClientId()==null? null : i.getClientId().toString()); comma(sb);
     field(sb,"contactId", i.getContactId()==null? null : i.getContactId().toString()); comma(sb);
@@ -231,6 +239,32 @@ final class ApiSupport {
   }
 
   /* ================= helpers ================= */
+  private static void setAgency(Object target, Map<String,Object> data){
+    if (target == null || data == null){
+      return;
+    }
+    Object value = firstNonBlank(data.get("agencyId"), data.get("agency"), data.get("agencyCode"));
+    if (value != null){
+      setIfPresent(target, "setAgencyId", value);
+    }
+  }
+
+  private static Object firstNonBlank(Object... values){
+    if (values == null){
+      return null;
+    }
+    for (Object value : values){
+      if (value == null){
+        continue;
+      }
+      if (value instanceof CharSequence sequence && sequence.toString().isBlank()){
+        continue;
+      }
+      return value;
+    }
+    return null;
+  }
+
   private static void field(StringBuilder sb, String k, String v){
     sb.append("\"").append(k).append("\":");
     if (v==null) sb.append("null");

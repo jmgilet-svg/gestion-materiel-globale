@@ -12,6 +12,7 @@ public final class MockData {
   public static final List<Order> ORDERS = new ArrayList<>();
   public static final List<DeliveryNote> DELIVERY_NOTES = new ArrayList<>();
   public static final List<Invoice> INVOICES = new ArrayList<>();
+  private static final String[] AGENCY_IDS = { "A1", "A2" };
   private static final AtomicInteger seqQuote = new AtomicInteger(1);
   private static final AtomicInteger seqOrder = new AtomicInteger(1);
   private static final AtomicInteger seqDN = new AtomicInteger(1);
@@ -20,12 +21,14 @@ public final class MockData {
   public static void seedIfEmpty(){
     if (!QUOTES.isEmpty()) return;
     var q1 = new Quote(UUID.randomUUID(), nextNumber("DEV", seqQuote), LocalDate.now().minusDays(2), "Société Alpha", "Brouillon");
+    q1.setAgencyId(AGENCY_IDS.length > 0 ? AGENCY_IDS[0] : null);
     q1.getLines().add(new DocumentLine("Location grue", 1, "j", 520, 0, 20));
     q1.getLines().add(new DocumentLine("Transport", 1, "forfait", 120, 0, 20));
     q1.recomputeTotals();
     QUOTES.add(q1);
 
     var q2 = new Quote(UUID.randomUUID(), nextNumber("DEV", seqQuote), LocalDate.now().minusDays(1), "BTP Béton", "Envoyé");
+    q2.setAgencyId(AGENCY_IDS.length > 1 ? AGENCY_IDS[1] : (AGENCY_IDS.length > 0 ? AGENCY_IDS[0] : null));
     q2.getLines().add(new DocumentLine("Levage charpente", 1, "forfait", 1800, 5, 20));
     q2.recomputeTotals();
     QUOTES.add(q2);
@@ -72,6 +75,7 @@ public final class MockData {
     o.setNumber(nextNumber("CMD", seqOrder));
     o.setDate(LocalDate.now());
     o.setCustomerName(q.getCustomerName());
+    o.setAgencyId(q.getAgencyId());
     // === CRM-INJECT BEGIN: order-from-quote-client ===
     o.setClientId(q.getClientId());
     o.setContactId(q.getContactId());
@@ -87,6 +91,7 @@ public final class MockData {
     d.setNumber(nextNumber("BL", seqDN));
     d.setDate(LocalDate.now());
     d.setCustomerName(o.getCustomerName());
+    d.setAgencyId(o.getAgencyId());
     // === CRM-INJECT BEGIN: delivery-from-order-client ===
     d.setClientId(o.getClientId());
     d.setContactId(o.getContactId());
@@ -102,6 +107,7 @@ public final class MockData {
     i.setNumber(nextNumber("FAC", seqInv));
     i.setDate(LocalDate.now());
     i.setCustomerName(q.getCustomerName());
+    i.setAgencyId(q.getAgencyId());
     // === CRM-INJECT BEGIN: invoice-from-quote-client ===
     i.setClientId(q.getClientId());
     i.setContactId(q.getContactId());
@@ -117,6 +123,9 @@ public final class MockData {
     i.setNumber(nextNumber("FAC", seqInv));
     i.setDate(LocalDate.now());
     i.setCustomerName(dns.isEmpty() ? "" : dns.get(0).getCustomerName());
+    if (!dns.isEmpty()){
+      i.setAgencyId(dns.get(0).getAgencyId());
+    }
     // === CRM-INJECT BEGIN: invoice-from-dn-client ===
     if (!dns.isEmpty()) {
       i.setClientId(dns.get(0).getClientId());

@@ -11,6 +11,7 @@ public class DeliveryNote {
   private LocalDate date;
   private String customerName;
   private String status; // Brouillon, Signé, Verrouillé
+  private String agencyId;
   private List<DocumentLine> lines = new ArrayList<>();
   private DocumentTotals totals = new DocumentTotals();
   // === CRM-INJECT BEGIN: delivery-client-link ===
@@ -27,6 +28,8 @@ public class DeliveryNote {
   public void setCustomerName(String v){ customerName=v; }
   public String getStatus(){ return status; }
   public void setStatus(String v){ status=v; }
+  public String getAgencyId(){ return agencyId; }
+  public void setAgencyId(String agencyId){ this.agencyId = agencyId; }
   // === CRM-INJECT BEGIN: delivery-client-accessors ===
   public UUID getClientId(){ return clientId; }
   public void setClientId(UUID v){ clientId=v; }
