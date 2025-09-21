@@ -73,6 +73,11 @@ public final class IconRegistry {
     return icon != null ? icon : fallback(key, 20);
   }
 
+  /** Variante légèrement plus grande, utile pour mettre en avant certaines actions. */
+  public static Icon colored(String key){
+    return medium(key);
+  }
+
   public static Icon large(String key){
     Icon icon = load(key, 28);
     return icon != null ? icon : fallback(key, 28);

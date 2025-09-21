@@ -87,6 +87,30 @@ public final class Prefs {
     PREFS.putInt("billing.rounding.scale", sanitized);
   }
 
+  public static int getUiScalePercent(){
+    int stored = PREFS.getInt("ui.scale.percent", 100);
+    if (stored < 80){
+      return 80;
+    }
+    if (stored > 130){
+      return 130;
+    }
+    return stored;
+  }
+
+  public static void setUiScalePercent(int percent){
+    int sanitized = Math.max(80, Math.min(percent, 130));
+    PREFS.putInt("ui.scale.percent", sanitized);
+  }
+
+  public static boolean isUiHighContrast(){
+    return PREFS.getBoolean("ui.high.contrast", false);
+  }
+
+  public static void setUiHighContrast(boolean enabled){
+    PREFS.putBoolean("ui.high.contrast", enabled);
+  }
+
   public static String getAgencyLogoPngBase64(){
     return readTrimmed("agency.logo.png.base64");
   }
