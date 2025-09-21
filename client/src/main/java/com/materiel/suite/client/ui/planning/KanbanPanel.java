@@ -1,5 +1,6 @@
 package com.materiel.suite.client.ui.planning;
 
+import com.materiel.suite.client.agency.AgencyContext;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.ui.common.EmptyState;
 import com.materiel.suite.client.ui.common.Toasts;
@@ -121,7 +122,9 @@ public class KanbanPanel extends JPanel {
       List<Intervention> safe = new ArrayList<>();
       for (Intervention intervention : interventions){
         if (intervention != null){
-          safe.add(intervention);
+          if (AgencyContext.matchesCurrentAgency(intervention)){
+            safe.add(intervention);
+          }
         }
       }
       source = safe.isEmpty() ? List.of() : List.copyOf(safe);

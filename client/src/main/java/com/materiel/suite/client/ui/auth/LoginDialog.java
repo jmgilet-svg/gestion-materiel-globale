@@ -1,5 +1,6 @@
 package com.materiel.suite.client.ui.auth;
 
+import com.materiel.suite.client.agency.AgencyContext;
 import com.materiel.suite.client.auth.Agency;
 import com.materiel.suite.client.auth.AuthContext;
 import com.materiel.suite.client.auth.AuthService;
@@ -77,6 +78,31 @@ public class LoginDialog extends JDialog {
     }
   }
 
+  private Agency resolveAgencyAfterLogin(Agency selected){
+    Agency current = AuthContext.get() != null ? AuthContext.get().getAgency() : null;
+    if (current != null){
+      return cloneAgency(current);
+    }
+    if (selected == null){
+      return null;
+    }
+    Agency copy = cloneAgency(selected);
+    if (AuthContext.get() != null){
+      AuthContext.get().setAgency(cloneAgency(selected));
+    }
+    return copy;
+  }
+
+  private Agency cloneAgency(Agency source){
+    if (source == null){
+      return null;
+    }
+    Agency copy = new Agency();
+    copy.setId(source.getId());
+    copy.setName(source.getName());
+    return copy;
+  }
+
   private void doLogin(){
     connectButton.setEnabled(false);
     try {
@@ -88,6 +114,7 @@ public class LoginDialog extends JDialog {
       String username = usernameField.getText() != null ? usernameField.getText().trim() : "";
       String password = new String(passwordField.getPassword());
       authService.login(agency != null ? agency.getId() : null, username, password);
+      AgencyContext.setAgency(resolveAgencyAfterLogin(agency));
       dispose();
     } catch (Exception ex){
       Toasts.error(this, "Connexion refusée");

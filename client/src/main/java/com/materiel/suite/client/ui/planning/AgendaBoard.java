@@ -1,5 +1,6 @@
 package com.materiel.suite.client.ui.planning;
 
+import com.materiel.suite.client.agency.AgencyContext;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.model.ResourceRef;
@@ -73,7 +74,7 @@ public class AgendaBoard extends JComponent {
 
   public void reload(){
     resources = ServiceFactory.planning().listResources();
-    interventions = ServiceFactory.planning().listInterventions(startDate, startDate.plusDays(days-1));
+    interventions = filterByAgency(ServiceFactory.planning().listInterventions(startDate, startDate.plusDays(days-1)));
     for (Intervention it : interventions){ // FIX: preserve labels
       if (it.getLabel()!=null) labelCache.put(it.getId(), it.getLabel());
       else if (labelCache.containsKey(it.getId())) it.setLabel(labelCache.get(it.getId()));
@@ -82,6 +83,22 @@ public class AgendaBoard extends JComponent {
     computeDayLanes();
     computeHeights();
     revalidate(); repaint();
+  }
+
+  private List<Intervention> filterByAgency(List<Intervention> list){
+    if (list == null || list.isEmpty()){
+      return List.of();
+    }
+    List<Intervention> filtered = new ArrayList<>();
+    for (Intervention intervention : list){
+      if (intervention == null){
+        continue;
+      }
+      if (AgencyContext.matchesCurrentAgency(intervention)){
+        filtered.add(intervention);
+      }
+    }
+    return filtered.isEmpty() ? List.of() : List.copyOf(filtered);
   }
 
   private void computeHeights(){

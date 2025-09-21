@@ -1,6 +1,9 @@
 package com.materiel.suite.client.ui;
 
+import com.materiel.suite.client.agency.AgencyContext;
+import com.materiel.suite.client.agency.AgencyPickerDialog;
 import com.materiel.suite.client.auth.AccessControl;
+import com.materiel.suite.client.auth.Agency;
 import com.materiel.suite.client.auth.AuthContext;
 import com.materiel.suite.client.auth.SessionManager;
 import com.materiel.suite.client.auth.User;
@@ -49,8 +52,10 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
   private final AutosaveIndicator autosaveIndicator = new AutosaveIndicator();
   private String currentCard;
   private JLabel userLabel;
+  private JLabel agencyBadge;
   private JButton changePasswordButton;
   private JButton logoutButton;
+  private JButton changeAgencyButton;
 
   public MainFrame(AppConfig cfg) {
     super("Gestion Matériel — Suite");
@@ -92,6 +97,7 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
     SessionManager.install(this);
     updateSessionInfo();
     initCommandPalette();
+    updateAgencyBadge();
   }
 
   private JMenuBar buildMenuBar(){
@@ -118,7 +124,15 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
     panel.setBorder(new EmptyBorder(8,8,8,8));
     JLabel title = new JLabel("Gestion Matériel — Mode " + (cfg.getMode()==null?"(non défini)":cfg.getMode()));
     title.setFont(title.getFont().deriveFont(Font.BOLD, 16f));
-    panel.add(title, BorderLayout.WEST);
+    JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+    left.setOpaque(false);
+    left.add(title);
+    agencyBadge = new JLabel("Agence : —");
+    left.add(agencyBadge);
+    changeAgencyButton = new JButton("Changer d'agence");
+    changeAgencyButton.addActionListener(e -> openAgencyPicker());
+    left.add(changeAgencyButton);
+    panel.add(left, BorderLayout.WEST);
 
     JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
     userLabel = new JLabel();
@@ -137,6 +151,90 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
     right.add(logoutButton);
     panel.add(right, BorderLayout.EAST);
     return panel;
+  }
+
+  private void openAgencyPicker(){
+    List<Agency> agencies = discoverAgencies();
+    if (agencies.isEmpty()){
+      Toasts.info(this, "Aucune agence disponible");
+      return;
+    }
+    AgencyPickerDialog dialog = new AgencyPickerDialog(this, agencies);
+    dialog.setVisible(true);
+    Agency selected = dialog.getSelectedAgency();
+    if (selected != null){
+      updateAgencyBadge();
+      applyNavigationPolicy();
+      reloadAfterAgencyChange();
+      status.setText("Agence active : " + agencyBadge.getText().replace("Agence : ", ""));
+    }
+  }
+
+  private List<Agency> discoverAgencies(){
+    List<Agency> agencies = new ArrayList<>();
+    try {
+      if (ServiceLocator.auth() != null){
+        List<Agency> fetched = ServiceLocator.auth().listAgencies();
+        if (fetched != null){
+          agencies.addAll(fetched);
+        }
+      }
+    } catch (Exception ignore){
+    }
+    if (!agencies.isEmpty()){
+      return agencies;
+    }
+    for (String id : AgencyContext.knownAgencyIds()){
+      Agency agency = new Agency();
+      agency.setId(id);
+      agency.setName(id);
+      agencies.add(agency);
+    }
+    if (agencies.isEmpty()){
+      String currentId = AgencyContext.agencyId();
+      String currentLabel = AgencyContext.agencyLabel();
+      if (currentId != null || currentLabel != null){
+        Agency agency = new Agency();
+        agency.setId(currentId);
+        agency.setName(currentLabel != null ? currentLabel : currentId);
+        agencies.add(agency);
+      }
+    }
+    return agencies;
+  }
+
+  private void updateAgencyBadge(){
+    if (agencyBadge == null){
+      return;
+    }
+    String id = AgencyContext.agencyId();
+    String label = AgencyContext.agencyLabel();
+    StringBuilder text = new StringBuilder("Agence : ");
+    if (label != null && !label.isBlank()){
+      text.append(label);
+      if (id != null && !id.isBlank() && !label.equalsIgnoreCase(id)){
+        text.append(" (").append(id).append(')');
+      }
+    } else if (id != null && !id.isBlank()){
+      text.append(id);
+    } else {
+      text.append('—');
+    }
+    agencyBadge.setText(text.toString());
+    if (changeAgencyButton != null){
+      boolean logged = AuthContext.isLogged();
+      changeAgencyButton.setEnabled(logged);
+      changeAgencyButton.setVisible(logged);
+    }
+  }
+
+  private void reloadAfterAgencyChange(){
+    PlanningPanel planning = visiblePlanningPanel();
+    if (planning != null){
+      planning.actionReload();
+    }
+    center.revalidate();
+    center.repaint();
   }
 
   private JComponent buildSidebar() {
@@ -236,16 +334,17 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
   }
 
   private void applyNavigationPolicy(){
-    setNavVisible("planning", AccessControl.canViewPlanning());
-    setNavVisible("agenda", AccessControl.canViewPlanning());
-    boolean sales = AccessControl.canViewSales();
+    boolean planning = AccessControl.canViewPlanning() && AgencyContext.hasFeature("PLANNING");
+    setNavVisible("planning", planning);
+    setNavVisible("agenda", planning);
+    boolean sales = AccessControl.canViewSales() && AgencyContext.hasFeature("SALES");
     setNavVisible("quotes", sales);
     setNavVisible("orders", sales);
     setNavVisible("delivery", sales);
     setNavVisible("invoices", sales);
-    setNavVisible("clients", true);
-    setNavVisible("resources", AccessControl.canViewResources());
-    setNavVisible("settings", AccessControl.canViewSettings());
+    setNavVisible("clients", AgencyContext.hasFeature("CLIENTS"));
+    setNavVisible("resources", AccessControl.canViewResources() && AgencyContext.hasFeature("RESOURCES"));
+    setNavVisible("settings", AccessControl.canViewSettings() && AgencyContext.hasFeature("SETTINGS"));
     if (sidebar != null){
       sidebar.revalidate();
       sidebar.repaint();
@@ -272,6 +371,7 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
       logoutButton.setEnabled(true);
     }
     userLabel.setVisible(true);
+    updateAgencyBadge();
   }
 
   private void doLogout(){

@@ -1,5 +1,6 @@
 package com.materiel.suite.client.service;
 
+import com.materiel.suite.client.agency.AgencyContext;
 import com.materiel.suite.client.auth.AuthService;
 import com.materiel.suite.client.model.InterventionType;
 import com.materiel.suite.client.model.Resource;
@@ -62,6 +63,16 @@ public final class ServiceLocator {
 
   public static TimelineService timeline(){
     return ServiceFactory.timeline();
+  }
+
+  /** Identifiant d'agence actuellement sélectionné, peut être {@code null}. */
+  public static String agencyId(){
+    return AgencyContext.agencyId();
+  }
+
+  /** Libellé d'agence actuellement sélectionné, peut être {@code null}. */
+  public static String agencyLabel(){
+    return AgencyContext.agencyLabel();
   }
 
   public static final class ResourcesGateway {
