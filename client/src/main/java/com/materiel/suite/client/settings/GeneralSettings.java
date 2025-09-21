@@ -5,6 +5,7 @@ import java.util.Locale;
 /** Paramètres généraux côté client. */
 public class GeneralSettings {
   public static final String DEFAULT_BRAND_PRIMARY_HEX = "#1E88E5";
+  public static final String DEFAULT_BRAND_SECONDARY_HEX = "#F4511E";
   private int sessionTimeoutMinutes = 30;
   private int autosaveIntervalSeconds = 30;
   /** TVA par défaut (%) appliquée si aucune valeur spécifique n'est fournie. */
@@ -21,6 +22,10 @@ public class GeneralSettings {
   private boolean dyslexiaMode;
   /** Couleur primaire personnalisée (branding agence). */
   private String brandPrimaryHex = DEFAULT_BRAND_PRIMARY_HEX;
+  /** Couleur secondaire utilisée pour les accents UI. */
+  private String brandSecondaryHex = DEFAULT_BRAND_SECONDARY_HEX;
+  /** Points supplémentaires appliqués sur la taille des polices (0 à 4). */
+  private int fontExtraPoints;
   /** PNG encodé en Base64 (optionnel) utilisé en en-tête PDF (logo d’agence). */
   private String agencyLogoPngBase64;
   private String agencyName;
@@ -130,22 +135,23 @@ public class GeneralSettings {
   }
 
   public void setBrandPrimaryHex(String value){
-    if (value == null){
-      brandPrimaryHex = DEFAULT_BRAND_PRIMARY_HEX;
-      return;
-    }
-    String trimmed = value.trim();
-    if (trimmed.isEmpty()){
-      brandPrimaryHex = DEFAULT_BRAND_PRIMARY_HEX;
-      return;
-    }
-    String normalized = trimmed.startsWith("#") ? trimmed : "#" + trimmed;
-    String upper = normalized.toUpperCase(Locale.ROOT);
-    if (upper.matches("#([0-9A-F]{6}|[0-9A-F]{8})")){
-      brandPrimaryHex = upper;
-    } else {
-      brandPrimaryHex = DEFAULT_BRAND_PRIMARY_HEX;
-    }
+    brandPrimaryHex = sanitizeHexColor(value, DEFAULT_BRAND_PRIMARY_HEX);
+  }
+
+  public String getBrandSecondaryHex(){
+    return brandSecondaryHex != null ? brandSecondaryHex : DEFAULT_BRAND_SECONDARY_HEX;
+  }
+
+  public void setBrandSecondaryHex(String value){
+    brandSecondaryHex = sanitizeHexColor(value, DEFAULT_BRAND_SECONDARY_HEX);
+  }
+
+  public int getFontExtraPoints(){
+    return clampFontExtra(fontExtraPoints);
+  }
+
+  public void setFontExtraPoints(int value){
+    fontExtraPoints = clampFontExtra(value);
   }
 
   public String getAgencyLogoPngBase64(){
@@ -194,6 +200,29 @@ public class GeneralSettings {
 
   public void setCgvText(String value){
     cgvText = trimToNull(value);
+  }
+
+  private static String sanitizeHexColor(String value, String defaultHex){
+    if (value == null){
+      return defaultHex;
+    }
+    String trimmed = value.trim();
+    if (trimmed.isEmpty()){
+      return defaultHex;
+    }
+    String normalized = trimmed.startsWith("#") ? trimmed : "#" + trimmed;
+    String upper = normalized.toUpperCase(Locale.ROOT);
+    if (upper.matches("#([0-9A-F]{6}|[0-9A-F]{8})")){
+      return upper;
+    }
+    return defaultHex;
+  }
+
+  private static int clampFontExtra(int value){
+    if (value < 0){
+      return 0;
+    }
+    return Math.min(value, 4);
   }
 
   private static String trimToNull(String value){

@@ -57,8 +57,11 @@ public final class ThemeManager {
   public static void applyGeneralSettings(GeneralSettings settings){
     GeneralSettings safe = settings != null ? settings : new GeneralSettings();
     applyFontSettings(safe);
-    applyBranding(safe.getBrandPrimaryHex());
-    applyHighContrast(safe.isHighContrast());
+    applyHighContrast(false);
+    applyBranding(safe);
+    if (safe.isHighContrast()){
+      applyHighContrast(true);
+    }
     configureTooltips();
   }
 
@@ -87,12 +90,13 @@ public final class ThemeManager {
 
   private static void applyFontSettings(GeneralSettings settings){
     float scale = clampScale(settings.getUiScalePercent());
+    int extraPoints = Math.max(0, Math.min(settings.getFontExtraPoints(), 4));
     ensureBaseFonts();
-    Font dyslexia = settings.isDyslexiaMode() ? loadDyslexiaFont(defaultFontSize() * scale) : null;
+    Font dyslexia = settings.isDyslexiaMode() ? loadDyslexiaFont(defaultFontSize() * scale + extraPoints) : null;
     if (dyslexia != null){
       applyUniformFont(dyslexia);
     } else {
-      applyFontScale(scale);
+      applyFontScale(scale, extraPoints);
     }
   }
 
@@ -111,13 +115,14 @@ public final class ThemeManager {
     }
   }
 
-  private static void applyFontScale(float scale){
+  private static void applyFontScale(float scale, int extraPoints){
     ensureBaseFonts();
     UIDefaults defaults = UIManager.getDefaults();
     for (Map.Entry<Object, Font> entry : BASE_FONTS.entrySet()){
       Font base = entry.getValue();
       if (base != null){
-        defaults.put(entry.getKey(), new FontUIResource(base.deriveFont(base.getSize2D() * scale)));
+        float newSize = base.getSize2D() * scale + extraPoints;
+        defaults.put(entry.getKey(), new FontUIResource(base.deriveFont(newSize)));
       }
     }
   }
@@ -138,8 +143,9 @@ public final class ThemeManager {
     }
   }
 
-  private static void applyBranding(String hex){
-    Color brand = parseColor(hex);
+  private static void applyBranding(GeneralSettings settings){
+    Color brand = settings != null ? parseColor(settings.getBrandPrimaryHex()) : null;
+    Color accent = settings != null ? parseColor(settings.getBrandSecondaryHex()) : null;
     if (brand == null){
       override("Component.accentColor", null);
       override("Component.linkColor", null);
@@ -147,23 +153,45 @@ public final class ThemeManager {
       override("Button.default.background", null);
       override("Button.default.focusColor", null);
       override("Button.default.foreground", null);
-      override("ProgressBar.foreground", null);
       override("CheckBox.icon.selectedBackground", null);
       override("RadioButton.icon.selectedBackground", null);
       override("ToggleButton.icon.selectedBackground", null);
-      return;
+    } else {
+      ColorUIResource accentPrimary = new ColorUIResource(brand);
+      override("Component.accentColor", accentPrimary);
+      override("Component.linkColor", accentPrimary);
+      override("Component.linkHoverColor", new ColorUIResource(brand.brighter()));
+      override("Button.default.background", accentPrimary);
+      override("Button.default.focusColor", new ColorUIResource(brand.darker()));
+      override("Button.default.foreground", new ColorUIResource(readableForeground(brand)));
+      override("CheckBox.icon.selectedBackground", accentPrimary);
+      override("RadioButton.icon.selectedBackground", accentPrimary);
+      override("ToggleButton.icon.selectedBackground", accentPrimary);
     }
-    ColorUIResource accent = new ColorUIResource(brand);
-    override("Component.accentColor", accent);
-    override("Component.linkColor", accent);
-    override("Component.linkHoverColor", new ColorUIResource(brand.brighter()));
-    override("Button.default.background", accent);
-    override("Button.default.focusColor", new ColorUIResource(brand.darker()));
-    override("Button.default.foreground", new ColorUIResource(readableForeground(brand)));
-    override("ProgressBar.foreground", accent);
-    override("CheckBox.icon.selectedBackground", accent);
-    override("RadioButton.icon.selectedBackground", accent);
-    override("ToggleButton.icon.selectedBackground", accent);
+    Color baseAccent = accent != null ? accent : brand;
+    if (baseAccent == null){
+      override("ProgressBar.foreground", null);
+      override("List.selectionBackground", null);
+      override("Tree.selectionBackground", null);
+      override("Table.selectionBackground", null);
+      override("List.selectionForeground", null);
+      override("Tree.selectionForeground", null);
+      override("Table.selectionForeground", null);
+      override("Button.select", null);
+    } else {
+      ColorUIResource accentResource = new ColorUIResource(baseAccent);
+      override("ProgressBar.foreground", accentResource);
+      Color selection = lighten(baseAccent, 0.65f);
+      ColorUIResource selectionBg = new ColorUIResource(selection);
+      ColorUIResource selectionFg = new ColorUIResource(readableForeground(selection));
+      override("List.selectionBackground", selectionBg);
+      override("Tree.selectionBackground", selectionBg);
+      override("Table.selectionBackground", selectionBg);
+      override("List.selectionForeground", selectionFg);
+      override("Tree.selectionForeground", selectionFg);
+      override("Table.selectionForeground", selectionFg);
+      override("Button.select", new ColorUIResource(lighten(baseAccent, 0.80f)));
+    }
   }
 
   private static float defaultFontSize(){
@@ -207,6 +235,11 @@ public final class ThemeManager {
     }
   }
 
+  public static Color parseColorSafe(String hex, Color fallback){
+    Color parsed = parseColor(hex);
+    return parsed != null ? parsed : fallback;
+  }
+
   private static Color parseColor(String hex){
     if (hex == null){
       return null;
@@ -233,6 +266,18 @@ public final class ThemeManager {
       return null;
     }
     return null;
+  }
+
+  public static Color lighten(Color color, float factor){
+    if (color == null){
+      return null;
+    }
+    float clamped = Math.max(0f, Math.min(factor, 1f));
+    int red = Math.round(color.getRed() + (255 - color.getRed()) * clamped);
+    int green = Math.round(color.getGreen() + (255 - color.getGreen()) * clamped);
+    int blue = Math.round(color.getBlue() + (255 - color.getBlue()) * clamped);
+    int alpha = color.getAlpha();
+    return new Color(Math.min(red, 255), Math.min(green, 255), Math.min(blue, 255), alpha);
   }
 
   private static Color readableForeground(Color color){
