@@ -56,11 +56,14 @@ import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JToggleButton;
 import javax.swing.JTextArea;
+import javax.swing.JTextField;
 import javax.swing.SpinnerDateModel;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingConstants;
 import javax.swing.border.EmptyBorder;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 
 import com.materiel.suite.client.model.BillingLine;
 import com.materiel.suite.client.model.Conflict;
@@ -117,6 +120,7 @@ public class PlanningPanel extends JPanel {
   private final JButton dispatcherBtn = new JButton("Mode Dispatcher", IconRegistry.small("task"));
   private final JButton dryRunBtn = new JButton("Prévisualiser", IconRegistry.small("calculator"));
   private final JComboBox<QuoteFilter> quoteFilter = new JComboBox<>(QuoteFilter.values());
+  private final JTextField search = new JTextField(18);
   private final JPanel bulkBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
   private final JLabel selCountLabel = new JLabel("0 interventions");
   private final JLabel bulkBadges = new JLabel();
@@ -213,6 +217,19 @@ public class PlanningPanel extends JPanel {
       @Override public void onCreateInvoice(Intervention intervention){
         createInvoiceFromKanban(intervention);
       }
+
+      @Override public void onStatusChanged(Intervention intervention){
+        PlanningService planning = ServiceFactory.planning();
+        if (planning == null){
+          throw new IllegalStateException("Service planning indisponible.");
+        }
+        planning.saveIntervention(intervention);
+      }
+    });
+    search.getDocument().addDocumentListener(new DocumentListener(){
+      @Override public void insertUpdate(DocumentEvent e){ applySearch(); }
+      @Override public void removeUpdate(DocumentEvent e){ applySearch(); }
+      @Override public void changedUpdate(DocumentEvent e){ applySearch(); }
     });
     updateModeToggleState();
 
@@ -356,6 +373,10 @@ public class PlanningPanel extends JPanel {
     bar.add(Box.createHorizontalStrut(12));
     bar.add(quoteFilterLabel);
     bar.add(quoteFilter);
+    JLabel searchLabel = new JLabel("Rechercher :");
+    bar.add(Box.createHorizontalStrut(12));
+    bar.add(searchLabel);
+    bar.add(search);
     return bar;
   }
 
@@ -1418,6 +1439,7 @@ public class PlanningPanel extends JPanel {
     }
     if (!kanbanHasError){
       kanbanView.setData(dataset);
+      applySearch();
     }
   }
 
@@ -1461,8 +1483,19 @@ public class PlanningPanel extends JPanel {
     updateFilteredSimpleViews();
   }
 
+  private void applySearch(){
+    if (kanbanView != null){
+      kanbanView.setFilter(search.getText());
+    }
+  }
+
   private void focusSearch(){
-    requestFocusInWindow();
+    if (search != null){
+      search.requestFocusInWindow();
+      search.selectAll();
+    } else {
+      requestFocusInWindow();
+    }
   }
 
   private void duplicateSelected(){
