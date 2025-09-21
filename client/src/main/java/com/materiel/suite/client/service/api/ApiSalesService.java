@@ -84,6 +84,7 @@ public class ApiSalesService implements SalesService {
     firstField = appendStringField(sb, firstField, "title", intervention.getLabel());
     String clientId = intervention.getClientId() == null ? null : intervention.getClientId().toString();
     firstField = appendStringField(sb, firstField, "clientId", clientId);
+    firstField = appendStringField(sb, firstField, "agencyId", intervention.getAgencyId());
     if (!firstField){
       sb.append(',');
     }

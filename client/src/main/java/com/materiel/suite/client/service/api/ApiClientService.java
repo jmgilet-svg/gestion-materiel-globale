@@ -71,6 +71,7 @@ public class ApiClientService implements ClientService {
     m.put("billingAddress", c.getBillingAddress());
     m.put("shippingAddress", c.getShippingAddress());
     m.put("notes", c.getNotes());
+    m.put("agencyId", c.getAgencyId());
     return m;
   }
   private Client fromMap(Map<String,Object> m){
@@ -84,6 +85,7 @@ public class ApiClientService implements ClientService {
     c.setBillingAddress(SimpleJson.str(m.get("billingAddress")));
     c.setShippingAddress(SimpleJson.str(m.get("shippingAddress")));
     c.setNotes(SimpleJson.str(m.get("notes")));
+    c.setAgencyId(SimpleJson.str(m.get("agencyId")));
     return c;
   }
   private Map<String,Object> toMapC(Contact c){

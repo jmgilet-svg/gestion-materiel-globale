@@ -2278,7 +2278,7 @@ public class InterventionDialog extends JDialog {
       intervention.setAgency(id);
     }
     if (id != null && !id.isBlank()){
-      invokeAgencySetter(intervention, "setAgencyId", id);
+      intervention.setAgencyId(id);
       invokeAgencySetter(intervention, "setAgencyCode", id);
     }
     if (label != null && !label.isBlank()){

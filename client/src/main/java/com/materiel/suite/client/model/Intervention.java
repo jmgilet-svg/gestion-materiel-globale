@@ -44,6 +44,7 @@ public class Intervention {
   private String craneName;
   private String truckName;
   private String driverName;
+  private String agencyId;
   private String agency;
   private String status; // PLANNED, CONFIRMED, DONE, CANCELED...
   private boolean favorite;
@@ -297,6 +298,8 @@ public class Intervention {
   public void setTruckName(String truckName){ this.truckName = truckName; }
   public String getDriverName(){ return driverName; }
   public void setDriverName(String driverName){ this.driverName = driverName; }
+  public String getAgencyId(){ return agencyId; }
+  public void setAgencyId(String agencyId){ this.agencyId = agencyId; }
   public String getAgency(){ return agency; }
   public void setAgency(String agency){ this.agency = agency; }
   public String getStatus(){ return status; }
