@@ -11,6 +11,7 @@ public class Invoice {
   private LocalDate date;
   private String customerName;
   private String status; // Brouillon, Envoyée, Partiellement payée, Payée, Annulée
+  private String agencyId;
   private List<DocumentLine> lines = new ArrayList<>();
   private DocumentTotals totals = new DocumentTotals();
   // === CRM-INJECT BEGIN: invoice-client-link ===
@@ -27,6 +28,8 @@ public class Invoice {
   public void setCustomerName(String v){ customerName=v; }
   public String getStatus(){ return status; }
   public void setStatus(String v){ status=v; }
+  public String getAgencyId(){ return agencyId; }
+  public void setAgencyId(String agencyId){ this.agencyId = agencyId; }
   // === CRM-INJECT BEGIN: invoice-client-accessors ===
   public UUID getClientId(){ return clientId; }
   public void setClientId(UUID v){ clientId=v; }
