@@ -6,12 +6,18 @@ import com.materiel.suite.client.model.QuoteV2;
 import com.materiel.suite.client.service.SalesService;
 import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.ui.common.Toasts;
+import com.materiel.suite.client.ui.sales.pdf.PdfMini;
 
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.TableRowSorter;
+import javax.swing.RowFilter;
 import java.awt.*;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -19,6 +25,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /** Ecran Devis/Factures (édition inline) avec filtrage agence. */
 public class SalesPanel extends JPanel {
@@ -30,6 +37,11 @@ public class SalesPanel extends JPanel {
   private final JButton delQuote = new JButton("Supprimer");
   private final JButton saveQuote = new JButton("Enregistrer");
   private final JButton reloadQuote = new JButton("Recharger");
+  private final JButton pdfQuote = new JButton("Exporter PDF");
+  private final JButton quoteToInvoice = new JButton("Générer facture");
+  private final JTextField searchQuote = new JTextField(18);
+  private final JLabel searchQuoteLbl = new JLabel("Recherche:");
+  private TableRowSorter<QuoteTableModel> quoteSorter;
   // Factures
   private final JTable invoicesTable = new JTable();
   private final InvoiceTableModel invoicesModel = new InvoiceTableModel();
@@ -37,6 +49,10 @@ public class SalesPanel extends JPanel {
   private final JButton delInvoice = new JButton("Supprimer");
   private final JButton saveInvoice = new JButton("Enregistrer");
   private final JButton reloadInvoice = new JButton("Recharger");
+  private final JButton pdfInvoice = new JButton("Exporter PDF");
+  private final JTextField searchInvoice = new JTextField(18);
+  private final JLabel searchInvoiceLbl = new JLabel("Recherche:");
+  private TableRowSorter<InvoiceTableModel> invoiceSorter;
 
   public SalesPanel(){
     super(new BorderLayout());
@@ -48,11 +64,18 @@ public class SalesPanel extends JPanel {
     qbar.add(delQuote);
     qbar.add(saveQuote);
     qbar.add(reloadQuote);
+    qbar.add(pdfQuote);
+    qbar.add(quoteToInvoice);
+    qbar.add(Box.createHorizontalStrut(12));
+    qbar.add(searchQuoteLbl);
+    qbar.add(searchQuote);
     quotesTable.setModel(quotesModel);
     quotesTable.setFillsViewportHeight(true);
     quotesTable.setRowHeight(24);
     quotesTable.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
     quotesTable.setDefaultRenderer(LocalDate.class, new LocalDateRenderer());
+    quoteSorter = new TableRowSorter<>(quotesModel);
+    quotesTable.setRowSorter(quoteSorter);
     quotesPane.add(qbar, BorderLayout.NORTH);
     quotesPane.add(new JScrollPane(quotesTable), BorderLayout.CENTER);
 
@@ -63,11 +86,17 @@ public class SalesPanel extends JPanel {
     ibar.add(delInvoice);
     ibar.add(saveInvoice);
     ibar.add(reloadInvoice);
+    ibar.add(pdfInvoice);
+    ibar.add(Box.createHorizontalStrut(12));
+    ibar.add(searchInvoiceLbl);
+    ibar.add(searchInvoice);
     invoicesTable.setModel(invoicesModel);
     invoicesTable.setFillsViewportHeight(true);
     invoicesTable.setRowHeight(24);
     invoicesTable.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
     invoicesTable.setDefaultRenderer(LocalDate.class, new LocalDateRenderer());
+    invoiceSorter = new TableRowSorter<>(invoicesModel);
+    invoicesTable.setRowSorter(invoiceSorter);
     invoicesPane.add(ibar, BorderLayout.NORTH);
     invoicesPane.add(new JScrollPane(invoicesTable), BorderLayout.CENTER);
 
@@ -81,10 +110,31 @@ public class SalesPanel extends JPanel {
     delQuote.addActionListener(e -> onDeleteQuote());
     saveQuote.addActionListener(e -> onSaveQuote());
     reloadQuote.addActionListener(e -> reloadQuotes());
+    pdfQuote.addActionListener(e -> onExportQuotesPdf());
+    quoteToInvoice.addActionListener(e -> onGenerateInvoiceFromQuote());
     addInvoice.addActionListener(e -> onAddInvoice());
     delInvoice.addActionListener(e -> onDeleteInvoice());
     saveInvoice.addActionListener(e -> onSaveInvoice());
     reloadInvoice.addActionListener(e -> reloadInvoices());
+    pdfInvoice.addActionListener(e -> onExportInvoicesPdf());
+
+    DocumentListener quoteSearchListener = new DocumentListener() {
+      @Override public void insertUpdate(DocumentEvent e){ filterQuotes(); }
+
+      @Override public void removeUpdate(DocumentEvent e){ filterQuotes(); }
+
+      @Override public void changedUpdate(DocumentEvent e){ filterQuotes(); }
+    };
+    searchQuote.getDocument().addDocumentListener(quoteSearchListener);
+
+    DocumentListener invoiceSearchListener = new DocumentListener() {
+      @Override public void insertUpdate(DocumentEvent e){ filterInvoices(); }
+
+      @Override public void removeUpdate(DocumentEvent e){ filterInvoices(); }
+
+      @Override public void changedUpdate(DocumentEvent e){ filterInvoices(); }
+    };
+    searchInvoice.getDocument().addDocumentListener(invoiceSearchListener);
 
     reload();
   }
@@ -124,8 +174,11 @@ public class SalesPanel extends JPanel {
     quotesModel.add(q);
     int row = quotesModel.getRowCount() - 1;
     if (row >= 0){
-      quotesTable.setRowSelectionInterval(row, row);
-      quotesTable.editCellAt(row, 1);
+      int viewRow = quotesTable.convertRowIndexToView(row);
+      if (viewRow >= 0){
+        quotesTable.setRowSelectionInterval(viewRow, viewRow);
+        quotesTable.editCellAt(viewRow, 1);
+      }
       quotesTable.requestFocusInWindow();
     }
   }
@@ -135,7 +188,8 @@ public class SalesPanel extends JPanel {
     if (row < 0){
       return;
     }
-    QuoteV2 q = quotesModel.getAt(row);
+    int modelRow = quotesTable.convertRowIndexToModel(row);
+    QuoteV2 q = quotesModel.getAt(modelRow);
     if (q.getId() != null && !q.getId().isBlank()){
       try {
         ServiceLocator.sales().deleteQuote(q.getId());
@@ -143,7 +197,7 @@ public class SalesPanel extends JPanel {
         Toasts.error(this, "Suppression devis: " + ex.getMessage());
       }
     }
-    quotesModel.remove(row);
+    quotesModel.remove(modelRow);
   }
 
   private void onSaveQuote(){
@@ -170,6 +224,73 @@ public class SalesPanel extends JPanel {
       Toasts.error(this, ok + " ok / " + ko + " erreurs");
     }
     reloadQuotes();
+  }
+
+  private void onExportQuotesPdf(){
+    JFileChooser chooser = new JFileChooser();
+    chooser.setDialogTitle("Exporter les devis (PDF)");
+    chooser.setSelectedFile(new java.io.File("devis.pdf"));
+    if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION){
+      return;
+    }
+    try {
+      java.io.File file = chooser.getSelectedFile();
+      if (file == null){
+        return;
+      }
+      PdfMini pdf = new PdfMini();
+      pdf.addTitle("Liste des Devis");
+      for (int i = 0; i < quotesTable.getRowCount(); i++){
+        int modelRow = quotesTable.convertRowIndexToModel(i);
+        QuoteV2 quote = quotesModel.getAt(modelRow);
+        String line = String.format(Locale.ROOT,
+            "• %s  |  %s  |  %s  |  HT: %s  TTC: %s%s",
+            nz(quote.getReference()),
+            nz(quote.getClientName()),
+            formatDate(quote.getDate()),
+            formatAmount(quote.getTotalHt()),
+            formatAmount(quote.getTotalTtc()),
+            Boolean.TRUE.equals(quote.getSent()) ? "  [envoyé]" : "");
+        pdf.addParagraph(line.trim());
+      }
+      pdf.save(file);
+      Toasts.success(this, "PDF exporté : " + file.getName());
+    } catch (Exception ex){
+      Toasts.error(this, "Export PDF devis : " + ex.getMessage());
+    }
+  }
+
+  private void onGenerateInvoiceFromQuote(){
+    int row = quotesTable.getSelectedRow();
+    if (row < 0){
+      Toasts.info(this, "Sélectionnez un devis à convertir.");
+      return;
+    }
+    SalesService sales = ServiceLocator.sales();
+    if (sales == null){
+      Toasts.error(this, "Service ventes indisponible.");
+      return;
+    }
+    int modelRow = quotesTable.convertRowIndexToModel(row);
+    QuoteV2 quote = quotesModel.getAt(modelRow);
+    try {
+      InvoiceV2 invoice = new InvoiceV2();
+      invoice.setClientId(quote.getClientId());
+      invoice.setClientName(quote.getClientName());
+      invoice.setDate(LocalDate.now());
+      invoice.setTotalHt(quote.getTotalHt());
+      invoice.setTotalTtc(quote.getTotalTtc());
+      invoice.setStatus("DRAFT");
+      invoice.setAgencyId(AgencyContext.agencyId());
+      invoice.setLines(quote.getLines());
+      InvoiceV2 saved = sales.saveInvoice(invoice);
+      String number = saved == null ? "—" : nz(saved.getNumber(), nz(saved.getId(), "—"));
+      Toasts.success(this, "Facture générée n° " + number);
+      reloadInvoices();
+      tabs.setSelectedIndex(1);
+    } catch (Exception ex){
+      Toasts.error(this, "Échec génération facture : " + ex.getMessage());
+    }
   }
 
   private void reloadInvoices(){
@@ -201,8 +322,11 @@ public class SalesPanel extends JPanel {
     invoicesModel.add(f);
     int row = invoicesModel.getRowCount() - 1;
     if (row >= 0){
-      invoicesTable.setRowSelectionInterval(row, row);
-      invoicesTable.editCellAt(row, 1);
+      int viewRow = invoicesTable.convertRowIndexToView(row);
+      if (viewRow >= 0){
+        invoicesTable.setRowSelectionInterval(viewRow, viewRow);
+        invoicesTable.editCellAt(viewRow, 1);
+      }
       invoicesTable.requestFocusInWindow();
     }
   }
@@ -212,7 +336,8 @@ public class SalesPanel extends JPanel {
     if (row < 0){
       return;
     }
-    InvoiceV2 f = invoicesModel.getAt(row);
+    int modelRow = invoicesTable.convertRowIndexToModel(row);
+    InvoiceV2 f = invoicesModel.getAt(modelRow);
     if (f.getId() != null && !f.getId().isBlank()){
       try {
         ServiceLocator.sales().deleteInvoice(f.getId());
@@ -220,7 +345,7 @@ public class SalesPanel extends JPanel {
         Toasts.error(this, "Suppression facture: " + ex.getMessage());
       }
     }
-    invoicesModel.remove(row);
+    invoicesModel.remove(modelRow);
   }
 
   private void onSaveInvoice(){
@@ -249,12 +374,132 @@ public class SalesPanel extends JPanel {
     reloadInvoices();
   }
 
+  private void onExportInvoicesPdf(){
+    JFileChooser chooser = new JFileChooser();
+    chooser.setDialogTitle("Exporter les factures (PDF)");
+    chooser.setSelectedFile(new java.io.File("factures.pdf"));
+    if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION){
+      return;
+    }
+    try {
+      java.io.File file = chooser.getSelectedFile();
+      if (file == null){
+        return;
+      }
+      PdfMini pdf = new PdfMini();
+      pdf.addTitle("Liste des Factures");
+      for (int i = 0; i < invoicesTable.getRowCount(); i++){
+        int modelRow = invoicesTable.convertRowIndexToModel(i);
+        InvoiceV2 invoice = invoicesModel.getAt(modelRow);
+        String line = String.format(Locale.ROOT,
+            "• %s  |  %s  |  %s  |  HT: %s  TTC: %s  |  %s",
+            nz(invoice.getNumber(), nz(invoice.getId(), "—")),
+            nz(invoice.getClientName()),
+            formatDate(invoice.getDate()),
+            formatAmount(invoice.getTotalHt()),
+            formatAmount(invoice.getTotalTtc()),
+            nz(invoice.getStatus(), "—"));
+        pdf.addParagraph(line.trim());
+      }
+      pdf.save(file);
+      Toasts.success(this, "PDF exporté : " + file.getName());
+    } catch (Exception ex){
+      Toasts.error(this, "Export PDF factures : " + ex.getMessage());
+    }
+  }
+
+  private void filterQuotes(){
+    if (quoteSorter == null){
+      return;
+    }
+    String text = searchQuote.getText();
+    final String query = text == null ? "" : text.trim().toLowerCase(Locale.ROOT);
+    if (query.isEmpty()){
+      quoteSorter.setRowFilter(null);
+      return;
+    }
+    quoteSorter.setRowFilter(new RowFilter<>() {
+      @Override public boolean include(Entry<? extends QuoteTableModel, ? extends Integer> entry){
+        Integer identifier = entry.getIdentifier();
+        if (identifier == null){
+          return false;
+        }
+        int modelRow = identifier;
+        if (modelRow < 0 || modelRow >= quotesModel.getRowCount()){
+          return false;
+        }
+        QuoteV2 quote = quotesModel.getAt(modelRow);
+        return containsIgnoreCase(quote.getReference(), query)
+            || containsIgnoreCase(quote.getClientName(), query)
+            || containsIgnoreCase(quote.getStatus(), query);
+      }
+    });
+  }
+
+  private void filterInvoices(){
+    if (invoiceSorter == null){
+      return;
+    }
+    String text = searchInvoice.getText();
+    final String query = text == null ? "" : text.trim().toLowerCase(Locale.ROOT);
+    if (query.isEmpty()){
+      invoiceSorter.setRowFilter(null);
+      return;
+    }
+    invoiceSorter.setRowFilter(new RowFilter<>() {
+      @Override public boolean include(Entry<? extends InvoiceTableModel, ? extends Integer> entry){
+        Integer identifier = entry.getIdentifier();
+        if (identifier == null){
+          return false;
+        }
+        int modelRow = identifier;
+        if (modelRow < 0 || modelRow >= invoicesModel.getRowCount()){
+          return false;
+        }
+        InvoiceV2 invoice = invoicesModel.getAt(modelRow);
+        return containsIgnoreCase(invoice.getNumber(), query)
+            || containsIgnoreCase(invoice.getId(), query)
+            || containsIgnoreCase(invoice.getClientName(), query)
+            || containsIgnoreCase(invoice.getStatus(), query);
+      }
+    });
+  }
+
   private boolean belongsToCurrentAgency(String agencyId){
     String current = AgencyContext.agencyId();
     if (current == null || current.isBlank()){
       return true;
     }
     return current.equals(agencyId);
+  }
+
+  private static boolean containsIgnoreCase(String value, String query){
+    if (value == null || query == null || query.isEmpty()){
+      return false;
+    }
+    return value.toLowerCase(Locale.ROOT).contains(query);
+  }
+
+  private static String formatDate(LocalDate date){
+    return date == null ? "—" : DateTimeFormatter.ISO_LOCAL_DATE.format(date);
+  }
+
+  private static String formatAmount(BigDecimal amount){
+    if (amount == null){
+      return "0.00";
+    }
+    return amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
+  }
+
+  private static String nz(String value){
+    return value == null ? "" : value;
+  }
+
+  private static String nz(String value, String fallback){
+    if (value == null || value.isBlank()){
+      return fallback;
+    }
+    return value;
   }
 
   private static void stopEditing(JTable table){
