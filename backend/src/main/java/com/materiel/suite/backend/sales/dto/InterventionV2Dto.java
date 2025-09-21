@@ -8,6 +8,7 @@ public class InterventionV2Dto {
   private String id;
   private String title;
   private String clientId;
+  private String agencyId;
   private List<BillingLineV2Dto> billingLines = new ArrayList<>();
 
   public String getId(){
@@ -32,6 +33,14 @@ public class InterventionV2Dto {
 
   public void setClientId(String clientId){
     this.clientId = clientId;
+  }
+
+  public String getAgencyId(){
+    return agencyId;
+  }
+
+  public void setAgencyId(String agencyId){
+    this.agencyId = agencyId;
   }
 
   public List<BillingLineV2Dto> getBillingLines(){

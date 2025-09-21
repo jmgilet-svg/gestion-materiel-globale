@@ -5,17 +5,16 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Représentation légère d'un devis retourné par l'API v2. */
-public class QuoteV2 {
+/** Représentation légère d'une facture retournée par l'API v2. */
+public class InvoiceV2 {
   private String id;
-  private String reference;
+  private String number;
   private String clientId;
   private String clientName;
   private LocalDate date;
-  private String status;
   private BigDecimal totalHt;
   private BigDecimal totalTtc;
-  private Boolean sent;
+  private String status;
   private String agencyId;
   private List<Object> lines = new ArrayList<>();
 
@@ -27,12 +26,12 @@ public class QuoteV2 {
     this.id = id;
   }
 
-  public String getReference(){
-    return reference;
+  public String getNumber(){
+    return number;
   }
 
-  public void setReference(String reference){
-    this.reference = reference;
+  public void setNumber(String number){
+    this.number = number;
   }
 
   public String getClientId(){
@@ -59,14 +58,6 @@ public class QuoteV2 {
     this.date = date;
   }
 
-  public String getStatus(){
-    return status;
-  }
-
-  public void setStatus(String status){
-    this.status = status;
-  }
-
   public BigDecimal getTotalHt(){
     return totalHt;
   }
@@ -83,12 +74,12 @@ public class QuoteV2 {
     this.totalTtc = totalTtc;
   }
 
-  public Boolean getSent(){
-    return sent;
+  public String getStatus(){
+    return status;
   }
 
-  public void setSent(Boolean sent){
-    this.sent = sent;
+  public void setStatus(String status){
+    this.status = status;
   }
 
   public String getAgencyId(){

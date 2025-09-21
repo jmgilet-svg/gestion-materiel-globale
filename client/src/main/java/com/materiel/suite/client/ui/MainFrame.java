@@ -410,6 +410,11 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
     }
   }
 
+  // Expose un openSales si le Sidebar l’utilise
+  public void openSales(){
+    // No-op ici : le Sidebar ouvre déjà la carte correspondante
+  }
+
   @Override
   public void onSessionRefreshed(){
     applyNavigationPolicy();
