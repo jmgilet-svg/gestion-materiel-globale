@@ -17,6 +17,8 @@ public class LocalSettingsService implements SettingsService {
     settings.setRoundingScale(Prefs.getRoundingScale());
     settings.setUiScalePercent(Prefs.getUiScalePercent());
     settings.setHighContrast(Prefs.isUiHighContrast());
+    settings.setDyslexiaMode(Prefs.isUiDyslexiaMode());
+    settings.setBrandPrimaryHex(Prefs.getUiBrandPrimaryHex());
     settings.setAgencyLogoPngBase64(Prefs.getAgencyLogoPngBase64());
     settings.setAgencyName(Prefs.getAgencyName());
     settings.setAgencyPhone(Prefs.getAgencyPhone());
@@ -38,6 +40,8 @@ public class LocalSettingsService implements SettingsService {
     Prefs.setRoundingScale(settings.getRoundingScale());
     Prefs.setUiScalePercent(settings.getUiScalePercent());
     Prefs.setUiHighContrast(settings.isHighContrast());
+    Prefs.setUiDyslexiaMode(settings.isDyslexiaMode());
+    Prefs.setUiBrandPrimaryHex(settings.getBrandPrimaryHex());
     Prefs.setAgencyLogoPngBase64(settings.getAgencyLogoPngBase64());
     Prefs.setAgencyName(settings.getAgencyName());
     Prefs.setAgencyPhone(settings.getAgencyPhone());

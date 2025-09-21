@@ -4,6 +4,7 @@ import java.util.Locale;
 
 /** Paramètres généraux côté client. */
 public class GeneralSettings {
+  public static final String DEFAULT_BRAND_PRIMARY_HEX = "#1E88E5";
   private int sessionTimeoutMinutes = 30;
   private int autosaveIntervalSeconds = 30;
   /** TVA par défaut (%) appliquée si aucune valeur spécifique n'est fournie. */
@@ -16,6 +17,10 @@ public class GeneralSettings {
   private int uiScalePercent = 100;
   /** Active un contraste renforcé (focus et couleurs plus marqués). */
   private boolean highContrast;
+  /** Police adaptée à la dyslexie (OpenDyslexic) si disponible. */
+  private boolean dyslexiaMode;
+  /** Couleur primaire personnalisée (branding agence). */
+  private String brandPrimaryHex = DEFAULT_BRAND_PRIMARY_HEX;
   /** PNG encodé en Base64 (optionnel) utilisé en en-tête PDF (logo d’agence). */
   private String agencyLogoPngBase64;
   private String agencyName;
@@ -110,6 +115,37 @@ public class GeneralSettings {
 
   public void setHighContrast(boolean highContrast){
     this.highContrast = highContrast;
+  }
+
+  public boolean isDyslexiaMode(){
+    return dyslexiaMode;
+  }
+
+  public void setDyslexiaMode(boolean dyslexiaMode){
+    this.dyslexiaMode = dyslexiaMode;
+  }
+
+  public String getBrandPrimaryHex(){
+    return brandPrimaryHex != null ? brandPrimaryHex : DEFAULT_BRAND_PRIMARY_HEX;
+  }
+
+  public void setBrandPrimaryHex(String value){
+    if (value == null){
+      brandPrimaryHex = DEFAULT_BRAND_PRIMARY_HEX;
+      return;
+    }
+    String trimmed = value.trim();
+    if (trimmed.isEmpty()){
+      brandPrimaryHex = DEFAULT_BRAND_PRIMARY_HEX;
+      return;
+    }
+    String normalized = trimmed.startsWith("#") ? trimmed : "#" + trimmed;
+    String upper = normalized.toUpperCase(Locale.ROOT);
+    if (upper.matches("#([0-9A-F]{6}|[0-9A-F]{8})")){
+      brandPrimaryHex = upper;
+    } else {
+      brandPrimaryHex = DEFAULT_BRAND_PRIMARY_HEX;
+    }
   }
 
   public String getAgencyLogoPngBase64(){
