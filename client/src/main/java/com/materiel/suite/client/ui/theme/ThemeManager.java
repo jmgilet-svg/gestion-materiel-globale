@@ -6,8 +6,10 @@ import com.materiel.suite.client.settings.GeneralSettings;
 import javax.swing.*;
 import javax.swing.border.Border;
 import javax.swing.border.LineBorder;
+import javax.swing.plaf.ColorUIResource;
 import javax.swing.plaf.FontUIResource;
 import java.awt.*;
+import java.io.InputStream;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
@@ -20,6 +22,8 @@ public final class ThemeManager {
   private static boolean dark = false;
   private static final Map<Object, Font> BASE_FONTS = new HashMap<>();
   private static final Map<String, Object> BASE_OVERRIDES = new HashMap<>();
+  private static Font DYSLEXIA_BASE_FONT;
+  private static boolean DYSLEXIA_LOAD_FAILED;
 
   private ThemeManager(){}
 
@@ -52,8 +56,8 @@ public final class ThemeManager {
 
   public static void applyGeneralSettings(GeneralSettings settings){
     GeneralSettings safe = settings != null ? settings : new GeneralSettings();
-    float scale = clampScale(safe.getUiScalePercent());
-    applyFontScale(scale);
+    applyFontSettings(safe);
+    applyBranding(safe.getBrandPrimaryHex());
     applyHighContrast(safe.isHighContrast());
     configureTooltips();
   }
@@ -81,24 +85,169 @@ public final class ThemeManager {
     return sanitized / 100f;
   }
 
-  private static void applyFontScale(float scale){
+  private static void applyFontSettings(GeneralSettings settings){
+    float scale = clampScale(settings.getUiScalePercent());
+    ensureBaseFonts();
+    Font dyslexia = settings.isDyslexiaMode() ? loadDyslexiaFont(defaultFontSize() * scale) : null;
+    if (dyslexia != null){
+      applyUniformFont(dyslexia);
+    } else {
+      applyFontScale(scale);
+    }
+  }
+
+  private static void ensureBaseFonts(){
+    if (!BASE_FONTS.isEmpty()){
+      return;
+    }
     UIDefaults defaults = UIManager.getDefaults();
-    if (BASE_FONTS.isEmpty()){
-      Enumeration<Object> keys = defaults.keys();
-      while (keys.hasMoreElements()){
-        Object key = keys.nextElement();
-        Object value = defaults.get(key);
-        if (value instanceof Font font){
-          BASE_FONTS.put(key, font);
-        }
+    Enumeration<Object> keys = defaults.keys();
+    while (keys.hasMoreElements()){
+      Object key = keys.nextElement();
+      Object value = defaults.get(key);
+      if (value instanceof Font font){
+        BASE_FONTS.put(key, font);
       }
     }
+  }
+
+  private static void applyFontScale(float scale){
+    ensureBaseFonts();
+    UIDefaults defaults = UIManager.getDefaults();
     for (Map.Entry<Object, Font> entry : BASE_FONTS.entrySet()){
       Font base = entry.getValue();
       if (base != null){
         defaults.put(entry.getKey(), new FontUIResource(base.deriveFont(base.getSize2D() * scale)));
       }
     }
+  }
+
+  private static void applyUniformFont(Font font){
+    if (font == null){
+      return;
+    }
+    FontUIResource resource = new FontUIResource(font);
+    UIDefaults defaults = UIManager.getDefaults();
+    Enumeration<Object> keys = defaults.keys();
+    while (keys.hasMoreElements()){
+      Object key = keys.nextElement();
+      Object value = defaults.get(key);
+      if (value instanceof Font){
+        defaults.put(key, resource);
+      }
+    }
+  }
+
+  private static void applyBranding(String hex){
+    Color brand = parseColor(hex);
+    if (brand == null){
+      override("Component.accentColor", null);
+      override("Component.linkColor", null);
+      override("Component.linkHoverColor", null);
+      override("Button.default.background", null);
+      override("Button.default.focusColor", null);
+      override("Button.default.foreground", null);
+      override("ProgressBar.foreground", null);
+      override("CheckBox.icon.selectedBackground", null);
+      override("RadioButton.icon.selectedBackground", null);
+      override("ToggleButton.icon.selectedBackground", null);
+      return;
+    }
+    ColorUIResource accent = new ColorUIResource(brand);
+    override("Component.accentColor", accent);
+    override("Component.linkColor", accent);
+    override("Component.linkHoverColor", new ColorUIResource(brand.brighter()));
+    override("Button.default.background", accent);
+    override("Button.default.focusColor", new ColorUIResource(brand.darker()));
+    override("Button.default.foreground", new ColorUIResource(readableForeground(brand)));
+    override("ProgressBar.foreground", accent);
+    override("CheckBox.icon.selectedBackground", accent);
+    override("RadioButton.icon.selectedBackground", accent);
+    override("ToggleButton.icon.selectedBackground", accent);
+  }
+
+  private static float defaultFontSize(){
+    Font label = BASE_FONTS.get("Label.font");
+    if (label != null){
+      return label.getSize2D();
+    }
+    Font fallback = UIManager.getFont("Label.font");
+    if (fallback != null){
+      return fallback.getSize2D();
+    }
+    return 14f;
+  }
+
+  private static Font loadDyslexiaFont(float size){
+    Font base = dyslexiaBaseFont();
+    if (base == null){
+      return null;
+    }
+    return base.deriveFont(size);
+  }
+
+  private static Font dyslexiaBaseFont(){
+    if (DYSLEXIA_BASE_FONT != null){
+      return DYSLEXIA_BASE_FONT;
+    }
+    if (DYSLEXIA_LOAD_FAILED){
+      return null;
+    }
+    try (InputStream is = ThemeManager.class.getResourceAsStream("/fonts/OpenDyslexic3-Regular.otf")){
+      if (is == null){
+        DYSLEXIA_LOAD_FAILED = true;
+        return null;
+      }
+      DYSLEXIA_BASE_FONT = Font.createFont(Font.TRUETYPE_FONT, is);
+      return DYSLEXIA_BASE_FONT;
+    } catch (Exception ex){
+      DYSLEXIA_LOAD_FAILED = true;
+      DYSLEXIA_BASE_FONT = null;
+      return null;
+    }
+  }
+
+  private static Color parseColor(String hex){
+    if (hex == null){
+      return null;
+    }
+    String trimmed = hex.trim();
+    if (trimmed.isEmpty()){
+      return null;
+    }
+    String normalized = trimmed.startsWith("#") ? trimmed.substring(1) : trimmed;
+    try {
+      if (normalized.length() == 6){
+        int rgb = Integer.parseInt(normalized, 16);
+        return new Color(rgb);
+      }
+      if (normalized.length() == 8){
+        long rgba = Long.parseLong(normalized, 16);
+        int alpha = (int) ((rgba >> 24) & 0xFF);
+        int red = (int) ((rgba >> 16) & 0xFF);
+        int green = (int) ((rgba >> 8) & 0xFF);
+        int blue = (int) (rgba & 0xFF);
+        return new Color(red, green, blue, alpha);
+      }
+    } catch (NumberFormatException ignore){
+      return null;
+    }
+    return null;
+  }
+
+  private static Color readableForeground(Color color){
+    double r = srgb(color.getRed() / 255.0);
+    double g = srgb(color.getGreen() / 255.0);
+    double b = srgb(color.getBlue() / 255.0);
+    double luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return luminance < 0.5 ? Color.WHITE : Color.BLACK;
+  }
+
+  private static double srgb(double channel){
+    if (channel <= 0.03928){
+      return channel / 12.92;
+    }
+    return Math.pow((channel + 0.055) / 1.055, 2.4);
   }
 
   private static void applyHighContrast(boolean enabled){

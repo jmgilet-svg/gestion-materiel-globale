@@ -27,6 +27,8 @@ public class GeneralSettingsPanel extends JPanel {
   private final JSpinner roundingScaleSpinner;
   private final JSpinner uiScaleSpinner;
   private final JCheckBox highContrastCheck;
+  private final JCheckBox dyslexiaCheck;
+  private final JTextField brandPrimaryField;
   private final JLabel logoPreview;
   private String logoBase64;
   private final JTextField agencyNameField;
@@ -56,6 +58,10 @@ public class GeneralSettingsPanel extends JPanel {
     uiScaleSpinner = new JSpinner(new SpinnerNumberModel(initialScale, 80, 130, 5));
     highContrastCheck = new JCheckBox("Contraste élevé (focus renforcé)");
     highContrastCheck.setSelected(settings.isHighContrast());
+    dyslexiaCheck = new JCheckBox("Mode dyslexie (OpenDyslexic)");
+    dyslexiaCheck.setSelected(settings.isDyslexiaMode());
+    brandPrimaryField = new JTextField(settings.getBrandPrimaryHex() == null ? "" : settings.getBrandPrimaryHex(), 9);
+    brandPrimaryField.setColumns(9);
 
     JPanel form = new JPanel(new GridBagLayout());
     GridBagConstraints gc = new GridBagConstraints();
@@ -118,6 +124,16 @@ public class GeneralSettingsPanel extends JPanel {
     row++;
     gc.gridx = 1; gc.gridy = row; gc.weightx = 1;
     form.add(highContrastCheck, gc);
+
+    row++;
+    gc.gridx = 1; gc.gridy = row; gc.weightx = 1;
+    form.add(dyslexiaCheck, gc);
+
+    row++;
+    gc.gridx = 0; gc.gridy = row; gc.weightx = 0;
+    form.add(new JLabel("Couleur primaire (branding)"), gc);
+    gc.gridx = 1; gc.weightx = 1;
+    form.add(brandPrimaryField, gc);
 
     row++;
     gc.gridx = 0; gc.gridy = row; gc.weightx = 0;
@@ -183,6 +199,8 @@ public class GeneralSettingsPanel extends JPanel {
     roundingScaleSpinner.setEnabled(canEdit);
     uiScaleSpinner.setEnabled(canEdit);
     highContrastCheck.setEnabled(canEdit);
+    dyslexiaCheck.setEnabled(canEdit);
+    brandPrimaryField.setEnabled(canEdit);
     save.setEnabled(canEdit);
     chooseLogo.setEnabled(canEdit);
     clearLogo.setEnabled(canEdit);
@@ -226,6 +244,8 @@ public class GeneralSettingsPanel extends JPanel {
     int scale = ((Number) roundingScaleSpinner.getValue()).intValue();
     int uiScale = ((Number) uiScaleSpinner.getValue()).intValue();
     boolean highContrast = highContrastCheck.isSelected();
+    boolean dyslexia = dyslexiaCheck.isSelected();
+    String brandPrimary = brandPrimaryField.getText();
 
     GeneralSettings updated = new GeneralSettings();
     updated.setSessionTimeoutMinutes(minutes);
@@ -235,6 +255,8 @@ public class GeneralSettingsPanel extends JPanel {
     updated.setRoundingScale(scale);
     updated.setUiScalePercent(uiScale);
     updated.setHighContrast(highContrast);
+    updated.setDyslexiaMode(dyslexia);
+    updated.setBrandPrimaryHex(brandPrimary);
     updated.setAgencyLogoPngBase64(logoBase64);
     updated.setAgencyName(agencyNameField.getText());
     updated.setAgencyPhone(agencyPhoneField.getText());
@@ -252,13 +274,17 @@ public class GeneralSettingsPanel extends JPanel {
       roundingScaleSpinner.setValue(updated.getRoundingScale());
       uiScaleSpinner.setValue(updated.getUiScalePercent());
       highContrastCheck.setSelected(updated.isHighContrast());
+      dyslexiaCheck.setSelected(updated.isDyslexiaMode());
+      brandPrimaryField.setText(updated.getBrandPrimaryHex());
       ThemeManager.applyGeneralSettings(updated);
       ThemeManager.refreshAllFrames();
       AppEventBus.get().publish(new SettingsEvents.GeneralSaved(
           updated.getSessionTimeoutMinutes(),
           updated.getAutosaveIntervalSeconds(),
           updated.getUiScalePercent(),
-          updated.isHighContrast()
+          updated.isHighContrast(),
+          updated.isDyslexiaMode(),
+          updated.getBrandPrimaryHex()
       ));
       Toasts.success(this, "Paramètres généraux mis à jour");
     } catch (RuntimeException ex){

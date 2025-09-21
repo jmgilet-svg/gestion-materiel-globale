@@ -85,6 +85,7 @@ import com.materiel.suite.client.ui.common.Accessible;
 import com.materiel.suite.client.ui.common.EmailPreviewDialog;
 import com.materiel.suite.client.ui.common.KeymapUtil;
 import com.materiel.suite.client.ui.common.Toasts;
+import com.materiel.suite.client.ui.common.Tooltips;
 import com.materiel.suite.client.ui.commands.CommandBus;
 import com.materiel.suite.client.ui.MainFrame;
 import com.materiel.suite.client.ui.icons.IconRegistry;
@@ -243,9 +244,9 @@ public class PlanningPanel extends JPanel {
     bulkBar.add(dryRunBtn);
     bulkBar.add(bulkQuoteBtn);
     bulkBar.add(exportIcsBtn);
-    exportMissionBtn.setToolTipText("Générer un ordre de mission PDF pour la sélection (P)");
-    sendBtn.setToolTipText("Envoyer les ordres de mission par email aux ressources (M)");
-    dispatcherBtn.setToolTipText("Ouvrir le mode Dispatcher (planification côte à côte)");
+    Tooltips.setWithShortcut(exportMissionBtn, "Générer un ordre de mission PDF pour la sélection", "P");
+    Tooltips.setWithShortcut(sendBtn, "Envoyer les ordres de mission par email aux ressources", "M");
+    Tooltips.setWithShortcut(dispatcherBtn, "Ouvrir le mode Dispatcher (planification côte à côte)", null);
     Accessible.a11y(exportMissionBtn,
         "Exporter Ordre de Mission PDF",
         "Génère un ordre de mission PDF pour les interventions sélectionnées.");

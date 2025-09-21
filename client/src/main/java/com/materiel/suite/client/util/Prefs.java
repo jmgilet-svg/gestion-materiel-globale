@@ -1,42 +1,48 @@
 package com.materiel.suite.client.util;
 
+import com.materiel.suite.client.auth.Agency;
+import com.materiel.suite.client.auth.AuthContext;
+import com.materiel.suite.client.auth.User;
+import com.materiel.suite.client.settings.GeneralSettings;
+
 import java.util.Locale;
 import java.util.prefs.Preferences;
 
 /** Accès simplifié aux préférences utilisateur côté client. */
 public final class Prefs {
-  private static final Preferences PREFS = Preferences.userRoot().node("gestion-materiel");
+  private static final String ROOT_NODE = "gestion-materiel";
+  private static final int MAX_NODE_SEGMENT = 64;
 
   private Prefs(){
   }
 
   public static int getSessionTimeoutMinutes(){
-    return Math.max(1, PREFS.getInt("session.timeout.minutes", 30));
+    return Math.max(1, readInt("session.timeout.minutes", 30));
   }
 
   public static void setSessionTimeoutMinutes(int minutes){
-    PREFS.putInt("session.timeout.minutes", Math.max(1, minutes));
+    prefs().putInt("session.timeout.minutes", Math.max(1, minutes));
   }
 
   public static int getAutosaveIntervalSeconds(){
-    return Math.max(5, PREFS.getInt("autosave.interval.seconds", 30));
+    return Math.max(5, readInt("autosave.interval.seconds", 30));
   }
 
   public static void setAutosaveIntervalSeconds(int seconds){
-    PREFS.putInt("autosave.interval.seconds", Math.max(5, seconds));
+    prefs().putInt("autosave.interval.seconds", Math.max(5, seconds));
   }
 
   public static double getDefaultVatPercent(){
-    return PREFS.getDouble("billing.vat.default.percent", 20.0d);
+    return readDouble("billing.vat.default.percent", 20.0d);
   }
 
   public static void setDefaultVatPercent(Double value){
     if (value == null){
-      PREFS.remove("billing.vat.default.percent");
+      prefs().remove("billing.vat.default.percent");
       return;
     }
     double sanitized = Math.max(0d, Math.min(100d, value));
-    PREFS.putDouble("billing.vat.default.percent", sanitized);
+    prefs().putDouble("billing.vat.default.percent", sanitized);
   }
 
   public static String getRoundingMode(){
@@ -53,12 +59,12 @@ public final class Prefs {
 
   public static void setRoundingMode(String mode){
     if (mode == null){
-      PREFS.remove("billing.rounding.mode");
+      prefs().remove("billing.rounding.mode");
       return;
     }
     String trimmed = mode.trim();
     if (trimmed.isEmpty()){
-      PREFS.remove("billing.rounding.mode");
+      prefs().remove("billing.rounding.mode");
       return;
     }
     String normalized = trimmed.toUpperCase(Locale.ROOT);
@@ -66,16 +72,16 @@ public final class Prefs {
       case "HALF_DOWN":
       case "HALF_EVEN":
       case "HALF_UP":
-        PREFS.put("billing.rounding.mode", normalized);
+        prefs().put("billing.rounding.mode", normalized);
         break;
       default:
-        PREFS.put("billing.rounding.mode", "HALF_UP");
+        prefs().put("billing.rounding.mode", "HALF_UP");
         break;
     }
   }
 
   public static int getRoundingScale(){
-    int stored = PREFS.getInt("billing.rounding.scale", 2);
+    int stored = readInt("billing.rounding.scale", 2);
     if (stored < 0){
       return 0;
     }
@@ -84,11 +90,11 @@ public final class Prefs {
 
   public static void setRoundingScale(int scale){
     int sanitized = Math.max(0, Math.min(scale, 6));
-    PREFS.putInt("billing.rounding.scale", sanitized);
+    prefs().putInt("billing.rounding.scale", sanitized);
   }
 
   public static int getUiScalePercent(){
-    int stored = PREFS.getInt("ui.scale.percent", 100);
+    int stored = readInt("ui.scale.percent", 100);
     if (stored < 80){
       return 80;
     }
@@ -100,15 +106,36 @@ public final class Prefs {
 
   public static void setUiScalePercent(int percent){
     int sanitized = Math.max(80, Math.min(percent, 130));
-    PREFS.putInt("ui.scale.percent", sanitized);
+    prefs().putInt("ui.scale.percent", sanitized);
   }
 
   public static boolean isUiHighContrast(){
-    return PREFS.getBoolean("ui.high.contrast", false);
+    return readBoolean("ui.high.contrast", false);
   }
 
   public static void setUiHighContrast(boolean enabled){
-    PREFS.putBoolean("ui.high.contrast", enabled);
+    prefs().putBoolean("ui.high.contrast", enabled);
+  }
+
+  public static boolean isUiDyslexiaMode(){
+    return readBoolean("ui.dyslexia.mode", false);
+  }
+
+  public static void setUiDyslexiaMode(boolean enabled){
+    prefs().putBoolean("ui.dyslexia.mode", enabled);
+  }
+
+  public static String getUiBrandPrimaryHex(){
+    String stored = readTrimmed("ui.brand.primary.hex");
+    return stored != null ? stored : GeneralSettings.DEFAULT_BRAND_PRIMARY_HEX;
+  }
+
+  public static void setUiBrandPrimaryHex(String value){
+    if (value == null || value.isBlank()){
+      prefs().remove("ui.brand.primary.hex");
+    } else {
+      prefs().put("ui.brand.primary.hex", value.trim());
+    }
   }
 
   public static String getAgencyLogoPngBase64(){
@@ -168,28 +195,28 @@ public final class Prefs {
   }
 
   public static int getMailPort(){
-    int port = PREFS.getInt("mail.smtp.port", 587);
+    int port = readInt("mail.smtp.port", 587);
     return port > 0 ? port : 587;
   }
 
   public static void setMailPort(int port){
-    PREFS.putInt("mail.smtp.port", port > 0 ? port : 587);
+    prefs().putInt("mail.smtp.port", port > 0 ? port : 587);
   }
 
   public static boolean isMailStarttls(){
-    return PREFS.getBoolean("mail.smtp.starttls", true);
+    return readBoolean("mail.smtp.starttls", true);
   }
 
   public static void setMailStarttls(boolean enabled){
-    PREFS.putBoolean("mail.smtp.starttls", enabled);
+    prefs().putBoolean("mail.smtp.starttls", enabled);
   }
 
   public static boolean isMailAuth(){
-    return PREFS.getBoolean("mail.smtp.auth", true);
+    return readBoolean("mail.smtp.auth", true);
   }
 
   public static void setMailAuth(boolean enabled){
-    PREFS.putBoolean("mail.smtp.auth", enabled);
+    prefs().putBoolean("mail.smtp.auth", enabled);
   }
 
   public static String getMailUsername(){
@@ -201,7 +228,7 @@ public final class Prefs {
   }
 
   public static String getMailPassword(){
-    String value = PREFS.get("mail.smtp.password", null);
+    String value = readRaw("mail.smtp.password");
     if (value == null){
       return null;
     }
@@ -211,9 +238,9 @@ public final class Prefs {
 
   public static void setMailPassword(String value){
     if (value == null || value.isBlank()){
-      PREFS.remove("mail.smtp.password");
+      prefs().remove("mail.smtp.password");
     } else {
-      PREFS.put("mail.smtp.password", value);
+      prefs().put("mail.smtp.password", value);
     }
   }
 
@@ -242,24 +269,24 @@ public final class Prefs {
   }
 
   public static String getMailSubjectTemplate(){
-    String value = PREFS.get("mail.subject.template", null);
+    String value = readRaw("mail.subject.template");
     if (value == null){
       return null;
     }
     String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
+    return trimmed.isEmpty() ? null : value;
   }
 
   public static void setMailSubjectTemplate(String value){
     if (value == null || value.isBlank()){
-      PREFS.remove("mail.subject.template");
+      prefs().remove("mail.subject.template");
     } else {
-      PREFS.put("mail.subject.template", value);
+      prefs().put("mail.subject.template", value);
     }
   }
 
   public static String getMailBodyTemplate(){
-    String value = PREFS.get("mail.body.template", null);
+    String value = readRaw("mail.body.template");
     if (value == null){
       return null;
     }
@@ -269,14 +296,14 @@ public final class Prefs {
 
   public static void setMailBodyTemplate(String value){
     if (value == null || value.isBlank()){
-      PREFS.remove("mail.body.template");
+      prefs().remove("mail.body.template");
     } else {
-      PREFS.put("mail.body.template", value);
+      prefs().put("mail.body.template", value);
     }
   }
 
   public static String getMailHtmlTemplate(){
-    String value = PREFS.get("mail.body.html.template", null);
+    String value = readRaw("mail.body.html.template");
     if (value == null){
       return null;
     }
@@ -286,26 +313,26 @@ public final class Prefs {
 
   public static void setMailHtmlTemplate(String value){
     if (value == null || value.isBlank()){
-      PREFS.remove("mail.body.html.template");
+      prefs().remove("mail.body.html.template");
     } else {
-      PREFS.put("mail.body.html.template", value);
+      prefs().put("mail.body.html.template", value);
     }
   }
 
   public static boolean isMailHtmlEnabled(){
-    return PREFS.getBoolean("mail.body.html.enabled", true);
+    return readBoolean("mail.body.html.enabled", true);
   }
 
   public static void setMailHtmlEnabled(boolean enabled){
-    PREFS.putBoolean("mail.body.html.enabled", enabled);
+    prefs().putBoolean("mail.body.html.enabled", enabled);
   }
 
   public static boolean isMailTrackingEnabled(){
-    return PREFS.getBoolean("mail.tracking.enabled", true);
+    return readBoolean("mail.tracking.enabled", true);
   }
 
   public static void setMailTrackingEnabled(boolean enabled){
-    PREFS.putBoolean("mail.tracking.enabled", enabled);
+    prefs().putBoolean("mail.tracking.enabled", enabled);
   }
 
   public static String getMailTrackingBaseUrl(){
@@ -316,8 +343,102 @@ public final class Prefs {
     writeTrimmed("mail.tracking.base", value);
   }
 
+  private static Preferences prefs(){
+    return Preferences.userRoot().node(currentNodePath());
+  }
+
+  private static Preferences basePrefs(){
+    return Preferences.userRoot().node(ROOT_NODE);
+  }
+
+  private static String currentNodePath(){
+    String agencyId = sanitizeNodeSegment(currentAgencyId());
+    if (agencyId == null){
+      return ROOT_NODE;
+    }
+    return ROOT_NODE + "/agency/" + agencyId;
+  }
+
+  private static String currentAgencyId(){
+    User user = AuthContext.get();
+    if (user == null){
+      return null;
+    }
+    Agency agency = user.getAgency();
+    return agency != null ? agency.getId() : null;
+  }
+
+  private static String sanitizeNodeSegment(String value){
+    if (value == null){
+      return null;
+    }
+    String trimmed = value.trim();
+    if (trimmed.isEmpty()){
+      return null;
+    }
+    StringBuilder sb = new StringBuilder(trimmed.length());
+    for (int i = 0; i < trimmed.length(); i++){
+      char ch = trimmed.charAt(i);
+      if (Character.isLetterOrDigit(ch) || ch == '-' || ch == '_' || ch == '.'){
+        sb.append(ch);
+      } else {
+        sb.append('_');
+      }
+      if (sb.length() >= MAX_NODE_SEGMENT){
+        break;
+      }
+    }
+    String sanitized = sb.toString();
+    return sanitized.isEmpty() ? null : sanitized;
+  }
+
+  private static int readInt(String key, int defaultValue){
+    String raw = readRaw(key);
+    if (raw == null){
+      return defaultValue;
+    }
+    try {
+      return Integer.parseInt(raw.trim());
+    } catch (NumberFormatException ignore){
+      return defaultValue;
+    }
+  }
+
+  private static double readDouble(String key, double defaultValue){
+    String raw = readRaw(key);
+    if (raw == null){
+      return defaultValue;
+    }
+    try {
+      return Double.parseDouble(raw.trim());
+    } catch (NumberFormatException ignore){
+      return defaultValue;
+    }
+  }
+
+  private static boolean readBoolean(String key, boolean defaultValue){
+    String raw = readRaw(key);
+    if (raw == null){
+      return defaultValue;
+    }
+    return Boolean.parseBoolean(raw.trim());
+  }
+
+  private static String readRaw(String key){
+    Preferences current = prefs();
+    String value = current.get(key, null);
+    if (value != null){
+      return value;
+    }
+    Preferences fallback = basePrefs();
+    if (fallback == current){
+      return null;
+    }
+    return fallback.get(key, null);
+  }
+
   private static String readTrimmed(String key){
-    String value = PREFS.get(key, null);
+    String value = readRaw(key);
     if (value == null){
       return null;
     }
@@ -327,14 +448,14 @@ public final class Prefs {
 
   private static void writeTrimmed(String key, String value){
     if (value == null){
-      PREFS.remove(key);
+      prefs().remove(key);
       return;
     }
     String trimmed = value.trim();
     if (trimmed.isEmpty()){
-      PREFS.remove(key);
-      return;
+      prefs().remove(key);
+    } else {
+      prefs().put(key, trimmed);
     }
-    PREFS.put(key, trimmed);
   }
 }
