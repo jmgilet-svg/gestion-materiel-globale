@@ -21,6 +21,8 @@ public class HtmlEditorPanel extends JPanel {
   private final JTextArea source = new JTextArea();
   private final HTMLEditorKit kit = new HTMLEditorKit();
   private final JToolBar toolbar = new JToolBar();
+  private final JButton validateBtn = new JButton("Valider HTML");
+  private final JLabel validationLabel = new JLabel(" ");
 
   public HtmlEditorPanel(){
     super(new BorderLayout());
@@ -65,6 +67,12 @@ public class HtmlEditorPanel extends JPanel {
     toolbar.add(action("Lien", e -> insert("<a href=\"https://\">lien</a>"), "Insérer un lien"));
     toolbar.add(action("Image", e -> insert("<img src=\"cid:logo\" style=\"max-width:200px\"/>")
         , "Insérer une image (cid)"));
+    toolbar.add(Box.createHorizontalStrut(16));
+    toolbar.add(validateBtn);
+    toolbar.add(Box.createHorizontalStrut(8));
+    validationLabel.setForeground(new java.awt.Color(0x33, 0x66, 0x33));
+    toolbar.add(validationLabel);
+    validateBtn.addActionListener(e -> runValidation());
   }
 
   private AbstractAction action(String label, Consumer<ActionEvent> fn, String tip){
@@ -143,6 +151,20 @@ public class HtmlEditorPanel extends JPanel {
       return source.getText();
     }
     return readDesignHtml();
+  }
+
+  private void runValidation(){
+    String html = getHtml();
+    HtmlValidation.Result r = HtmlValidation.validate(html);
+    if (r.ok){
+      validationLabel.setForeground(new java.awt.Color(0x2e, 0x7d, 0x32));
+      validationLabel.setText("HTML valide");
+      validationLabel.setToolTipText(null);
+    } else {
+      validationLabel.setForeground(new java.awt.Color(0xc6, 0x28, 0x28));
+      validationLabel.setText("⚠ " + r.message);
+      validationLabel.setToolTipText(r.details);
+    }
   }
 
   /** Ouvre un éditeur HTML modal en mode plein écran. */
