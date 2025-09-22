@@ -3,6 +3,7 @@ package com.materiel.suite.client.ui.sales;
 import com.materiel.suite.client.service.AgencyConfigGateway;
 import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.service.TemplatesGateway;
+import com.materiel.suite.client.ui.common.HtmlValidation;
 
 import javax.swing.*;
 import java.awt.*;
@@ -21,6 +22,10 @@ public class EmailPrompt extends JDialog {
   private final JTextArea bodyArea = new JTextArea(6, 28);
   private final JEditorPane preview = new JEditorPane("text/html", "");
   private final JCheckBox livePreview = new JCheckBox("Prévisualiser le rendu HTML");
+  private final JCheckBox mobileToggle = new JCheckBox("Aperçu mobile (375px)");
+  private final JPanel previewViewport = new JPanel(new BorderLayout());
+  private final JLabel validationLabel = new JLabel(" ");
+  private final JButton validateBtn = new JButton("Valider HTML");
   private String agencyCss = "";
   private String agencySignature = "";
   private boolean confirmed;
@@ -82,8 +87,10 @@ public class EmailPrompt extends JDialog {
     gc.fill = GridBagConstraints.BOTH;
     preview.setEditable(false);
     preview.setContentType("text/html; charset=UTF-8");
+    previewViewport.add(preview, BorderLayout.CENTER);
+    JScrollPane right = new JScrollPane(previewViewport);
     JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
-        new JScrollPane(bodyArea), new JScrollPane(preview));
+        new JScrollPane(bodyArea), right);
     split.setResizeWeight(0.5);
     add(split, gc);
 
@@ -91,7 +98,13 @@ public class EmailPrompt extends JDialog {
     gc.gridy++;
     gc.anchor = GridBagConstraints.LINE_START;
     gc.fill = GridBagConstraints.NONE;
-    add(livePreview, gc);
+    JPanel previewOptions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+    previewOptions.add(livePreview);
+    previewOptions.add(mobileToggle);
+    previewOptions.add(validateBtn);
+    validationLabel.setForeground(new java.awt.Color(0x33, 0x66, 0x33));
+    previewOptions.add(validationLabel);
+    add(previewOptions, gc);
 
     JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
     JButton send = new JButton("Envoyer");
@@ -131,6 +144,8 @@ public class EmailPrompt extends JDialog {
 
     livePreview.setSelected(true);
     livePreview.addActionListener(e -> refreshPreview());
+    mobileToggle.addActionListener(e -> refreshPreview());
+    validateBtn.addActionListener(e -> runValidation());
     bodyArea.getDocument().addDocumentListener(new javax.swing.event.DocumentListener(){
       @Override public void insertUpdate(javax.swing.event.DocumentEvent e){ refreshPreview(); }
       @Override public void removeUpdate(javax.swing.event.DocumentEvent e){ refreshPreview(); }
@@ -203,11 +218,31 @@ public class EmailPrompt extends JDialog {
   private void refreshPreview(){
     if (!livePreview.isSelected()){
       preview.setText("");
+      previewViewport.setPreferredSize(null);
+      previewViewport.revalidate();
+      previewViewport.repaint();
       return;
     }
-    String finalHtml = buildFinalHtml();
-    preview.setText(finalHtml);
+    String headCss = agencyCss == null || agencyCss.isBlank() ? "" : "<style>" + agencyCss + "</style>";
+    String body = bodyArea.getText();
+    if (body == null){
+      body = "";
+    }
+    if (agencySignature != null && !agencySignature.isBlank()){
+      body = body + "\n" + agencySignature;
+    }
+    String html = "<!doctype html><html><head><meta charset='UTF-8'>"
+        + "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        + headCss + "</head><body>" + body + "</body></html>";
+    preview.setText(html);
     preview.setCaretPosition(0);
+    if (mobileToggle.isSelected()){
+      previewViewport.setPreferredSize(new Dimension(375, 600));
+    } else {
+      previewViewport.setPreferredSize(null);
+    }
+    previewViewport.revalidate();
+    previewViewport.repaint();
   }
 
   private String buildFinalHtml(){
@@ -225,7 +260,9 @@ public class EmailPrompt extends JDialog {
         body = body + System.lineSeparator() + agencySignature;
       }
       String headCss = agencyCss == null || agencyCss.isBlank() ? "" : "<style>" + agencyCss + "</style>";
-      return "<!doctype html><html><head><meta charset='UTF-8'>" + headCss + "</head><body>" + body + "</body></html>";
+      return "<!doctype html><html><head><meta charset='UTF-8'>"
+          + "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+          + headCss + "</head><body>" + body + "</body></html>";
     }
     return trimmed;
   }
@@ -268,5 +305,19 @@ public class EmailPrompt extends JDialog {
       }
     }
     return out;
+  }
+
+  private void runValidation(){
+    HtmlValidation.Result result = HtmlValidation.validate(bodyArea.getText());
+    if (result.ok){
+      validationLabel.setForeground(new java.awt.Color(0x2e, 0x7d, 0x32));
+      validationLabel.setText("HTML valide");
+      validationLabel.setToolTipText(null);
+    } else {
+      validationLabel.setForeground(new java.awt.Color(0xc6, 0x28, 0x28));
+      validationLabel.setText("⚠ " + result.message);
+      String details = result.details == null ? "" : result.details.replace("\n", "<br/>");
+      validationLabel.setToolTipText(details.isEmpty() ? null : "<html>" + details + "</html>");
+    }
   }
 }
