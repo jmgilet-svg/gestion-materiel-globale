@@ -155,6 +155,12 @@ public class InterventionDialog extends JDialog {
   private final JLabel quoteStatusLabel = new JLabel("Aucun devis généré");
   private final StepBar workflowStepBar = new StepBar();
   private final JTabbedPane tabs = new JTabbedPane();
+  private enum WorkflowStage { INTERVENTION, DEVIS, FACTURATION }
+  private WorkflowStage currentStage = WorkflowStage.INTERVENTION;
+  private final JButton prevStageButton = new JButton("← Précédent");
+  private final JButton nextStageButton = new JButton("Suivant →");
+  private boolean ignoreTabChange;
+  private int lastAccessibleTabIndex;
   private final DefaultListModel<TimelineEvent> historyModel = new DefaultListModel<>();
   private final JList<TimelineEvent> historyList = new JList<>(historyModel);
   private final JTextArea historyInput = new JTextArea(3, 20);
@@ -235,6 +241,10 @@ public class InterventionDialog extends JDialog {
     openQuoteButton.addActionListener(e -> openQuotePreview());
     importSignatureButton.addActionListener(e -> importSignature());
     clearSignatureButton.addActionListener(e -> clearSignature());
+    prevStageButton.setFocusable(false);
+    nextStageButton.setFocusable(false);
+    prevStageButton.addActionListener(e -> goToPreviousStage());
+    nextStageButton.addActionListener(e -> goToNextStage());
     fullscreenButton.addActionListener(e -> toggleFullscreen());
     fullscreenButton.setFocusPainted(false);
     fullscreenButton.setToolTipText("Basculer plein écran (Alt+Entrée)");
@@ -293,7 +303,7 @@ public class InterventionDialog extends JDialog {
   }
 
   private void installWorkflowHooks(){
-    // Mapping étapes → onglets (ordre figé) : Intervention(1), Devis(3), Facturation(2)
+    // Navigation pilotée par goToStage pour aligner l'étape active sur les onglets disponibles.
     workflowStepBar.setOnNavigate(this::navigateToStep);
     ChangeListener spinnerListener = e -> {
       if (!suppressDurationSync){
@@ -323,9 +333,12 @@ public class InterventionDialog extends JDialog {
     }
     KeymapUtil.bindGlobal(target, "intervention-gen-quote", KeymapUtil.ctrlG(), this::generateQuoteFromPrebilling);
     KeymapUtil.bindGlobal(target, "intervention-regenerate", KeymapUtil.ctrlR(), this::regenerateBillingFromResources);
-    KeymapUtil.bindGlobal(target, "intervention-step-1", KeymapUtil.ctrlDigit(1), () -> selectTabSafe(1));
-    KeymapUtil.bindGlobal(target, "intervention-step-2", KeymapUtil.ctrlDigit(2), () -> selectTabSafe(3));
-    KeymapUtil.bindGlobal(target, "intervention-step-3", KeymapUtil.ctrlDigit(3), () -> selectTabSafe(2));
+    KeymapUtil.bindGlobal(target, "intervention-step-1", KeymapUtil.ctrlDigit(1), () -> goToStage(WorkflowStage.INTERVENTION));
+    KeymapUtil.bindGlobal(target, "intervention-step-2", KeymapUtil.ctrlDigit(2), () -> goToStage(WorkflowStage.DEVIS));
+    KeymapUtil.bindGlobal(target, "intervention-step-3", KeymapUtil.ctrlDigit(3), () -> goToStage(WorkflowStage.FACTURATION));
+    KeymapUtil.bindGlobal(target, "intervention-prev-stage", KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, KeymapUtil.menuMask()), this::goToPreviousStage);
+    KeymapUtil.bindGlobal(target, "intervention-next-stage", KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, KeymapUtil.menuMask()), this::goToNextStage);
+    KeymapUtil.bindGlobal(target, "intervention-close", KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), this::closeDialog);
     InputMap map = target.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
     ActionMap actions = target.getActionMap();
     map.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, KeymapUtil.menuMask()), "intervention-undo");
@@ -588,26 +601,186 @@ public class InterventionDialog extends JDialog {
     return copy;
   }
 
-  private void selectTabSafe(int index){
-    if (tabs == null){
+  private void handleTabSelectionChange(){
+    if (tabs == null || ignoreTabChange){
       return;
     }
-    if (index >= 0 && index < tabs.getTabCount()){
-      tabs.setSelectedIndex(index);
+    int selected = tabs.getSelectedIndex();
+    WorkflowStage stage = stageForTabIndex(selected);
+    if (stage != null && !canAccessStage(stage)){
+      showStageGuardMessage(stage);
+      ignoreTabChange = true;
+      try {
+        if (lastAccessibleTabIndex >= 0 && lastAccessibleTabIndex < tabs.getTabCount()){
+          tabs.setSelectedIndex(lastAccessibleTabIndex);
+        }
+      } finally {
+        ignoreTabChange = false;
+      }
+      refreshWorkflowState();
+      return;
     }
+    if (stage != null){
+      currentStage = stage;
+    }
+    lastAccessibleTabIndex = Math.max(0, Math.min(selected, tabs.getTabCount() - 1));
+    refreshWorkflowState();
+  }
+
+  private WorkflowStage stageForTabIndex(int index){
+    if (tabs == null || index < 0 || index >= tabs.getTabCount()){
+      return null;
+    }
+    String title = tabs.getTitleAt(index);
+    if (title == null){
+      return null;
+    }
+    String normalized = title.toLowerCase(Locale.ROOT);
+    if (normalized.contains("factur")){
+      return WorkflowStage.DEVIS;
+    }
+    if (normalized.contains("devis")){
+      return WorkflowStage.FACTURATION;
+    }
+    if (normalized.contains("intervention") || normalized.contains("général") || normalized.contains("general")){
+      return WorkflowStage.INTERVENTION;
+    }
+    return null;
+  }
+
+  private int findTabIndexForStage(WorkflowStage stage){
+    if (tabs == null || stage == null){
+      return -1;
+    }
+    int fallbackIntervention = -1;
+    for (int i = 0; i < tabs.getTabCount(); i++){
+      String title = tabs.getTitleAt(i);
+      if (title == null){
+        continue;
+      }
+      String normalized = title.toLowerCase(Locale.ROOT);
+      switch (stage){
+        case INTERVENTION -> {
+          if (normalized.contains("général") || normalized.contains("general")){
+            return i;
+          }
+          if (fallbackIntervention < 0 && normalized.contains("intervention")){
+            fallbackIntervention = i;
+          }
+        }
+        case DEVIS -> {
+          if (normalized.contains("factur")){
+            return i;
+          }
+        }
+        case FACTURATION -> {
+          if (normalized.contains("devis")){
+            return i;
+          }
+        }
+      }
+    }
+    return stage == WorkflowStage.INTERVENTION ? fallbackIntervention : -1;
   }
 
   private void navigateToStep(int index){
-    int target = switch (index){
-      case 0 -> 1; // Intervention
-      case 1 -> 3; // Devis
-      case 2 -> 2; // Facturation
-      default -> 1;
+    WorkflowStage target = switch (index){
+      case 0 -> WorkflowStage.INTERVENTION;
+      case 1 -> WorkflowStage.DEVIS;
+      case 2 -> WorkflowStage.FACTURATION;
+      default -> WorkflowStage.INTERVENTION;
     };
-    if (target < 0 || target >= tabs.getTabCount()){
+    goToStage(target);
+  }
+
+  private boolean goToStage(WorkflowStage target){
+    if (target == null || tabs == null){
+      return false;
+    }
+    if (!canAccessStage(target)){
+      showStageGuardMessage(target);
+      return false;
+    }
+    int index = findTabIndexForStage(target);
+    if (index < 0){
+      return false;
+    }
+    if (tabs.getSelectedIndex() != index){
+      ignoreTabChange = true;
+      try {
+        tabs.setSelectedIndex(index);
+      } finally {
+        ignoreTabChange = false;
+      }
+    }
+    currentStage = target;
+    lastAccessibleTabIndex = index;
+    refreshWorkflowState();
+    return true;
+  }
+
+  private void goToPreviousStage(){
+    switch (currentStage){
+      case FACTURATION -> goToStage(WorkflowStage.DEVIS);
+      case DEVIS -> goToStage(WorkflowStage.INTERVENTION);
+      default -> {
+      }
+    }
+  }
+
+  private void goToNextStage(){
+    switch (currentStage){
+      case INTERVENTION -> goToStage(WorkflowStage.DEVIS);
+      case DEVIS -> goToStage(WorkflowStage.FACTURATION);
+      default -> {
+      }
+    }
+  }
+
+  private boolean canAccessStage(WorkflowStage stage){
+    if (stage == null){
+      return false;
+    }
+    return switch (stage){
+      case INTERVENTION -> true;
+      case DEVIS -> isInterventionStageReady();
+      case FACTURATION -> hasLinkedQuote();
+    };
+  }
+
+  private void showStageGuardMessage(WorkflowStage stage){
+    if (stage == null){
       return;
     }
-    tabs.setSelectedIndex(target);
+    switch (stage){
+      case DEVIS -> toastInfo("Compléter l'intervention avant d'accéder au devis.");
+      case FACTURATION -> toastInfo("Générer un devis avant de passer en facturation.");
+      default -> {
+      }
+    }
+  }
+
+  private boolean isInterventionStageReady(){
+    if (!isGeneralSectionComplete()){
+      return false;
+    }
+    Date start = spinnerDate(startSpinner);
+    Date end = spinnerDate(endSpinner);
+    return start != null && end != null && !end.before(start);
+  }
+
+  private boolean hasLinkedQuote(){
+    return current != null && current.hasQuote();
+  }
+
+  private void syncNavigationButtons(){
+    prevStageButton.setEnabled(currentStage != WorkflowStage.INTERVENTION);
+    boolean canAdvance = switch (currentStage){
+      case INTERVENTION -> isInterventionStageReady();
+      case DEVIS -> hasLinkedQuote();
+      case FACTURATION -> false;
+    };
+    nextStageButton.setEnabled(canAdvance);
   }
 
   private DocumentListener documentListener(Runnable action){
@@ -631,16 +804,14 @@ public class InterventionDialog extends JDialog {
       String stage = !detailsReady ? "INTERVENTION" : (!quoted ? "DEVIS" : "FACTURATION");
       current.setWorkflowStage(stage);
     }
-    // Peindre la barre (activeIndex selon l'onglet : Intervention(1)→0, Devis(3)→1, Facturation(2)→2)
-    int tabIdx = tabs.getSelectedIndex();
-    int active = switch (tabIdx){
-      case 1 -> 0;
-      case 3 -> 1;
-      case 2 -> 2;
-      default -> 0;
+    int active = switch (currentStage){
+      case INTERVENTION -> 0;
+      case DEVIS -> 1;
+      case FACTURATION -> 2;
     };
     workflowStepBar.setState(active, detailsReady, quoted, billingReady);
     quoteSummaryLabel.setText(quoteStatusLabel.getText());
+    syncNavigationButtons();
   }
 
   private boolean isGeneralSectionComplete(){
@@ -1143,7 +1314,14 @@ public class InterventionDialog extends JDialog {
     tabs.addTab("Devis", IconRegistry.small("file"), buildQuoteTab());
     tabs.addTab("Facturation", IconRegistry.small("invoice"), buildFacturationTab());
     tabs.addTab("Historique", IconRegistry.small("info"), buildHistoryTab());
-    tabs.addChangeListener(e -> refreshWorkflowState());
+    tabs.addChangeListener(e -> handleTabSelectionChange());
+    lastAccessibleTabIndex = Math.max(0, tabs.getSelectedIndex());
+    WorkflowStage initialStage = stageForTabIndex(lastAccessibleTabIndex);
+    if (initialStage != null){
+      currentStage = initialStage;
+    } else {
+      currentStage = WorkflowStage.INTERVENTION;
+    }
     return tabs;
   }
 
@@ -1404,11 +1582,17 @@ public class InterventionDialog extends JDialog {
   }
 
   private JComponent buildFooter(){
-    JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+    JPanel panel = new JPanel(new BorderLayout());
+    JPanel navigation = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    navigation.add(prevStageButton);
+    navigation.add(nextStageButton);
+    panel.add(navigation, BorderLayout.WEST);
+    JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
     JButton cancel = new JButton("Fermer");
     cancel.addActionListener(e -> closeDialog());
-    panel.add(saveButton);
-    panel.add(cancel);
+    actions.add(saveButton);
+    actions.add(cancel);
+    panel.add(actions, BorderLayout.EAST);
     return panel;
   }
 
