@@ -41,6 +41,7 @@ public class InterventionCalendarView extends JPanel implements InterventionView
   private final JPanel days = new JPanel();
   private final JScrollPane dayScroll = new JScrollPane(days);
   private final JScrollPane weekScroll = new JScrollPane();
+  private final InterventionTileRenderer tileRenderer = new InterventionTileRenderer();
   private final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
   private final DateTimeFormatter dayFormatter = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.FRENCH);
   private Consumer<Intervention> onOpen = it -> {};
@@ -209,83 +210,136 @@ public class InterventionCalendarView extends JPanel implements InterventionView
   }
 
   private JComponent row(Intervention it){
-    JPanel panel = new JPanel(new BorderLayout(8, 0));
-    panel.setOpaque(true);
-    panel.setBackground(Color.WHITE);
+    CalendarTile tile = new CalendarTile(it);
     String quote = quoteReference(it);
-    panel.setBorder(badgeBorder(BorderFactory.createCompoundBorder(
-        BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(235, 235, 235)),
-        BorderFactory.createEmptyBorder(6, 8, 6, 8)
-    ), quote));
     if (quote != null){
-      panel.setToolTipText("Devis " + quote);
+      tile.setToolTipText("Devis " + quote);
     }
-    panel.setAlignmentX(Component.LEFT_ALIGNMENT);
+    tile.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-    JLabel iconLabel = new JLabel();
-    InterventionType type = it.getType();
-    if (type != null){
-      iconLabel.setIcon(IconRegistry.small(type.getIconKey()));
-    }
-    panel.add(iconLabel, BorderLayout.WEST);
-
-    LocalDateTime start = it.getDateHeureDebut();
-    String time = start != null ? timeFormatter.format(start) : "";
-    String title = escape(it.getLabel());
-    String client = escape(it.getClientName());
-    String address = escape(it.getAddress());
-    StringBuilder html = new StringBuilder("<html><b>").append(title).append("</b>");
-    if (!client.isBlank()){
-      html.append(" — ").append(client);
-    }
-    if (!time.isBlank()){
-      html.append(" — ").append(time);
-    }
-    if (!address.isBlank()){
-      html.append("<br/><span style='color:#555555'>").append(address).append("</span>");
-    }
-    html.append("</html>");
-    JLabel text = new JLabel(html.toString());
-    panel.add(text, BorderLayout.CENTER);
-
-    panel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
     JPopupMenu menu = buildContextMenu(it);
-    panel.addMouseListener(new MouseAdapter(){
+    tile.addMouseListener(new MouseAdapter(){
       @Override public void mouseClicked(MouseEvent e){
         if (e.getClickCount() == 2){
           if (!AccessControl.canEditInterventions()){
-            Toasts.info(panel, "Ouverture en lecture seule");
+            Toasts.info(tile, "Ouverture en lecture seule");
           }
           onOpen.accept(it);
         }
       }
+      @Override public void mouseEntered(MouseEvent e){
+        tile.setHovered(true);
+      }
+      @Override public void mouseExited(MouseEvent e){
+        tile.setHovered(false);
+        if (dragging == null){
+          tile.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        }
+      }
       @Override public void mousePressed(MouseEvent e){
         if (e.isPopupTrigger()){
-          menu.show(panel, e.getX(), e.getY());
+          menu.show(tile, e.getX(), e.getY());
           return;
         }
         if (SwingUtilities.isRightMouseButton(e)){
           return;
         }
         dragging = it;
-        dragSource = panel;
-        panel.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+        dragSource = tile;
+        tile.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
       }
       @Override public void mouseReleased(MouseEvent e){
-        panel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        tile.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)){
-          menu.show(panel, e.getX(), e.getY());
+          menu.show(tile, e.getX(), e.getY());
           return;
         }
         if (dragging == it){
           dragging = null;
         }
-        if (dragSource == panel){
+        if (dragSource == tile){
           dragSource = null;
         }
       }
     });
-    return panel;
+    return tile;
+  }
+
+  private final class CalendarTile extends JComponent {
+    private final Intervention intervention;
+    private boolean hovered;
+
+    CalendarTile(Intervention intervention){
+      this.intervention = intervention;
+      setOpaque(false);
+      setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+      setBorder(BorderFactory.createEmptyBorder(6, 4, 6, 4));
+    }
+
+    void setHovered(boolean hovered){
+      if (this.hovered != hovered){
+        this.hovered = hovered;
+        repaint();
+      }
+    }
+
+    @Override public Dimension getPreferredSize(){
+      Insets insets = getInsets();
+      int width = widthHint();
+      int height = tileRenderer.heightFor(intervention, width);
+      return new Dimension(width + insets.left + insets.right, height + insets.top + insets.bottom);
+    }
+
+    @Override public Dimension getMaximumSize(){
+      Dimension pref = getPreferredSize();
+      return new Dimension(Integer.MAX_VALUE, pref.height);
+    }
+
+    @Override public void setBounds(int x, int y, int width, int height){
+      Insets insets = getInsets();
+      int innerWidth = Math.max(200, width - insets.left - insets.right);
+      int innerHeight = tileRenderer.heightFor(intervention, innerWidth);
+      int totalHeight = innerHeight + insets.top + insets.bottom;
+      super.setBounds(x, y, width, totalHeight);
+    }
+
+    private int widthHint(){
+      int width = getWidth();
+      if (width <= 0){
+        Container parent = getParent();
+        if (parent != null){
+          width = parent.getWidth();
+        }
+      }
+      if (width <= 0 && days.getParent() != null){
+        width = days.getParent().getWidth();
+      }
+      if (width <= 0){
+        width = days.getWidth();
+      }
+      if (width <= 0){
+        width = 320;
+      }
+      Insets insets = getInsets();
+      width -= insets.left + insets.right;
+      return Math.max(200, width);
+    }
+
+    @Override protected void paintComponent(Graphics g){
+      super.paintComponent(g);
+      Graphics2D g2 = (Graphics2D) g.create();
+      try {
+        Insets insets = getInsets();
+        Rectangle r = new Rectangle(
+            insets.left,
+            insets.top,
+            Math.max(0, getWidth() - insets.left - insets.right),
+            Math.max(0, getHeight() - insets.top - insets.bottom));
+        tileRenderer.paint(g2, intervention, r, false, hovered);
+      } finally {
+        g2.dispose();
+      }
+    }
   }
 
   private JPopupMenu buildContextMenu(Intervention intervention){
