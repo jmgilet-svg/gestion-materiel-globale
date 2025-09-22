@@ -5,6 +5,7 @@ import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.model.ResourceType;
 import com.materiel.suite.server.api.v2.ClientControllerV2;
 import com.materiel.suite.server.api.v2.ResourceControllerV2;
+import com.materiel.suite.server.api.v2.ResourceTypeControllerV2;
 import com.materiel.suite.server.api.v2.interventions.InterventionControllerV2;
 import com.materiel.suite.server.api.v2.interventions.InterventionControllerV2.InterventionV2;
 import org.springframework.context.event.ContextRefreshedEvent;
@@ -28,13 +29,9 @@ import java.util.UUID;
 @Component
 public class DemoPlanningDataLoader {
   private static final String AGENCY = "_default";
-  private static final String[] TYPES = {"Grue", "Camion", "Manutention"};
-  private static final String[] TYPE_ICONS = {
-      // SVGs ultra-simples en ligne (monochrome) — utilisables comme innerHTML si besoin
-      "<svg viewBox='0 0 24 24'><path d='M3 20h18v2H3zM4 18h6l4-9h5V7h-6l-4 9H4z'/></svg>",
-      "<svg viewBox='0 0 24 24'><path d='M3 13h13l3 3h2v4h-2a3 3 0 1 1-6 0H9a3 3 0 1 1-6 0H1v-5a2 2 0 0 1 2-2z'/></svg>",
-      "<svg viewBox='0 0 24 24'><circle cx='12' cy='12' r='4'/><path d='M4 12h4M16 12h4M12 4v4M12 16v4'/></svg>"
-  };
+  private static final String[] TYPE_CODES = {"CRANE", "TRUCK", "FORKLIFT"};
+  private static final String[] TYPE_LABELS = {"Grue", "Camion", "Manutention"};
+  private static final String[] TYPE_ICON_KEYS = {"crane", "truck", "forklift"};
 
   @EventListener
   public void onStart(ContextRefreshedEvent ev){
@@ -46,28 +43,62 @@ public class DemoPlanningDataLoader {
   }
 
   private void seedResources(){
+    seedResourceTypes();
     Map<String, Resource> resources = ResourceControllerV2._bucket(AGENCY);
     if (resources.size() >= 60){
       return; // déjà seedé
     }
     int seq = 1;
-    for (int t = 0; t < TYPES.length; t++){
-      String type = TYPES[t];
-      String icon = TYPE_ICONS[t];
+    Map<String, ResourceType> types = ResourceTypeControllerV2._bucket(AGENCY);
+    for (int t = 0; t < TYPE_CODES.length; t++){
+      String code = TYPE_CODES[t];
+      String label = TYPE_LABELS[t];
+      String iconKey = TYPE_ICON_KEYS[t];
+      ResourceType type = copyType(types.get(code));
+      if (type == null){
+        type = createType(code, label, iconKey);
+      }
       for (int i = 1; i <= 20; i++){
         Resource r = new Resource();
         String id = UUID.randomUUID().toString();
         safeCall(r, "setId", id);
-        safeCall(r, "setName", type + "-" + String.format("%02d", i));
-        safeCall(r, "setLabel", type + "-" + String.format("%02d", i));
+        String base = label + "-" + String.format("%02d", i);
+        safeCall(r, "setName", base);
+        safeCall(r, "setLabel", base);
         safeCall(r, "setType", type);
-        safeCall(r, "setIconSvg", icon);
-        safeCall(r, "setIcon", icon);
+        safeCall(r, "setIcon", iconKey);
         safeCall(r, "setEmail", "res" + (seq++) + "@demo.local");
         String actualId = get(r, "getId");
         resources.put(actualId != null ? actualId : id, r);
       }
     }
+  }
+
+  private void seedResourceTypes(){
+    Map<String, ResourceType> store = ResourceTypeControllerV2._bucket(AGENCY);
+    for (int i = 0; i < TYPE_CODES.length; i++){
+      String code = TYPE_CODES[i];
+      store.putIfAbsent(code, createType(code, TYPE_LABELS[i], TYPE_ICON_KEYS[i]));
+    }
+  }
+
+  private ResourceType createType(String code, String label, String iconKey){
+    ResourceType type = new ResourceType();
+    type.setId(code);
+    type.setName(label);
+    type.setIconKey(iconKey);
+    return type;
+  }
+
+  private ResourceType copyType(ResourceType src){
+    if (src == null){
+      return null;
+    }
+    ResourceType copy = new ResourceType();
+    copy.setId(src.getId());
+    copy.setName(src.getName());
+    copy.setIconKey(src.getIconKey());
+    return copy;
   }
 
   private void seedInterventions(){
