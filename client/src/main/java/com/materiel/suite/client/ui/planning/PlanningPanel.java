@@ -159,6 +159,7 @@ public class PlanningPanel extends JPanel {
   private final InterventionView calendarView = new InterventionCalendarView();
   private final InterventionView tableView = new InterventionTableView();
   private final KanbanPanel kanbanView = new KanbanPanel();
+  private JScrollPane planningScroll;
   private JToggleButton modeToggle;
   private boolean agendaMode;
   private boolean updatingModeToggle;
@@ -173,19 +174,19 @@ public class PlanningPanel extends JPanel {
     super(new BorderLayout());
     add(buildToolbar(), BorderLayout.NORTH);
 
-    var scroll = new JScrollPane(board, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
-    scroll.getVerticalScrollBar().setUnitIncrement(32);
-    scroll.getHorizontalScrollBar().setUnitIncrement(24);
-    scroll.getViewport().setScrollMode(JViewport.BLIT_SCROLL_MODE);
+    planningScroll = new JScrollPane(board, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
+    planningScroll.getVerticalScrollBar().setUnitIncrement(32);
+    planningScroll.getHorizontalScrollBar().setUnitIncrement(24);
+    planningScroll.getViewport().setScrollMode(JViewport.BLIT_SCROLL_MODE);
     board.setAutoscrolls(true);
     DayHeader header = new DayHeader(board);
-    scroll.setColumnHeaderView(header);
-    scroll.getHorizontalScrollBar().addAdjustmentListener(e -> header.repaint());
+    planningScroll.setColumnHeaderView(header);
+    planningScroll.getHorizontalScrollBar().addAdjustmentListener(e -> header.repaint());
 
     var scrollAgenda = new JScrollPane(agenda);
 
     JPanel center = new JPanel(new CardLayout());
-    center.add(scroll, "gantt");
+    center.add(planningScroll, "gantt");
     center.add(scrollAgenda, "agenda");
 
     JComponent rowHeader = new JComponent(){
@@ -214,12 +215,13 @@ public class PlanningPanel extends JPanel {
         }
       }
     };
-    scroll.setRowHeaderView(rowHeader);
+    planningScroll.setRowHeaderView(rowHeader);
 
     // Repeindre le header quand le layout du board change
     board.addPropertyChangeListener("layout", e -> {
       rowHeader.revalidate();
       rowHeader.repaint();
+      pushVisibleWindowToBoard();
     });
 
     calendarView.setOnOpen(this::openInterventionEditor);
@@ -320,7 +322,9 @@ public class PlanningPanel extends JPanel {
     // Ouvrir une intervention par double-clic + entrée menu contextuel
     installBoardOpenHandlers();
 
-    installGlobalWheelZoom(this, board, scroll, scroll.getViewport());
+    installGlobalWheelZoom(this, board, planningScroll, planningScroll.getViewport());
+    planningScroll.getViewport().addChangeListener(e -> pushVisibleWindowToBoard());
+    pushVisibleWindowToBoard();
   }
 
   private JComponent buildToolbar(){
@@ -547,6 +551,50 @@ public class PlanningPanel extends JPanel {
     }
   }
 
+  private void pushVisibleWindowToBoard(){
+    if (planningScroll == null){
+      return;
+    }
+    Rectangle viewRect = planningScroll.getViewport().getViewRect();
+    if (viewRect == null){
+      board.setVisibleRowWindow(-1, -1);
+      return;
+    }
+    List<Resource> resources = board.getResourcesList();
+    if (resources == null || resources.isEmpty()){
+      board.setVisibleRowWindow(-1, -1);
+      return;
+    }
+    int y = 0;
+    int start = 0;
+    int end = resources.size();
+    boolean startFound = false;
+    int viewportBottom = viewRect.y + viewRect.height;
+    for (int i = 0; i < resources.size(); i++){
+      Resource resource = resources.get(i);
+      int rowHeight = board.rowHeight(resource.getId());
+      int nextY = y + rowHeight;
+      if (!startFound && nextY >= viewRect.y){
+        start = i;
+        startFound = true;
+      }
+      if (y > viewportBottom){
+        end = i;
+        break;
+      }
+      y = nextY;
+    }
+    if (!startFound){
+      start = Math.max(0, resources.size() - 1);
+    }
+    start = Math.max(0, start - 2);
+    end = Math.min(resources.size(), end + 2);
+    if (end <= start){
+      end = Math.min(resources.size(), start + 1);
+    }
+    board.setVisibleRowWindow(start, end);
+  }
+
   private void zoomInStep(){
     setZoomSliderBy(1);
   }
@@ -730,6 +778,7 @@ public class PlanningPanel extends JPanel {
     agenda.setDayWidth(width * 10);
     board.revalidate();
     board.repaint();
+    pushVisibleWindowToBoard();
     revalidate();
     repaint();
   }
@@ -1581,6 +1630,7 @@ public class PlanningPanel extends JPanel {
     }
     board.reload();
     agenda.reload();
+    pushVisibleWindowToBoard();
     refreshSimpleViews(planning);
     syncWeekBadgeFromBoard();
   }

@@ -39,6 +39,8 @@ public class PlanningBoard extends JComponent {
   private Map<UUID, Integer> rowTileHeights = new HashMap<>();
   private Map<UUID, Integer> rowTops = new HashMap<>();
   private java.util.List<UUID> resourceOrder = new java.util.ArrayList<>();
+  private volatile int visibleStart = -1;
+  private volatile int visibleEnd = -1;
 
   // UX
   private boolean showIndispo = true;
@@ -203,6 +205,20 @@ public class PlanningBoard extends JComponent {
     this.tile.setDensity(d);
     reload();
   }
+  public void setVisibleRowWindow(int startInclusive, int endExclusive){
+    int newStart = startInclusive;
+    int newEnd = endExclusive;
+    if (newStart < 0 || newEnd < 0 || newEnd <= newStart){
+      newStart = -1;
+      newEnd = -1;
+    }
+    if (newStart == visibleStart && newEnd == visibleEnd){
+      return;
+    }
+    visibleStart = newStart;
+    visibleEnd = newEnd;
+    repaint();
+  }
   /** Largeur d'un slot en pixels. */
   public int getSlotWidth(){ return slotWidth; }
   /** Nombre de slots par jour. */
@@ -233,6 +249,8 @@ public class PlanningBoard extends JComponent {
   public int tileHeight(){ return tile.heightBase(); }
 
   public void reload(){
+    visibleStart = -1;
+    visibleEnd = -1;
     resources = ServiceFactory.planning().listResources().stream()
         .filter(r -> resourceFilter.isBlank() || r.getName().toLowerCase().contains(resourceFilter))
         .collect(Collectors.toList());
@@ -302,6 +320,9 @@ public class PlanningBoard extends JComponent {
     g2.setColor(PlanningUx.BG);
     g2.fillRect(0,0,getWidth(),getHeight());
     Rectangle clip = g2.getClipBounds();
+    if (clip == null){
+      clip = new Rectangle(0, 0, getWidth(), getHeight());
+    }
 
     // Background grid
     int x=0, dayW = getDayPixelWidth();
@@ -319,26 +340,46 @@ public class PlanningBoard extends JComponent {
     }
 
     // Rows + tiles (virtualization)
-    int y=0;
-    for (Resource r : resources){
-      int rowH = rowHeights.getOrDefault(r.getId(), tile.heightBase()+rowGap);
-      if (y + rowH < clip.y){ y += rowH; continue; }
-      if (y > clip.y + clip.height){ break; }
-      // Indispos (hachures)
-      if (showIndispo){
-        Rectangle hatch = new Rectangle(2*dayW, y, dayW*2, rowH-1);
-        PlanningUx.paintHatch(g2, hatch);
+    int total = resources == null ? 0 : resources.size();
+    if (total > 0){
+      int startIndex = 0;
+      int endIndex = total;
+      int windowStart = visibleStart;
+      int windowEnd = visibleEnd;
+      if (windowStart >= 0 && windowEnd >= 0){
+        startIndex = Math.max(0, Math.min(windowStart, total - 1));
+        endIndex = Math.max(startIndex + 1, Math.min(windowEnd, total));
       }
-      // baseline
-      g2.setColor(PlanningUx.ROW_DIV);
-      g2.drawLine(0,y+rowH-1, getWidth(), y+rowH-1);
-      // tiles for resource
-      for (Intervention it : byResource.getOrDefault(r.getId(), List.of())){
-        Rectangle rect = rectOf(it, y);
-        if (!rect.intersects(new Rectangle(clip.x-200, y, clip.width+400, rowH))) continue;
-        tile.paint(g2, rect, it, it==hovered, it==selected);
+      int y = 0;
+      for (int i = 0; i < startIndex; i++){
+        Resource r = resources.get(i);
+        y += rowHeights.getOrDefault(r.getId(), tile.heightBase() + rowGap);
       }
-      y += rowH;
+      for (int i = startIndex; i < endIndex; i++){
+        Resource r = resources.get(i);
+        int rowH = rowHeights.getOrDefault(r.getId(), tile.heightBase() + rowGap);
+        if (y + rowH < clip.y){
+          y += rowH;
+          continue;
+        }
+        if (y > clip.y + clip.height){
+          break;
+        }
+        if (showIndispo){
+          Rectangle hatch = new Rectangle(2 * dayW, y, dayW * 2, rowH - 1);
+          PlanningUx.paintHatch(g2, hatch);
+        }
+        g2.setColor(PlanningUx.ROW_DIV);
+        g2.drawLine(0, y + rowH - 1, getWidth(), y + rowH - 1);
+        for (Intervention it : byResource.getOrDefault(r.getId(), List.of())){
+          Rectangle rect = rectOf(it, y);
+          if (!rect.intersects(new Rectangle(clip.x - 200, y, clip.width + 400, rowH))){
+            continue;
+          }
+          tile.paint(g2, rect, it, it == hovered, it == selected);
+        }
+        y += rowH;
+      }
     }
 
     // Drag ghost
