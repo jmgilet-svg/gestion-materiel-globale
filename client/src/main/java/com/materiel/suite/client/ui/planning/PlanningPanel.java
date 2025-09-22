@@ -10,6 +10,8 @@ import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.FontMetrics;
+import java.awt.GraphicsEnvironment;
+import java.awt.Rectangle;
 import java.awt.event.KeyEvent;
 import java.io.File;
 import java.io.PrintWriter;
@@ -21,7 +23,9 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.TextStyle;
 import java.time.temporal.TemporalAdjusters;
+import java.time.temporal.WeekFields;
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.util.ArrayList;
@@ -123,6 +127,8 @@ public class PlanningPanel extends JPanel {
   private final JButton sendBtn = new JButton("Envoyer aux ressources", IconRegistry.colored("info"));
   private final JButton dispatcherBtn = new JButton("Mode Dispatcher", IconRegistry.colored("task"));
   private final JButton dryRunBtn = new JButton("Prévisualiser", IconRegistry.small("calculator"));
+  private final JLabel weekBadge = new JLabel("Semaine —");
+  private LocalDate pivotMonday = LocalDate.now().with(DayOfWeek.MONDAY);
   private final JComboBox<QuoteFilter> quoteFilter = new JComboBox<>(QuoteFilter.values());
   private final JTextField search = new JTextField(18);
   private final JPanel bulkBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
@@ -298,8 +304,15 @@ public class PlanningPanel extends JPanel {
       }
     } catch (RuntimeException ignore){
     }
-    JButton prev = new JButton("◀ Semaine");
-    JButton next = new JButton("Semaine ▶");
+    weekBadge.setOpaque(true);
+    weekBadge.setBorder(new EmptyBorder(2, 8, 2, 8));
+    weekBadge.setBackground(new Color(0xE8, 0xF0, 0xFF));
+    Font badgeFont = weekBadge.getFont();
+    if (badgeFont != null){
+      weekBadge.setFont(badgeFont.deriveFont(Font.BOLD));
+    }
+    JButton prev = new JButton("◀");
+    JButton next = new JButton("▶");
     JButton today = new JButton("Aujourd'hui");
     JLabel zoomL = new JLabel("Zoom (slot):");
     JSlider zoom = new JSlider(6,24,board.getSlotWidth());
@@ -316,7 +329,9 @@ public class PlanningPanel extends JPanel {
     LocalDate initialRef = board.getStartDate();
     if (initialRef == null){
       initialRef = LocalDate.now().with(DayOfWeek.MONDAY);
+      board.setStartDate(initialRef);
     }
+    agenda.setStartDate(initialRef);
     simpleRefDate = new JSpinner(new SpinnerDateModel(toDate(initialRef), null, null, Calendar.DAY_OF_MONTH));
     simpleRefDate.setEditor(new JSpinner.DateEditor(simpleRefDate, "dd/MM/yyyy"));
     JButton simplePrev = new JButton("◀");
@@ -334,32 +349,12 @@ public class PlanningPanel extends JPanel {
       revalidate(); repaint();
     });
 
-    prev.addActionListener(e -> {
-      LocalDate start = board.getStartDate();
-      if (start == null){
-        start = LocalDate.now().with(DayOfWeek.MONDAY);
-      }
-      LocalDate newStart = start.minusDays(7);
-      board.setStartDate(newStart);
-      agenda.setStartDate(board.getStartDate());
-      updateSimpleReference(board.getStartDate());
-    });
-    next.addActionListener(e -> {
-      LocalDate start = board.getStartDate();
-      if (start == null){
-        start = LocalDate.now().with(DayOfWeek.MONDAY);
-      }
-      LocalDate newStart = start.plusDays(7);
-      board.setStartDate(newStart);
-      agenda.setStartDate(board.getStartDate());
-      updateSimpleReference(board.getStartDate());
-    });
-    today.addActionListener(e -> {
-      LocalDate monday = LocalDate.now().with(DayOfWeek.MONDAY);
-      board.setStartDate(monday);
-      agenda.setStartDate(board.getStartDate());
-      updateSimpleReference(monday);
-    });
+    prev.setToolTipText("Semaine précédente");
+    next.setToolTipText("Semaine suivante");
+    today.setToolTipText("Revenir à la semaine courante");
+    prev.addActionListener(e -> shiftWeek(-1));
+    next.addActionListener(e -> shiftWeek(1));
+    today.addActionListener(e -> goToday());
     zoom.addChangeListener(e -> {
       int w = zoom.getValue();
       board.setZoom(w);
@@ -381,7 +376,11 @@ public class PlanningPanel extends JPanel {
     simpleNext.addActionListener(e -> shiftSimpleRange(1));
     simpleToday.addActionListener(e -> updateSimpleReference(LocalDate.now()));
 
-    bar.add(prev); bar.add(next); bar.add(today); bar.add(modeToggle);
+    bar.add(prev);
+    bar.add(weekBadge);
+    bar.add(next);
+    bar.add(today);
+    bar.add(modeToggle);
     bar.add(Box.createHorizontalStrut(16)); bar.add(zoomL); bar.add(zoom);
     bar.add(Box.createHorizontalStrut(12)); bar.add(granL); bar.add(gran);
     bar.add(Box.createHorizontalStrut(12)); bar.add(densL); bar.add(density);
@@ -402,6 +401,7 @@ public class PlanningPanel extends JPanel {
     bar.add(Box.createHorizontalStrut(12));
     bar.add(searchLabel);
     bar.add(search);
+    syncWeekBadgeFromBoard();
     return bar;
   }
 
@@ -499,6 +499,59 @@ public class PlanningPanel extends JPanel {
 
   public void reload(){
     refreshPlanning();
+  }
+
+  private void goToday(){
+    applyPivotMonday(LocalDate.now());
+  }
+
+  private void shiftWeek(int direction){
+    LocalDate start = board.getStartDate();
+    if (start == null){
+      start = LocalDate.now().with(DayOfWeek.MONDAY);
+    }
+    applyPivotMonday(start.plusWeeks(direction));
+  }
+
+  private void applyPivotMonday(LocalDate reference){
+    LocalDate monday = reference != null
+        ? reference.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+        : LocalDate.now().with(DayOfWeek.MONDAY);
+    pivotMonday = monday;
+    board.setStartDate(monday);
+    agenda.setStartDate(board.getStartDate());
+    updateWeekBadge();
+    updateSimpleReference(monday);
+  }
+
+  private void updateWeekBadge(){
+    LocalDate monday = pivotMonday != null ? pivotMonday : LocalDate.now().with(DayOfWeek.MONDAY);
+    String month = monday.getMonth().getDisplayName(TextStyle.SHORT, Locale.getDefault());
+    if (month == null){
+      month = "";
+    }
+    String normalized = month.trim();
+    if (!normalized.isEmpty()){
+      normalized = normalized.substring(0, 1).toUpperCase(Locale.getDefault()) + normalized.substring(1);
+    }
+    int isoWeek = monday.get(WeekFields.ISO.weekOfWeekBasedYear());
+    int year = monday.get(WeekFields.ISO.weekBasedYear());
+    String label = normalized.isEmpty()
+        ? String.format("Semaine %d · %d", isoWeek, year)
+        : String.format("Semaine %d · %s %d", isoWeek, normalized, year);
+    weekBadge.setText(label);
+    LocalDate sunday = monday.plusDays(6);
+    weekBadge.setToolTipText("Du " + SIMPLE_DAY_FORMAT.format(monday) + " au " + SIMPLE_DAY_FORMAT.format(sunday));
+  }
+
+  private void syncWeekBadgeFromBoard(){
+    LocalDate start = board.getStartDate();
+    if (start != null){
+      pivotMonday = start.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+    } else {
+      pivotMonday = LocalDate.now().with(DayOfWeek.MONDAY);
+    }
+    updateWeekBadge();
   }
 
   /* ---------- Gestion de la sélection ---------- */
@@ -1227,11 +1280,13 @@ public class PlanningPanel extends JPanel {
           "Impossible de charger les interventions du pipeline.",
           this::reload);
       updateFilteredSimpleViews();
+      syncWeekBadgeFromBoard();
       return;
     }
     board.reload();
     agenda.reload();
     refreshSimpleViews(planning);
+    syncWeekBadgeFromBoard();
   }
 
   private void reloadSimpleViews(){
@@ -2018,6 +2073,7 @@ public class PlanningPanel extends JPanel {
       refreshPlanning();
     });
     dialog.edit(new Intervention());
+    maximizeDialog(dialog);
     dialog.setVisible(true);
   }
 
@@ -2041,7 +2097,19 @@ public class PlanningPanel extends JPanel {
       refreshPlanning();
     });
     dialog.edit(it);
+    maximizeDialog(dialog);
     dialog.setVisible(true);
+  }
+
+  private void maximizeDialog(InterventionDialog dialog){
+    if (dialog == null){
+      return;
+    }
+    Rectangle bounds = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+    if (bounds != null){
+      dialog.setBounds(bounds);
+    }
+    dialog.setResizable(true);
   }
 
   private void putUndoRedoKeymap(){
