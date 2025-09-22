@@ -1,200 +1,132 @@
-# Gestion Matériel — README
+# Gestion Matériel Globale — Suite Planning, Devis & Facturation
 
-Application **planning & exploitation** pour sociétés de levage/transport/manutention :
-ressources (grues, camions, chariots…), **interventions** multi-ressources, **devis/ventes**,
-paramétrage fin (icônes, types…), **sécurité par rôles**, et gros **jeu de données mock**.
+Application Swing/Java pour planifier les interventions (multi-ressources), gérer les clients/contacts,
+générer des devis/factures, et envoyer des PDF détaillés par email — le tout **multi-agences**,
+avec **modèles** (templates) HTML/PDF/Email et **icônes** en couleur pour les types de ressources.
 
-> ✅ **Contrat v1 préservé**. Les ajouts sont introduits en **v2** (DTO/contrôleurs) pour éviter toute régression.
+## Sommaire
+- [Fonctionnalités](#fonctionnalités)
+- [Architecture](#architecture)
+- [Démarrage](#démarrage)
+- [Configuration Agence](#configuration-agence)
+- [Modèles (Templates) & PDF](#modèles-templates--pdf)
+- [Emails (To/CC/BCC, preview, CSS agence)](#emails-toccbcc-preview-css-agence)
+- [Multi-agences (X-Agency-Id)](#multi-agences-x-agency-id)
+- [Sécurité & Rôles](#sécurité--rôles)
+- [API v2 (endpoints)](#api-v2-endpoints)
+- [Mock vs API](#mock-vs-api)
+- [Raccourcis & UX](#raccourcis--ux)
+- [Roadmap](#roadmap)
 
----
+## Fonctionnalités
+- **Planning** des interventions (drag & drop, filtres période semaine/mois, filtre **À deviser / Déjà devisé**),
+  édition plein écran, multi-ressources (grues, camions…), contacts clients associés, signature PNG.
+- **Workflow** : Intervention → **Devis** → **Facturation** (+ picto “dévisé”, génération de devis en masse).
+- **Ressources** : CRUD, types avec **icônes SVG couleur** globalisées, indisponibilités (date début/fin).
+- **Clients/Contacts** : CRUD, contact principal, recherche/tri, panel inline comme Ressources/Clients (pattern unifié).
+- **Ventes** : Devis/BC/BL/Factures avec **tableaux éditables**, recherche/tri, export **CSV/Excel**,
+  **génération de facture** depuis devis (sélection multiple).
+- **PDF détaillé** (A4) : logo agence, adresses (client/agence), TVA, CGV, **tableau réel des lignes**.
+- **Templates** (Paramètres → Templates) : CRUD **QUOTE/INVOICE/EMAIL**, éditeur **WYSIWYG** (Design↔Source),
+  **plein écran**, **palette de variables** cliquables, preview PDF.
+- **Emails** : envoi groupé **To/CC/BCC** avec **pièces jointes**, modèles EMAIL par agence (fusion `{{...}}`),
+  **prévisualisation HTML live**, **aperçu mobile 375px**, **validation HTML basique**.
+- **Paramètres** : Général (autosave, durée session), **Agence** (address/cgv/vat, email CSS, signature),
+  **Templates** (voir ci-dessus).
+- **Rôles** : ADMIN (tout), SALES (ventes + lecture planning), CONFIG (ressources/paramètres, lecture ventes).
+- **UI** : Sidebar compacte épinglable, icônes colorées partout (menu, recherche, toasts), palette d’actions contextuelles.
 
-## 🧭 Sommaire
-1. [Aperçu des fonctionnalités](#aperçu-des-fonctionnalités)
-2. [Sécurité & rôles](#sécurité--rôles)
-3. [Données mock enrichies](#données-mock-enrichies)
-4. [UX — Navigation & écrans](#ux--navigation--écrans)
-5. [Interventions (v2)](#interventions-v2)
-6. [Ressources & types](#ressources--types)
-7. [Paramétrage](#paramétrage)
-8. [Ventes (devis/BC/BL/factures)](#ventes-devisbcblfactures)
-9. [API & contrat](#api--contrat)
-10. [Build & Run](#build--run)
-11. [Roadmap](#roadmap)
+## Architecture
+- **Client** : Swing + modèles/Services Gateways. `ServiceLocator` oriente Mock/API.
+- **Serveur** : Spring Boot. V2 ajoutée pour ne **pas casser** les endpoints V1 existants.
+- **Rendu PDF** : `/api/v2/pdf/render` (OpenHTMLtoPDF). Le client envoie un HTML + images inline (`cid:logo` -> `data:`).
+- **Templates** : `/api/v2/templates` (in-memory par défaut), scoping par agence via `X-Agency-Id`.
+- **Config Agence** : `/api/v2/agency-config` (adresse société, TVA, CGV HTML, **emailCss**, **emailSignatureHtml**).
+- **Emails** : `/api/v2/mail/send` avec **to/cc/bcc** + **attachments[]**.
 
----
+## Démarrage
+1. **Backend**
+   - `cd server && mvn spring-boot:run`
+   - Par défaut, les stores V2 sont **en mémoire** (pas de DB → parfait démo/dev).
+2. **Client**
+   - Lancer l’app Swing (IDE ou `mvn -pl client exec:java` si configuré).
+   - Au démarrage : choisir **Mock** ou **API**, **Agence** et s’authentifier (si activé).
+3. **Logo**
+   - Placez votre logo dans `client/src/main/resources/branding/logo.png` pour l’inclure dans les PDF.
 
-## Aperçu des fonctionnalités
+## Configuration Agence
+- Ouvrir **Paramètres → Templates** : section **styles d’emails** (CSS) + **signature HTML** par agence.
+- Ouvrir **Paramètres → Général** : autosave, durée session.
+- `GET/POST /api/v2/agency-config` stocke :
+  - `companyAddressHtml`, `vatRate`, `cgvHtml`
+  - **`emailCss`**, **`emailSignatureHtml`**
 
-- **Planning** d’interventions avec **drag & drop** (déplacement), **filtre de période** (semaine/mois) et **refresh auto** après enregistrement.
-- **Interventions multi-ressources** : sélection de plusieurs ressources de **tout type**, avec :
-  - **Type d’intervention** paramétrable (icône, ordre d’affichage), **tri** & **duplication rapide**,
-  - **Description**, **note interne**, **note de fin**,
-  - **Horaires planifiés** et **horaires effectifs** (début/fin),
-  - **Contacts client** multiples (filtrés par client sélectionné),
-  - Pré-devis rapide : **lignes par ressource** avec **PU HT** (prix porté par la *ressource*).
-- **Ressources** : vue type “Clients” avec édition **inline** dans le même panneau, filtre par **type**, tri par **type**, **indisponibilités** (date début/fin).
-- **Icônes SVG** en **couleur** et **catalogue partagé** (ressources, types, recherche globale, toasts/notifications, tuiles d’intervention).
-- **Paramètres** : icônes, types d’intervention (**ordre par DnD**, duplication, édition inline), général (ex. **durée de session**).
-- **Sécurité** : login (avec **agence**), rôles, **masquage** fin du menu, **lecture seule** sur écrans/boîtes de dialogue en fonction des droits,
-  **expiration de session** par inactivité, **changement de mot de passe**, **administration des utilisateurs**.
-- **Mock** riche pour la démo : ~**60 ressources**, **20 clients** × **2–4 contacts**, **15 utilisateurs**, ~**60 interventions** sur **2 semaines**.
+## Modèles (Templates) & PDF
+- **Types** : `QUOTE`, `INVOICE`, `EMAIL`. Clé `default` utilisée comme fallback.
+- **Variables** principales disponibles :
+  - `agency.*` : `name`, `addressHtml`, `vatRate`, `cgvHtml`
+  - `client.*` : `name`, `addressHtml`
+  - `quote.*` : `reference`, `date`, `totalHt`, `totalTtc`
+  - `invoice.*` : `number`, `date`, `status`, `totalHt`, `totalTtc`
+  - **Lignes** : `{{lines.rows}}` (pour PDF) et `{{lines.tableHtml}}` (pour emails)
+  - **Logo** : `<img src="{{logo.cdi}}">` (remplacé par une image inline)
+- **Éditeur WYSIWYG** : Design ↔ Source, **plein écran**, palette de variables.
+- **Prévisualiser PDF** : bouton “Prévisualiser” génère un PDF via `/api/v2/pdf/render`.
 
----
+## Emails (To/CC/BCC, preview, CSS agence)
+- Fenêtre “Envoyer PDF…” :
+  - Sélection d’un **modèle EMAIL** ; première ligne `Subject: …` = **sujet auto**.
+  - **Preview live** HTML + **aperçu mobile (375px)**.
+  - **Validation HTML** basique (balises non fermées, imbrication).
+  - **CSS agence** + **signature** injectés automatiquement.
+- Envoi via `/api/v2/mail/send` (simulé par log en démo).
 
-## Sécurité & rôles
+## Multi-agences (X-Agency-Id)
+- Tous les appels API passent par `ApiSupport` qui ajoute `X-Agency-Id` (et Authorization si activée).
+- **Templates** et **Config agence** sont scoppés par entête.
 
-Au lancement (après choix **Mock** / **API**), une fenêtre de **connexion** s’ouvre :
-sélection de **l’agence**, **login/mot de passe** (en mock : `admin/admin`, `sales/sales`, `config/config` et variantes).
+## Sécurité & Rôles
+- **Rôles** : ADMIN / SALES / CONFIG.
+- Masquage fin des entrées de menu selon rôle + **lecture-seule** forcée dans les dialogues ventes si non autorisé.
+- Expiration de session + bouton **Déconnexion**.
+- Passage ultérieur à **JWT** possible (non requis pour démo).
 
-**Rôles :**
-- **ADMIN** : tous les droits.
-- **SALES** : lecture planning + **édition** ventes (Devis/BC/BL/Factures), pas de configuration.
-- **CONFIG** : lecture générale + **édition** **Ressources** et **Paramètres**.
+## API v2 (endpoints)
+- **PDF** : `POST /api/v2/pdf/render`
+  - `{"html": "<html>…</html>", "inlineImages": {"logo":"<base64>"}, "baseUrl": "https://..."? }`
+  - Response: `application/pdf`
+- **Templates** : `GET/POST/DELETE /api/v2/templates`  
+  - `TemplateV2{ id, agencyId, type: QUOTE|INVOICE|EMAIL, key, name, content }`
+- **Agency config** : `GET/POST /api/v2/agency-config`  
+  - `{ companyAddressHtml, vatRate, cgvHtml, emailCss, emailSignatureHtml }`
+- **Clients** : `GET /api/v2/clients/{id}` (adresse HTML)
+- **Mail** : `POST /api/v2/mail/send`  
+  - `{ to:[], cc:[], bcc:[], subject, body, attachments:[{name,contentType,base64}] }`
 
-**Comportements clés :**
-- Menu latéral **masqué** par droit (planning, ventes, ressources, paramètres).
-- **Interventions** en lecture seule pour non-ADMIN.
-- Ventes en lecture seule pour non-SALES/ADMIN (boutons Nouveau/Modifier/Supprimer/Enregistrer **désactivés**).
-- **Header** : bouton **Déconnexion** + **“Mot de passe…”** (changement du mot de passe utilisateur).
-- **Session** : expiration par inactivité (par défaut **30 min**, **paramétrable**).
-- **Pré-câblage JWT** : le mock renvoie un `token` (client l’envoie en `Authorization: Bearer …`) — prêt pour durcir côté API.
+## Mock vs API
+- **Mock** : stores en mémoire pour Templates, Agency Config, Mail (log), PDF (optionnel dummy).
+- **API** : back Spring Boot (cf. ci-dessus).
+- **Données démo attendues** :
+  - **Ressources ~60**, **Utilisateurs ~15**, **Clients ~20×(2–4 contacts)**,
+    **Interventions ~60** sur 2 semaines (avec types/icônes).
 
-**Administration des comptes (ADMIN seulement)** :
-- Onglet **Paramètres → Comptes utilisateurs** : liste, **créer**, **modifier**, **supprimer**, **définir mot de passe**.
-
----
-
-## Données mock enrichies
-
-- **Ressources (~60)** : grues, camions, chariots, conteneurs, quelques convois “spéciaux”, états variés (DISPONIBLE / OCCUPÉE / EN_MAINTENANCE), **PU HT réalistes**.
-- **Clients (20)** : adresses FR plausibles, **tri par nom**.
-- **Contacts (2–4 par client)** : email/portable cohérents, **contact principal** marqué (si le modèle le supporte).
-- **Utilisateurs (15)** : répartition ADMIN/SALES/CONFIG sur 2 agences, mots de passe mock alignés sur les logins.
-- **Interventions (~60 / 2 semaines)** : titres, adresses (client ou “chantier”), **types** (icônes), **ressources multiples**, **contacts**, notes, horaires planifiés/logiques.
-
-> Les seeds mock sont **déterministes** (graine) pour des tests stables.
-
----
-
-## UX — Navigation & écrans
-
-- **Menu latéral** compact **épingle**/**auto-repli** (icône + libellé au survol).
-- Icônes en couleur partout (menu, recherche globale, toasts, tuiles).
-- **Ressources** : même **pattern que Clients** (édition dans le panneau – pas de dialog), **filtre** par type, tri par défaut **par type**.
-- **InterventionDialog** : réorganisée et **tabulée** (ex. *Général*, *Intervention*, *Facturation*), **plein écran** pour les dispatchers, sélection **ergonomique** des ressources/contacts (listes + filtres).
-- **Types d’intervention** : tableau avec **drag & drop** pour l’ordre (`orderIndex`), **duplication**, **édition inline** (F2), persistance par **ID**.
-
----
-
-## Interventions (v2)
-
-Caractéristiques principales :
-- Plusieurs **ressources hétérogènes** affectées.
-- **Type d’intervention** (icône configurable, ordre personnalisable).
-- **Horaires planifiés** et **effectifs** (début/fin).
-- **Contacts client** multiples (et **filtrage** par client).
-- **Notes** (interne + fin).
-- **Pré-devis** : génération initiale des lignes avec **PU** de chaque ressource.
-- **Signature** PNG (champ prévu côté service; utilisé si présent).
-
-**Planning :**
-- **Drag & drop** pour déplacer un créneau; filtre **Semaine/Mois**; rechargement auto après `save()`.
-- Ouverture depuis le planning (double-clic / menu contextuel) ; en lecture seule si l’utilisateur n’a pas le droit d’éditer.
-
----
-
-## Ressources & types
-
-- **Ressource = prix unitaire (PU HT)** porté par la *ressource* (pas par le type).
-- **Indisponibilités** stockées en paires **date début** / **date fin**.
-- **Type de ressource** : porte l’**icône** (catalogue SVG couleur commun).
-- Édition **inline** des ressources dans le panneau (à la “Clients”).
-
----
-
-## Paramétrage
-
-- **Icônes** : catalogue SVG couleur mutualisé (ressources, types, recherche globale, toasts).
-- **Types d’intervention** : ordre **DnD**, **duplication**, **édition inline** (F2), tri persistant (`orderIndex`).
-- **Général** : **durée d’inactivité** (minutes) avant déconnexion — *appliquée à chaud*.
-- **Comptes utilisateurs (ADMIN)** : CRUD utilisateurs + définition de mot de passe.
-
----
-
-## Ventes (Devis/BC/BL/Factures)
-
-- Accès **lecture/édition** contrôlé par rôle (**SALES** ou **ADMIN** pour l’édition).
-- **Dialogs** de ventes forcent la **lecture seule** si l’utilisateur n’a pas les droits (boutons d’action désactivés, champs non éditables).
-- Conversion/flux à venir (pré-devis depuis l’intervention déjà amorcé via lignes ressources).
-
----
-
-## API & contrat
-
-### Compatibilité
-- **OpenAPI v1** conservée pour les endpoints historiques (ex : `#/components/schemas/Quote` existants).
-- Les nouveautés sont **versionnées en v2** (DTO/contrôleurs dédiés).
-
-### Endpoints v2 ajoutés
-
-Authentification & agences :
-- `GET /api/v2/agencies` — liste des agences.
-- `POST /api/v2/auth/login` — **login** (retourne `UserV2` + éventuel `token` mock).
-
-Administration utilisateurs :
-- `GET /api/v2/users` — lister.
-- `POST /api/v2/users` — créer (payload `UserCreateRequest` avec mot de passe).
-- `PUT /api/v2/users/{id}` — mettre à jour.
-- `DELETE /api/v2/users/{id}` — supprimer.
-- `POST /api/v2/users/{id}/password` — définir le mot de passe.
-
-Types d’intervention :
-- `GET /api/v2/intervention-types` — renvoie la liste **triée** par `orderIndex`.
-- `POST /api/v2/intervention-types` / `PUT /api/v2/intervention-types/{id}` — création/maj (gèrent `orderIndex`).
-
-> **Casing JSON** : attention aux propriétés `totalTtc` (client/serveur alignés via `@JsonProperty("totalTtc")` le cas échéant).
-
-### Auth côté client
-- Le client reçoit un `token` (mock) au login et l’envoie automatiquement via `Authorization: Bearer …`.
-- Le backend **n’exige pas** encore le JWT : prêt pour un durcissement futur (filtre/decoder).
-
----
-
-## Build & Run
-
-### Backend
-```bash
-mvn -pl backend -am spring-boot:run
-```
-Expose les endpoints **v1** historiques et les ajouts **v2** ci-dessus. Spécification OpenAPI dans
-`backend/src/main/resources/openapi/gestion-materiel-v1.yaml` (inclut les schémas v2).
-
-### Client (Swing)
-```bash
-mvn -pl client -am package
-java -jar client/target/gestion-materiel-client.jar
-```
-Au démarrage :
-1. Choisir **Mock** ou **API**,
-2. **Login** (sélection d’agence + identifiants).
-
-**Comptes mock** utiles :
-- `admin / admin` (plein accès),
-- `sales / sales` (ventes éditables),
-- `config / config` (paramètres & ressources éditables).
-
----
+## Raccourcis & UX
+- Palette contextuelle du planning (“Générer devis pour *n* interventions…”, filtre courant, aide `?` avec raccourcis).
+- Sidebar compacte épinglable, **icônes colorées** dans le menu/recherche/toasts.
+- Fenêtres “édition inline” dans les panneaux (Ressources/Clients/Ventes), tri & filtres par défaut pertinents.
 
 ## Roadmap
-
-- Génération **PDF** (bons d’intervention / BL / factures) avec les icônes & signatures.
-- **Mobile** terrain : app dédiée pour chauffeurs/grutiers (liste du jour, démarrage & fin effectifs, signature client).
-- **JWT** côté backend (validation, rôles/autorités) + rafraîchissement de token.
-- Import/Export **JSON** des types d’intervention & icônes.
-- Optimisation calendrier : **regroupement** par ressource, **détection de conflits** (chevauchements/indispos).
+- Génération de **BL/BC** au même niveau d’automatisation.
+- **Signature sur mobile** et synchronisation temps réel des interventions.
+- Éditeur de **modèles avancés** avec snippets réutilisables (en-têtes/pieds).
+- Support **JWT** et rafraîchissement de token.
 
 ---
 
-## Licence
+### Développement
+- Java 17+, Maven.
+- Client Swing (modèle MVC léger, Gateways HTTP), Serveur Spring Boot.
+- **OpenHTMLtoPDF** pour le rendu PDF (pas de dépendance native).
 
-Voir le fichier `LICENSE` le cas échéant.
+### Contribuer
+- PR bienvenues ! Merci de **ne pas casser** les endpoints V1. Toute évolution de contrat passe par **V2**.
