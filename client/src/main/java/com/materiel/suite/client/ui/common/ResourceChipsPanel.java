@@ -42,7 +42,7 @@ public class ResourceChipsPanel extends JPanel {
     Set<String> types = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
     for (Resource resource : resources){
       if (resource != null){
-        String type = resource.getTypeName();
+        String type = resource.getTypeLabel();
         if (type != null && !type.isBlank()){
           types.add(type);
         }
@@ -106,7 +106,7 @@ public class ResourceChipsPanel extends JPanel {
     }
     boolean typeMatches = true;
     if (selectedType != null && !selectedType.isBlank() && !"Tous".equalsIgnoreCase(selectedType)){
-      String typeName = resource.getTypeName();
+      String typeName = resource.getTypeLabel();
       typeMatches = typeName != null && !typeName.isBlank() && typeName.equalsIgnoreCase(selectedType);
     }
     if (!typeMatches){
@@ -116,7 +116,7 @@ public class ResourceChipsPanel extends JPanel {
       return true;
     }
     String name = resource.getName() != null ? resource.getName() : "";
-    String type = resource.getTypeName() != null ? resource.getTypeName() : "";
+    String type = resource.getTypeLabel() != null ? resource.getTypeLabel() : "";
     String haystack = (name + " " + type).toLowerCase(Locale.ROOT);
     return haystack.contains(query);
   }

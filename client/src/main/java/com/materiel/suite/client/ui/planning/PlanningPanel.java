@@ -432,14 +432,6 @@ public class PlanningPanel extends JPanel {
     return bar;
   }
 
-  private void applyZoom(){
-    int width = zoomSlider != null ? zoomSlider.getValue() : board.getSlotWidth();
-    board.setZoom(width);
-    agenda.setDayWidth(width * 10);
-    revalidate();
-    repaint();
-  }
-
   private void zoomInStep(){
     setZoomSliderBy(1);
   }

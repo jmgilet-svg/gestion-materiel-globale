@@ -26,7 +26,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /** Regroupement par journée pour une lecture "agenda" rapide. */
-public class InterventionCalendarView implements InterventionView {
+public class InterventionCalendarView extends JPanel implements InterventionView {
   private static final Color HEADER_BG = new Color(245, 245, 245);
   private static final Color DROP_TARGET_BG = new Color(232, 245, 233);
   private static final int START_HOUR = 6;
@@ -543,7 +543,7 @@ public class InterventionCalendarView implements InterventionView {
             }
             @Override public void mousePressed(MouseEvent e){
               if (e.isPopupTrigger()){
-                menu.show(JPanel.this, e.getX(), e.getY());
+                menu.show(InterventionCalendarView.this, e.getX(), e.getY());
                 return;
               }
               if (SwingUtilities.isRightMouseButton(e)){
@@ -558,7 +558,7 @@ public class InterventionCalendarView implements InterventionView {
             @Override public void mouseReleased(MouseEvent e){
               setCursor(Cursor.getDefaultCursor());
               if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)){
-                menu.show(JPanel.this, e.getX(), e.getY());
+                menu.show(InterventionCalendarView.this, e.getX(), e.getY());
                 return;
               }
               LocalDateTime baseStart = startOfY(getY());

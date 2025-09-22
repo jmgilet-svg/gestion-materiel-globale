@@ -89,7 +89,7 @@ public final class ThemeIO {
     if (trimmed.startsWith("{") && trimmed.endsWith("}")){
       trimmed = trimmed.substring(1, trimmed.length() - 1);
     }
-    Pattern pair = Pattern.compile("\"([^\"]+)\"\\s*:\\s*(\"(?:\\\\.|[^\\"])*\"|[^,]+)(?:,|$)");
+    Pattern pair = Pattern.compile("\"([^\"]+)\"\\s*:\\s*(\"(?:\\\\.|[^\\\"])*\"|[^,]+)(?:,|$)");
     Matcher matcher = pair.matcher(trimmed);
     while (matcher.find()){
       String key = unescape(matcher.group(1));

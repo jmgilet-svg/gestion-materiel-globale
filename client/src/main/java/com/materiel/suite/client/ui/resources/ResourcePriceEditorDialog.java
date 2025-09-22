@@ -17,7 +17,7 @@ import java.util.Locale;
  */
 public class ResourcePriceEditorDialog extends JDialog {
   private final Resource resource;
-  private final JFormattedTextField priceField;
+  private JFormattedTextField priceField;
 
   public ResourcePriceEditorDialog(Window owner, Resource resource){
     super(owner, "Tarif ressource", ModalityType.APPLICATION_MODAL);

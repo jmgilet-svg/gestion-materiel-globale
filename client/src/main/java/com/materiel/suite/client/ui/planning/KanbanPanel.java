@@ -349,8 +349,8 @@ public class KanbanPanel extends JPanel {
     component.setTransferHandler(handler);
     component.addMouseListener(dragAdapter);
     component.addMouseMotionListener(dragAdapter);
-    if (component instanceof Container container){
-      for (Component child : container.getComponents()){
+    if (component instanceof Container){
+      for (Component child : component.getComponents()){
         if (child instanceof JComponent jComponent){
           registerDragSource(jComponent, handler);
         }
