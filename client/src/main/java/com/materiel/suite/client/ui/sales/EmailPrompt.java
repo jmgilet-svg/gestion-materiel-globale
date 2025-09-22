@@ -1,5 +1,6 @@
 package com.materiel.suite.client.ui.sales;
 
+import com.materiel.suite.client.service.AgencyConfigGateway;
 import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.service.TemplatesGateway;
 
@@ -7,6 +8,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /** Boîte de dialogue pour saisir les informations d'envoi d'email. */
@@ -17,6 +19,10 @@ public class EmailPrompt extends JDialog {
   private final JComboBox<TemplatesGateway.Template> templateBox = new JComboBox<>();
   private final JTextField subjectField = new JTextField(28);
   private final JTextArea bodyArea = new JTextArea(6, 28);
+  private final JEditorPane preview = new JEditorPane("text/html", "");
+  private final JCheckBox livePreview = new JCheckBox("Prévisualiser le rendu HTML");
+  private String agencyCss = "";
+  private String agencySignature = "";
   private boolean confirmed;
   private Map<String, String> contextVars = Map.of();
 
@@ -74,8 +80,18 @@ public class EmailPrompt extends JDialog {
     gc.gridx = 1;
     gc.anchor = GridBagConstraints.LINE_START;
     gc.fill = GridBagConstraints.BOTH;
-    JScrollPane scroll = new JScrollPane(bodyArea);
-    add(scroll, gc);
+    preview.setEditable(false);
+    preview.setContentType("text/html; charset=UTF-8");
+    JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
+        new JScrollPane(bodyArea), new JScrollPane(preview));
+    split.setResizeWeight(0.5);
+    add(split, gc);
+
+    gc.gridx = 1;
+    gc.gridy++;
+    gc.anchor = GridBagConstraints.LINE_START;
+    gc.fill = GridBagConstraints.NONE;
+    add(livePreview, gc);
 
     JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
     JButton send = new JButton("Envoyer");
@@ -85,7 +101,6 @@ public class EmailPrompt extends JDialog {
     gc.gridx = 1;
     gc.gridy++;
     gc.anchor = GridBagConstraints.LINE_END;
-    gc.fill = GridBagConstraints.NONE;
     add(buttons, gc);
 
     send.addActionListener(e -> {
@@ -97,11 +112,33 @@ public class EmailPrompt extends JDialog {
       dispose();
     });
     getRootPane().setDefaultButton(send);
-    setResizable(false);
+    setResizable(true);
 
     loadEmailTemplates();
     templateBox.addActionListener(e -> applyTemplateSelected());
+
+    AgencyConfigGateway config = ServiceLocator.agencyConfig();
+    if (config != null){
+      try {
+        AgencyConfigGateway.AgencyConfig cfg = config.get();
+        agencyCss = cfg == null || cfg.emailCss() == null ? "" : cfg.emailCss();
+        agencySignature = cfg == null || cfg.emailSignatureHtml() == null ? "" : cfg.emailSignatureHtml();
+      } catch (Exception ignore){
+        agencyCss = "";
+        agencySignature = "";
+      }
+    }
+
+    livePreview.setSelected(true);
+    livePreview.addActionListener(e -> refreshPreview());
+    bodyArea.getDocument().addDocumentListener(new javax.swing.event.DocumentListener(){
+      @Override public void insertUpdate(javax.swing.event.DocumentEvent e){ refreshPreview(); }
+      @Override public void removeUpdate(javax.swing.event.DocumentEvent e){ refreshPreview(); }
+      @Override public void changedUpdate(javax.swing.event.DocumentEvent e){ refreshPreview(); }
+    });
+
     applyTemplateSelected();
+    refreshPreview();
 
     pack();
     setLocationRelativeTo(owner);
@@ -124,7 +161,7 @@ public class EmailPrompt extends JDialog {
         split(dialog.ccField.getText()),
         split(dialog.bccField.getText()),
         dialog.subjectField.getText().trim(),
-        dialog.bodyArea.getText());
+        dialog.buildFinalHtml());
   }
 
   private void loadEmailTemplates(){
@@ -142,6 +179,7 @@ public class EmailPrompt extends JDialog {
   private void applyTemplateSelected(){
     Object selected = templateBox.getSelectedItem();
     if (!(selected instanceof TemplatesGateway.Template template)){
+      refreshPreview();
       return;
     }
     String merged = merge(template.content(), contextVars);
@@ -154,10 +192,54 @@ public class EmailPrompt extends JDialog {
       if (first.regionMatches(true, 0, "subject:", 0, 8)){
         subjectField.setText(first.substring(8).trim());
         bodyArea.setText(lines.length > 1 ? lines[1] : "");
+        refreshPreview();
         return;
       }
     }
     bodyArea.setText(merged);
+    refreshPreview();
+  }
+
+  private void refreshPreview(){
+    if (!livePreview.isSelected()){
+      preview.setText("");
+      return;
+    }
+    String finalHtml = buildFinalHtml();
+    preview.setText(finalHtml);
+    preview.setCaretPosition(0);
+  }
+
+  private String buildFinalHtml(){
+    String html = bodyArea.getText();
+    if (html == null){
+      return "";
+    }
+    String trimmed = html.trim();
+    if (trimmed.isEmpty()){
+      return "";
+    }
+    if (!trimmed.toLowerCase(Locale.ROOT).contains("<html")){
+      String body = trimmed;
+      if (shouldAppendSignature(body)){
+        body = body + System.lineSeparator() + agencySignature;
+      }
+      String headCss = agencyCss == null || agencyCss.isBlank() ? "" : "<style>" + agencyCss + "</style>";
+      return "<!doctype html><html><head><meta charset='UTF-8'>" + headCss + "</head><body>" + body + "</body></html>";
+    }
+    return trimmed;
+  }
+
+  private boolean shouldAppendSignature(String content){
+    if (agencySignature == null || agencySignature.isBlank()){
+      return false;
+    }
+    String normalizedSignature = agencySignature.replaceAll("\\s+", "");
+    if (normalizedSignature.isEmpty()){
+      return false;
+    }
+    String normalizedContent = content == null ? "" : content.replaceAll("\\s+", "");
+    return !normalizedContent.contains(normalizedSignature);
   }
 
   private static String merge(String template, Map<String, String> vars){

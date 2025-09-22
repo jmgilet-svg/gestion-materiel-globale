@@ -39,6 +39,12 @@ public class HtmlEditorPanel extends JPanel {
 
     buildToolbar();
 
+    JButton full = new JButton("Plein écran");
+    full.addActionListener(e -> openFullscreenDialog(SwingUtilities.getWindowAncestor(this)));
+    toolbar.addSeparator();
+    toolbar.add(Box.createHorizontalGlue());
+    toolbar.add(full);
+
     add(toolbar, BorderLayout.NORTH);
     add(tabs, BorderLayout.CENTER);
   }
@@ -137,6 +143,31 @@ public class HtmlEditorPanel extends JPanel {
       return source.getText();
     }
     return readDesignHtml();
+  }
+
+  /** Ouvre un éditeur HTML modal en mode plein écran. */
+  public void openFullscreenDialog(java.awt.Window owner){
+    JDialog dialog = new JDialog(owner, "Édition (plein écran)", Dialog.ModalityType.APPLICATION_MODAL);
+    dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+    dialog.setLayout(new BorderLayout());
+    HtmlEditorPanel editor = new HtmlEditorPanel();
+    editor.setHtml(getHtml());
+    JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+    JButton ok = new JButton("Valider");
+    JButton cancel = new JButton("Annuler");
+    actions.add(ok);
+    actions.add(cancel);
+    dialog.add(editor, BorderLayout.CENTER);
+    dialog.add(actions, BorderLayout.SOUTH);
+    dialog.setResizable(true);
+    dialog.setSize(1200, 800);
+    dialog.setLocationRelativeTo(owner);
+    ok.addActionListener(ev -> {
+      setHtml(editor.getHtml());
+      dialog.dispose();
+    });
+    cancel.addActionListener(ev -> dialog.dispose());
+    dialog.setVisible(true);
   }
 
   public void insertText(String html){

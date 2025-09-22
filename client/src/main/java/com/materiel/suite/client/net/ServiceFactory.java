@@ -28,6 +28,7 @@ public class ServiceFactory {
   private static MailService mailService;
   private static DocumentTemplateService documentTemplateService;
   private static PdfService pdfService;
+  private static AgencyConfigGateway agencyConfigService;
 
   public static void init(AppConfig c) {
     cfg = c;
@@ -40,6 +41,7 @@ public class ServiceFactory {
     mailService = null;
     documentTemplateService = null;
     pdfService = null;
+    agencyConfigService = null;
     switch (cfg.getMode()) {
       case "mock" -> initMock();
       case "backend" -> initBackend();
@@ -65,6 +67,7 @@ public class ServiceFactory {
     mailService = new MockMailService();
     documentTemplateService = new MockDocumentTemplateService();
     pdfService = new MockPdfService();
+    agencyConfigService = new MockAgencyConfigService();
     MockUserService mockUsers = new MockUserService();
     userService = mockUsers;
     authService = new MockAuthService(mockUsers);
@@ -91,6 +94,7 @@ public class ServiceFactory {
     mailService = new ApiMailService(rc, new MockMailService());
     documentTemplateService = new ApiDocumentTemplateService(rc, new MockDocumentTemplateService());
     pdfService = new ApiPdfService(rc, new MockPdfService());
+    agencyConfigService = new ApiAgencyConfigService(rc, new MockAgencyConfigService());
     MockUserService mockUsers = new MockUserService();
     userService = new ApiUserService(rc, mockUsers);
     authService = new ApiAuthService(rc, new MockAuthService(mockUsers));
@@ -111,6 +115,7 @@ public class ServiceFactory {
   public static MailService mail(){ return mailService; }
   public static DocumentTemplateService documentTemplates(){ return documentTemplateService; }
   public static PdfService pdf(){ return pdfService; }
+  public static AgencyConfigGateway agencyConfig(){ return agencyConfigService; }
   public static RestClient http(){ return restClient; }
   public static AuthService auth(){ return authService; }
   public static UserService users(){ return userService; }

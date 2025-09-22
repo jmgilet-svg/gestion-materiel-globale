@@ -2,6 +2,7 @@ package com.materiel.suite.client.ui.sales;
 
 import com.materiel.suite.client.model.InvoiceV2;
 import com.materiel.suite.client.model.QuoteV2;
+import com.materiel.suite.client.service.AgencyConfigGateway;
 import com.materiel.suite.client.service.DocumentTemplateService;
 import com.materiel.suite.client.service.PdfService;
 import com.materiel.suite.client.service.ServiceLocator;
@@ -23,10 +24,7 @@ public final class PdfTemplateEngine {
   public static byte[] renderQuote(QuoteV2 quote, String logoBase64){
     String html = loadTemplate("QUOTE", "default", defaultQuoteTemplate());
     Map<String, String> values = new LinkedHashMap<>();
-    values.put("agency.name", nz(ServiceLocator.agencyLabel()));
-    values.put("agency.addressHtml", "");
-    values.put("agency.vatRate", "");
-    values.put("agency.cgvHtml", "");
+    populateAgency(values);
     values.put("client.name", nz(quote == null ? null : quote.getClientName()));
     values.put("client.addressHtml", "");
     values.put("quote.reference", nz(quote == null ? null : quote.getReference()));
@@ -43,10 +41,7 @@ public final class PdfTemplateEngine {
   public static byte[] renderInvoice(InvoiceV2 invoice, String logoBase64){
     String html = loadTemplate("INVOICE", "default", defaultInvoiceTemplate());
     Map<String, String> values = new LinkedHashMap<>();
-    values.put("agency.name", nz(ServiceLocator.agencyLabel()));
-    values.put("agency.addressHtml", "");
-    values.put("agency.vatRate", "");
-    values.put("agency.cgvHtml", "");
+    populateAgency(values);
     values.put("client.name", nz(invoice == null ? null : invoice.getClientName()));
     values.put("client.addressHtml", "");
     values.put("invoice.number", nz(invoice == null ? null : nz(invoice.getNumber(), invoice.getId())));
@@ -87,6 +82,34 @@ public final class PdfTemplateEngine {
       out = out.replace("{{" + entry.getKey() + "}}", entry.getValue() == null ? "" : entry.getValue());
     }
     return out;
+  }
+
+  private static void populateAgency(Map<String, String> values){
+    values.put("agency.name", nz(ServiceLocator.agencyLabel()));
+    values.put("agency.addressHtml", "");
+    values.put("agency.vatRate", "");
+    values.put("agency.cgvHtml", "");
+    values.put("agency.emailCss", "");
+    values.put("agency.emailSignatureHtml", "");
+    AgencyConfigGateway gateway = ServiceLocator.agencyConfig();
+    if (gateway == null){
+      return;
+    }
+    try {
+      AgencyConfigGateway.AgencyConfig cfg = gateway.get();
+      if (cfg != null){
+        if (cfg.companyName() != null && !cfg.companyName().isBlank()){
+          values.put("agency.name", cfg.companyName());
+        }
+        values.put("agency.addressHtml", nz(cfg.companyAddressHtml()));
+        values.put("agency.vatRate", cfg.vatRate() == null ? "" : cfg.vatRate().toString());
+        values.put("agency.cgvHtml", nz(cfg.cgvHtml()));
+        values.put("agency.emailCss", nz(cfg.emailCss()));
+        values.put("agency.emailSignatureHtml", nz(cfg.emailSignatureHtml()));
+      }
+    } catch (Exception ignore){
+      // valeurs par défaut déjà renseignées
+    }
   }
 
   private static byte[] renderHtml(String html, String logoBase64){

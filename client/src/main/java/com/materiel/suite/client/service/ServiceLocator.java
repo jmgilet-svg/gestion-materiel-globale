@@ -5,6 +5,7 @@ import com.materiel.suite.client.auth.AuthService;
 import com.materiel.suite.client.model.InterventionType;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.net.ServiceFactory;
+import com.materiel.suite.client.service.AgencyConfigGateway;
 import com.materiel.suite.client.service.DocumentTemplateService;
 import com.materiel.suite.client.service.MailService;
 import com.materiel.suite.client.service.PdfService;
@@ -71,6 +72,10 @@ public final class ServiceLocator {
 
   public static MailService mail(){
     return ServiceFactory.mail();
+  }
+
+  public static AgencyConfigGateway agencyConfig(){
+    return ServiceFactory.agencyConfig();
   }
 
   public static DocumentTemplateService documentTemplates(){
