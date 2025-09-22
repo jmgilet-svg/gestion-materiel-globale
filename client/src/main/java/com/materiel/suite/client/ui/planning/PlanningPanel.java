@@ -15,6 +15,7 @@ import java.awt.GraphicsEnvironment;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
@@ -60,6 +61,7 @@ import javax.swing.JDialog;
 import javax.swing.InputMap;
 import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -305,6 +307,9 @@ public class PlanningPanel extends JPanel {
     installKeyAndWheelShortcuts();
     putUndoRedoKeymap();
     installKeymap();
+
+    // Ouvrir une intervention par double-clic + entrée menu contextuel
+    installBoardOpenHandlers();
   }
 
   private JComponent buildToolbar(){
@@ -347,11 +352,11 @@ public class PlanningPanel extends JPanel {
     gran.setSelectedItem(board.getSlotMinutes()+" min");
     JLabel densL = new JLabel("Densité:");
     JComboBox<String> density = new JComboBox<>(new String[]{"COMPACT","NORMAL","SPACIOUS"});
-    modeToggle = new JToggleButton("Agenda");
+    modeToggle = new JToggleButton("Agenda"); // conservé en mémoire si utilisé ailleurs
     conflictsBtn = new JButton("Conflits (0)");
-    JButton toAgenda = new JButton("↔ Agenda");
+    JButton toAgenda = new JButton("↔ Agenda"); // ne sera pas ajouté à la barre
     JButton addI = new JButton("+ Intervention", IconRegistry.small("task"));
-    simplePeriod = new JComboBox<>(new String[]{"Semaine","Mois"});
+    simplePeriod = new JComboBox<>(new String[]{"Semaine","Mois"}); // on garde la logique, mais on n'affiche plus ce bloc
     LocalDate initialRef = board.getStartDate();
     if (initialRef == null){
       initialRef = LocalDate.now().with(DayOfWeek.MONDAY);
@@ -360,7 +365,7 @@ public class PlanningPanel extends JPanel {
     agenda.setStartDate(initialRef);
     simpleRefDate = new JSpinner(new SpinnerDateModel(toDate(initialRef), null, null, Calendar.DAY_OF_MONTH));
     simpleRefDate.setEditor(new JSpinner.DateEditor(simpleRefDate, "dd/MM/yyyy"));
-    JButton simplePrev = new JButton("◀");
+    JButton simplePrev = new JButton("◀");       // non ajoutés à la barre
     JButton simpleToday = new JButton("Aujourd'hui");
     JButton simpleNext = new JButton("▶");
 
@@ -401,15 +406,12 @@ public class PlanningPanel extends JPanel {
     bar.add(weekBadge);
     bar.add(next);
     bar.add(today);
-    bar.add(modeToggle);
+    // On n’ajoute PAS le toggle Agenda ici
     bar.add(Box.createHorizontalStrut(16)); bar.add(zoomL); bar.add(zoomSlider);
     bar.add(Box.createHorizontalStrut(12)); bar.add(granL); bar.add(gran);
     bar.add(Box.createHorizontalStrut(12)); bar.add(densL); bar.add(density);
     bar.add(Box.createHorizontalStrut(8)); bar.add(conflictsBtn);
-    bar.add(Box.createHorizontalStrut(12)); bar.add(toAgenda);
-    JLabel simpleLabel = new JLabel("Période calendrier:");
-    bar.add(Box.createHorizontalStrut(16)); bar.add(simpleLabel); bar.add(simplePeriod); bar.add(simpleRefDate);
-    bar.add(simplePrev); bar.add(simpleToday); bar.add(simpleNext);
+    // Suppression de “↔ Agenda” et du bloc “Période calendrier …”
     bar.add(Box.createHorizontalStrut(16)); bar.add(addI);
     JLabel quoteFilterLabel = new JLabel("Filtre devis:", IconRegistry.small("filter"), JLabel.LEFT);
     quoteFilterLabel.setIconTextGap(4);
@@ -432,6 +434,58 @@ public class PlanningPanel extends JPanel {
     buildDisplayMenu();
     syncWeekBadgeFromBoard();
     return bar;
+  }
+
+  /**
+   * Branches : double-clic ouvre l’édition de l’intervention ; clic droit -> “Ouvrir l’intervention”.
+   * Ne dépend pas d’une API spécifique du board : on essaie plusieurs méthodes usuelles par réflexion.
+   */
+  private void installBoardOpenHandlers(){
+    board.addMouseListener(new MouseAdapter(){
+      @Override public void mouseClicked(MouseEvent e){
+        if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)){
+          Intervention it = resolveInterventionAt(e.getPoint());
+          if (it != null){
+            openInterventionEditor(it);
+          }
+        }
+      }
+
+      @Override public void mousePressed(MouseEvent e){ maybePopup(e); }
+      @Override public void mouseReleased(MouseEvent e){ maybePopup(e); }
+
+      private void maybePopup(MouseEvent e){
+        if (e.isPopupTrigger()){
+          Intervention it = resolveInterventionAt(e.getPoint());
+          JPopupMenu m = new JPopupMenu();
+          JMenuItem open = new JMenuItem("Ouvrir l’intervention…");
+          open.addActionListener(a -> { if (it != null) openInterventionEditor(it); });
+          m.add(open);
+          m.show(board, e.getX(), e.getY());
+        }
+      }
+    });
+  }
+
+  /** Tente de trouver l’intervention sous le point souris, sans dépendre d’une signature précise. */
+  private Intervention resolveInterventionAt(Point p){
+    // 1) try getInterventionAt(Point)
+    try{
+      var m = board.getClass().getMethod("getInterventionAt", Point.class);
+      Object o = m.invoke(board, p);
+      if (o instanceof Intervention it) return it;
+    }catch(Exception ignore){}
+    // 2) try itemAt(Point)
+    try{
+      var m = board.getClass().getMethod("itemAt", Point.class);
+      Object o = m.invoke(board, p);
+      if (o instanceof Intervention it) return it;
+    }catch(Exception ignore){}
+    // 3) fallback : si une seule sélection courante existe déjà
+    if (currentSelection != null && currentSelection.size() == 1){
+      return currentSelection.get(0);
+    }
+    return null;
   }
 
   private void zoomInStep(){
