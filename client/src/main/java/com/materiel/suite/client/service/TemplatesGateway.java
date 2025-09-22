@@ -43,6 +43,57 @@ public final class TemplatesGateway {
     );
   }
 
+  public Template save(Template template){
+    DocumentTemplateService svc = ServiceLocator.documentTemplates();
+    if (svc == null){
+      return template;
+    }
+    try {
+      DocumentTemplateService.Template dto = toDocumentTemplate(template);
+      DocumentTemplateService.Template saved = svc.save(dto);
+      return saved == null ? template : copy(saved);
+    } catch (Exception ex){
+      throw new RuntimeException(ex);
+    }
+  }
+
+  public void delete(Template template){
+    if (template == null){
+      return;
+    }
+    delete(template.id());
+  }
+
+  public void delete(String id){
+    if (id == null || id.isBlank()){
+      return;
+    }
+    DocumentTemplateService svc = ServiceLocator.documentTemplates();
+    if (svc == null){
+      return;
+    }
+    svc.delete(id);
+  }
+
+  private DocumentTemplateService.Template toDocumentTemplate(Template template){
+    DocumentTemplateService.Template dto = new DocumentTemplateService.Template();
+    if (template == null){
+      dto.setAgencyId(ServiceLocator.agencyId());
+      return dto;
+    }
+    dto.setId(template.id());
+    String agency = template.agencyId();
+    if (agency == null || agency.isBlank()){
+      agency = ServiceLocator.agencyId();
+    }
+    dto.setAgencyId(agency);
+    dto.setType(template.type());
+    dto.setKey(template.key());
+    dto.setName(template.name());
+    dto.setContent(template.content());
+    return dto;
+  }
+
   public record Template(String id, String agencyId, String type, String key, String name, String content) {
     @Override
     public String toString(){

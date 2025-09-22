@@ -18,6 +18,7 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableRowSorter;
 import javax.swing.RowFilter;
 import java.awt.*;
+import java.awt.datatransfer.StringSelection;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
@@ -55,6 +56,7 @@ public class SalesPanel extends JPanel {
   private final JButton csvQuote = new JButton("Exporter CSV");
   private final JButton xlsQuote = new JButton("Exporter Excel");
   private final JButton mailQuote = new JButton("Envoyer PDF…");
+  private final JButton mailQuoteInsertLines = new JButton("Insérer lignes (HTML)");
   private final JTextField searchQuote = new JTextField(18);
   private final JLabel searchQuoteLbl = new JLabel("Recherche:");
   private TableRowSorter<QuoteTableModel> quoteSorter;
@@ -70,6 +72,7 @@ public class SalesPanel extends JPanel {
   private final JButton csvInvoice = new JButton("Exporter CSV");
   private final JButton xlsInvoice = new JButton("Exporter Excel");
   private final JButton mailInvoice = new JButton("Envoyer PDF…");
+  private final JButton mailInvoiceInsertLines = new JButton("Insérer lignes (HTML)");
   private final JTextField searchInvoice = new JTextField(18);
   private final JLabel searchInvoiceLbl = new JLabel("Recherche:");
   private TableRowSorter<InvoiceTableModel> invoiceSorter;
@@ -87,6 +90,7 @@ public class SalesPanel extends JPanel {
     qbar.add(pdfQuote);
     qbar.add(pdfQuoteDetail);
     qbar.add(mailQuote);
+    qbar.add(mailQuoteInsertLines);
     qbar.add(quoteToInvoice);
     qbar.add(quoteToInvoicesMulti);
     qbar.add(csvQuote);
@@ -115,6 +119,7 @@ public class SalesPanel extends JPanel {
     ibar.add(pdfInvoice);
     ibar.add(pdfInvoiceDetail);
     ibar.add(mailInvoice);
+    ibar.add(mailInvoiceInsertLines);
     ibar.add(csvInvoice);
     ibar.add(xlsInvoice);
     ibar.add(Box.createHorizontalStrut(12));
@@ -143,6 +148,7 @@ public class SalesPanel extends JPanel {
     pdfQuote.addActionListener(e -> onExportQuotesPdf());
     pdfQuoteDetail.addActionListener(e -> onExportQuoteDetailedPdf());
     mailQuote.addActionListener(e -> onEmailQuotesPdf());
+    mailQuoteInsertLines.addActionListener(e -> onInsertQuoteLinesHtml());
     quoteToInvoice.addActionListener(e -> onGenerateInvoiceFromQuote());
     quoteToInvoicesMulti.addActionListener(e -> onGenerateInvoicesFromSelection());
     csvQuote.addActionListener(e -> onExportQuotesCsv());
@@ -154,6 +160,7 @@ public class SalesPanel extends JPanel {
     pdfInvoice.addActionListener(e -> onExportInvoicesPdf());
     pdfInvoiceDetail.addActionListener(e -> onExportInvoiceDetailedPdf());
     mailInvoice.addActionListener(e -> onEmailInvoicesPdf());
+    mailInvoiceInsertLines.addActionListener(e -> onInsertInvoiceLinesHtml());
     csvInvoice.addActionListener(e -> onExportInvoicesCsv());
     xlsInvoice.addActionListener(e -> onExportInvoicesExcel());
 
@@ -705,6 +712,7 @@ public class SalesPanel extends JPanel {
   private Map<String, String> buildQuoteEmailVars(){
     Map<String, String> vars = new LinkedHashMap<>();
     vars.put("agency.name", nz(AgencyContext.agencyLabel()));
+    vars.put("lines.tableHtml", "");
     int selectedRow = quotesTable.getSelectedRow();
     if (selectedRow >= 0){
       int modelRow = quotesTable.convertRowIndexToModel(selectedRow);
@@ -715,6 +723,7 @@ public class SalesPanel extends JPanel {
         vars.put("quote.date", quote.getDate() == null ? "" : formatDate(quote.getDate()));
         vars.put("quote.totalHt", quote.getTotalHt() == null ? "" : formatAmount(quote.getTotalHt()));
         vars.put("quote.totalTtc", quote.getTotalTtc() == null ? "" : formatAmount(quote.getTotalTtc()));
+        vars.put("lines.tableHtml", buildQuoteLinesHtml(quote));
       }
     }
     return vars;
@@ -723,6 +732,7 @@ public class SalesPanel extends JPanel {
   private Map<String, String> buildInvoiceEmailVars(){
     Map<String, String> vars = new LinkedHashMap<>();
     vars.put("agency.name", nz(AgencyContext.agencyLabel()));
+    vars.put("lines.tableHtml", "");
     int selectedRow = invoicesTable.getSelectedRow();
     if (selectedRow >= 0){
       int modelRow = invoicesTable.convertRowIndexToModel(selectedRow);
@@ -734,9 +744,75 @@ public class SalesPanel extends JPanel {
         vars.put("invoice.totalHt", invoice.getTotalHt() == null ? "" : formatAmount(invoice.getTotalHt()));
         vars.put("invoice.totalTtc", invoice.getTotalTtc() == null ? "" : formatAmount(invoice.getTotalTtc()));
         vars.put("invoice.status", nz(invoice.getStatus(), ""));
+        vars.put("lines.tableHtml", buildInvoiceLinesHtml(invoice));
       }
     }
     return vars;
+  }
+
+  private String buildQuoteLinesHtml(QuoteV2 quote){
+    if (quote == null){
+      return "";
+    }
+    try {
+      return EmailTableBuilder.tableHtml(quote.getLines());
+    } catch (Exception ex){
+      return "";
+    }
+  }
+
+  private String buildInvoiceLinesHtml(InvoiceV2 invoice){
+    if (invoice == null){
+      return "";
+    }
+    try {
+      return EmailTableBuilder.tableHtml(invoice.getLines());
+    } catch (Exception ex){
+      return "";
+    }
+  }
+
+  private void onInsertQuoteLinesHtml(){
+    int row = quotesTable.getSelectedRow();
+    if (row < 0){
+      Toasts.info(this, "Sélectionnez un devis.");
+      return;
+    }
+    row = quotesTable.convertRowIndexToModel(row);
+    QuoteV2 quote = quotesModel.getAt(row);
+    insertHtmlIntoEmailBody(buildQuoteLinesHtml(quote), "Insérer lignes (Devis)");
+  }
+
+  private void onInsertInvoiceLinesHtml(){
+    int row = invoicesTable.getSelectedRow();
+    if (row < 0){
+      Toasts.info(this, "Sélectionnez une facture.");
+      return;
+    }
+    row = invoicesTable.convertRowIndexToModel(row);
+    InvoiceV2 invoice = invoicesModel.getAt(row);
+    insertHtmlIntoEmailBody(buildInvoiceLinesHtml(invoice), "Insérer lignes (Facture)");
+  }
+
+  private void insertHtmlIntoEmailBody(String html, String title){
+    JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(this), title, Dialog.ModalityType.APPLICATION_MODAL);
+    JTextArea textArea = new JTextArea(12, 60);
+    textArea.setLineWrap(false);
+    textArea.setText(html == null ? "" : html);
+    textArea.setCaretPosition(0);
+    dialog.add(new JScrollPane(textArea), BorderLayout.CENTER);
+    JButton copy = new JButton("Copier dans le presse-papiers");
+    copy.addActionListener(e -> {
+      Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(textArea.getText()), null);
+      Toasts.success(SalesPanel.this, "Table HTML copiée. Collez-la dans votre message.");
+      dialog.dispose();
+    });
+    JPanel south = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8));
+    south.add(copy);
+    dialog.add(south, BorderLayout.SOUTH);
+    dialog.pack();
+    dialog.setLocationRelativeTo(this);
+    dialog.setVisible(true);
   }
 
   private File buildQuotesPdfTemp(){

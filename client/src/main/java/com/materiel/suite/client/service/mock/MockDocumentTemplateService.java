@@ -15,6 +15,7 @@ public class MockDocumentTemplateService implements DocumentTemplateService {
   public MockDocumentTemplateService(){
     saveInternal(defaultTemplate("QUOTE", "default", "Modèle devis"));
     saveInternal(defaultTemplate("INVOICE", "default", "Modèle facture"));
+    saveInternal(defaultTemplate("EMAIL", "default", "Modèle email"));
   }
 
   @Override
@@ -66,7 +67,44 @@ public class MockDocumentTemplateService implements DocumentTemplateService {
     t.setType(type);
     t.setKey(key);
     t.setName(name);
-    t.setContent("<html><body><h1>" + name + "</h1><p>{{agency.name}}</p></body></html>");
+    if ("EMAIL".equalsIgnoreCase(type)){
+      t.setContent("""
+<!DOCTYPE html><html><body>
+<p>Bonjour {{client.name}},</p>
+<p>Veuillez trouver ci-joint votre document.</p>
+{{lines.tableHtml}}
+<p>Cordialement,<br/>{{agency.name}}</p>
+</body></html>
+""");
+    } else if ("INVOICE".equalsIgnoreCase(type)){
+      t.setContent("""
+<!DOCTYPE html><html><body>
+<h1>Facture {{invoice.number}}</h1>
+<p>Client : {{client.name}}</p>
+<table style=\"width:100%;border-collapse:collapse\">
+  <thead><tr><th>Désignation</th><th>Qté</th><th>PU HT</th><th>Total HT</th></tr></thead>
+  <tbody>
+    {{lines.rows}}
+  </tbody>
+</table>
+<p>Total TTC : {{invoice.totalTtc}} €</p>
+</body></html>
+""");
+    } else {
+      t.setContent("""
+<!DOCTYPE html><html><body>
+<h1>Devis {{quote.reference}}</h1>
+<p>Agence : {{agency.name}}</p>
+<table style=\"width:100%;border-collapse:collapse\">
+  <thead><tr><th>Désignation</th><th>Qté</th><th>PU HT</th><th>Total HT</th></tr></thead>
+  <tbody>
+    {{lines.rows}}
+  </tbody>
+</table>
+<p>Total HT : {{quote.totalHt}} €</p>
+</body></html>
+""");
+    }
     return t;
   }
 }

@@ -9,6 +9,7 @@ import com.materiel.suite.client.service.ServiceLocator;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -21,29 +22,41 @@ public final class PdfTemplateEngine {
 
   public static byte[] renderQuote(QuoteV2 quote, String logoBase64){
     String html = loadTemplate("QUOTE", "default", defaultQuoteTemplate());
-    html = merge(html, Map.of(
-        "agency.name", nz(ServiceLocator.agencyLabel()),
-        "client.name", nz(quote == null ? null : quote.getClientName()),
-        "quote.reference", nz(quote == null ? null : quote.getReference()),
-        "quote.date", formatDate(quote == null ? null : quote.getDate()),
-        "quote.totalHt", formatAmount(quote == null ? null : quote.getTotalHt()),
-        "quote.totalTtc", formatAmount(quote == null ? null : quote.getTotalTtc())
-    ));
+    Map<String, String> values = new LinkedHashMap<>();
+    values.put("agency.name", nz(ServiceLocator.agencyLabel()));
+    values.put("agency.addressHtml", "");
+    values.put("agency.vatRate", "");
+    values.put("agency.cgvHtml", "");
+    values.put("client.name", nz(quote == null ? null : quote.getClientName()));
+    values.put("client.addressHtml", "");
+    values.put("quote.reference", nz(quote == null ? null : quote.getReference()));
+    values.put("quote.date", formatDate(quote == null ? null : quote.getDate()));
+    values.put("quote.totalHt", formatAmount(quote == null ? null : quote.getTotalHt()));
+    values.put("quote.totalTtc", formatAmount(quote == null ? null : quote.getTotalTtc()));
+    values.put("lines.rows", EmailTableBuilder.rowsHtml(quote == null ? null : quote.getLines()));
+    values.put("lines.tableHtml", EmailTableBuilder.tableHtml(quote == null ? null : quote.getLines()));
+    html = merge(html, values);
     html = html.replace("{{logo.cdi}}", logoBase64 == null ? "" : "cid:logo");
     return renderHtml(html, logoBase64);
   }
 
   public static byte[] renderInvoice(InvoiceV2 invoice, String logoBase64){
     String html = loadTemplate("INVOICE", "default", defaultInvoiceTemplate());
-    html = merge(html, Map.of(
-        "agency.name", nz(ServiceLocator.agencyLabel()),
-        "client.name", nz(invoice == null ? null : invoice.getClientName()),
-        "invoice.number", nz(invoice == null ? null : nz(invoice.getNumber(), invoice.getId())),
-        "invoice.date", formatDate(invoice == null ? null : invoice.getDate()),
-        "invoice.totalHt", formatAmount(invoice == null ? null : invoice.getTotalHt()),
-        "invoice.totalTtc", formatAmount(invoice == null ? null : invoice.getTotalTtc()),
-        "invoice.status", nz(invoice == null ? null : invoice.getStatus())
-    ));
+    Map<String, String> values = new LinkedHashMap<>();
+    values.put("agency.name", nz(ServiceLocator.agencyLabel()));
+    values.put("agency.addressHtml", "");
+    values.put("agency.vatRate", "");
+    values.put("agency.cgvHtml", "");
+    values.put("client.name", nz(invoice == null ? null : invoice.getClientName()));
+    values.put("client.addressHtml", "");
+    values.put("invoice.number", nz(invoice == null ? null : nz(invoice.getNumber(), invoice.getId())));
+    values.put("invoice.date", formatDate(invoice == null ? null : invoice.getDate()));
+    values.put("invoice.totalHt", formatAmount(invoice == null ? null : invoice.getTotalHt()));
+    values.put("invoice.totalTtc", formatAmount(invoice == null ? null : invoice.getTotalTtc()));
+    values.put("invoice.status", nz(invoice == null ? null : invoice.getStatus()));
+    values.put("lines.rows", EmailTableBuilder.rowsHtml(invoice == null ? null : invoice.getLines()));
+    values.put("lines.tableHtml", EmailTableBuilder.tableHtml(invoice == null ? null : invoice.getLines()));
+    html = merge(html, values);
     html = html.replace("{{logo.cdi}}", logoBase64 == null ? "" : "cid:logo");
     return renderHtml(html, logoBase64);
   }
@@ -121,23 +134,27 @@ public final class PdfTemplateEngine {
   th{ background:#f5f5f5; text-align:left; }
   .totals{ margin-top:12px; float:right; width:40%; }
   .totals td{ border:none; }
+  .cgv{ margin-top:24px; font-size:10px; color:#444;}
 </style></head><body>
   <div class=\"header\">
-    <div><div class=\"title\">Devis {{quote.reference}}</div><div>Agence: {{agency.name}}</div></div>
+    <div><div class=\"title\">Devis {{quote.reference}}</div><div>Agence: {{agency.name}}</div><div>{{agency.addressHtml}}</div></div>
     <div><img src=\"{{logo.cdi}}\" style=\"height:60px\" /></div>
   </div>
-  <div>Client: <b>{{client.name}}</b></div>
+  <div>Client: <b>{{client.name}}</b></div><div>{{client.addressHtml}}</div>
   <div>Date: {{quote.date}}</div>
   <table>
     <thead><tr><th>Désignation</th><th>Qté</th><th>PU HT</th><th>Total HT</th></tr></thead>
     <tbody>
-      <tr><td>Ligne exemple</td><td>1</td><td>100.00</td><td>100.00</td></tr>
+      {{lines.rows}}
     </tbody>
   </table>
+  <!-- Variante pour emails: {{lines.tableHtml}} -->
   <table class=\"totals\">
     <tr><td>Total HT</td><td style=\"text-align:right\">{{quote.totalHt}} €</td></tr>
+    <tr><td>TVA</td><td style=\"text-align:right\">{{agency.vatRate}}</td></tr>
     <tr><td>Total TTC</td><td style=\"text-align:right\"><b>{{quote.totalTtc}} €</b></td></tr>
   </table>
+  <div class=\"cgv\">{{agency.cgvHtml}}</div>
 </body></html>
 """;
   }
@@ -154,24 +171,28 @@ public final class PdfTemplateEngine {
   th{ background:#f5f5f5; text-align:left; }
   .totals{ margin-top:12px; float:right; width:40%; }
   .totals td{ border:none; }
+  .cgv{ margin-top:24px; font-size:10px; color:#444;}
 </style></head><body>
   <div class=\"header\">
-    <div><div class=\"title\">Facture {{invoice.number}}</div><div>Agence: {{agency.name}}</div></div>
+    <div><div class=\"title\">Facture {{invoice.number}}</div><div>Agence: {{agency.name}}</div><div>{{agency.addressHtml}}</div></div>
     <div><img src=\"{{logo.cdi}}\" style=\"height:60px\" /></div>
   </div>
-  <div>Client: <b>{{client.name}}</b></div>
+  <div>Client: <b>{{client.name}}</b></div><div>{{client.addressHtml}}</div>
   <div>Date: {{invoice.date}}</div>
   <table>
     <thead><tr><th>Désignation</th><th>Qté</th><th>PU HT</th><th>Total HT</th></tr></thead>
     <tbody>
-      <tr><td>Ligne exemple</td><td>1</td><td>100.00</td><td>100.00</td></tr>
+      {{lines.rows}}
     </tbody>
   </table>
+  <!-- Variante pour emails: {{lines.tableHtml}} -->
   <table class=\"totals\">
     <tr><td>Total HT</td><td style=\"text-align:right\">{{invoice.totalHt}} €</td></tr>
+    <tr><td>TVA</td><td style=\"text-align:right\">{{agency.vatRate}}</td></tr>
     <tr><td>Total TTC</td><td style=\"text-align:right\"><b>{{invoice.totalTtc}} €</b></td></tr>
     <tr><td>Statut</td><td style=\"text-align:right\">{{invoice.status}}</td></tr>
   </table>
+  <div class=\"cgv\">{{agency.cgvHtml}}</div>
 </body></html>
 """;
   }
