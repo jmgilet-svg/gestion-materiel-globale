@@ -1,15 +1,19 @@
 package com.materiel.suite.client.ui.planning;
 
 import com.materiel.suite.client.model.Intervention;
+import com.materiel.suite.client.model.ResourceRef;
 import com.materiel.suite.client.ui.icons.IconRegistry;
 
-import javax.swing.Icon;
+import javax.swing.*;
 import java.awt.*;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /** Rendu d'une intervention dans la grille du planning. */
-final class InterventionTileRenderer {
+public final class InterventionTileRenderer {
   private static final int PAD = PlanningUx.PAD;
   private static final int R = PlanningUx.RADIUS;
   private static final int CHIP_H = 24;
@@ -22,6 +26,20 @@ final class InterventionTileRenderer {
   // States
   private static final Color SEL_BORDER = new Color(0x1F4FD8);
   private static final Color HOVER_BORDER = new Color(0x94A3B8);
+
+  // Composant "tuile" (agenda compact)
+  private static final Color CARD_BG = new Color(0xF7F9FC);
+  private static final Color CARD_TEXT = new Color(0x1F2937);
+  private static final Color CARD_SUBTEXT = new Color(0x6B7280);
+  private static final Color CARD_SELECTION = new Color(0x3B82F6);
+  private static final Color CARD_SELECTION_HALO = new Color(
+      CARD_SELECTION.getRed(), CARD_SELECTION.getGreen(), CARD_SELECTION.getBlue(), 60);
+  private static final Color STRIPE_PLANNED = new Color(0x6366F1);
+  private static final Color STRIPE_IN_PROGRESS = new Color(0xF59E0B);
+  private static final Color STRIPE_DONE = new Color(0x10B981);
+  private static final Color STRIPE_CANCELLED = new Color(0xEF4444);
+  private static final DateTimeFormatter HM_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
+  private static final int MICRO_THRESHOLD = 110;
 
   // Tiers de rendu selon l'espace disponible
   enum Tier { XS, SM, MD, LG }
@@ -43,6 +61,420 @@ final class InterventionTileRenderer {
       case SPACIOUS -> 1.15;
       default -> 1.0;
     };
+  }
+
+  /** Construit un composant léger représentant l'intervention (agenda compact). */
+  public JComponent render(Intervention it, boolean selected, int widthPx){
+    if (it == null){
+      JPanel empty = new JPanel();
+      empty.setOpaque(false);
+      empty.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+      empty.setName("intervention-tile");
+      return widthPx > 0 && widthPx < MICRO_THRESHOLD ? shrink(empty) : empty;
+    }
+
+    final boolean micro = widthPx > 0 && widthPx < MICRO_THRESHOLD;
+    final boolean compactDensity = compact || density == UiDensity.COMPACT;
+    final boolean spaciousDensity = density == UiDensity.SPACIOUS;
+    final float titleSize = compactDensity ? 11f : (spaciousDensity ? 13.5f : 12.5f);
+    final float subtitleSize = compactDensity ? 10.5f : (spaciousDensity ? 12f : 11.5f);
+    final int headerIconSize = compactDensity ? 14 : (spaciousDensity ? 18 : 16);
+    final int chipIconSize = compactDensity ? 12 : (spaciousDensity ? 15 : 14);
+    final String status = nonBlankOr(it.getStatus(), "Planifiée");
+    final Color stripe = stripeColor(status);
+
+    JPanel root = new JPanel(new BorderLayout()){
+      @Override protected void paintComponent(Graphics g){
+        super.paintComponent(g);
+        Graphics2D g2 = (Graphics2D) g.create();
+        try {
+          g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+          g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+          g2.setColor(CARD_BG);
+          g2.fillRoundRect(0, 0, getWidth()-1, getHeight()-1, 8, 8);
+          g2.setColor(stripe);
+          g2.fillRoundRect(0, 0, 4, getHeight()-1, 8, 8);
+          if (selected){
+            g2.setColor(CARD_SELECTION_HALO);
+            g2.setStroke(new BasicStroke(2f));
+            g2.drawRoundRect(1, 1, getWidth()-3, getHeight()-3, 8, 8);
+          }
+        } finally {
+          g2.dispose();
+        }
+      }
+    };
+    root.setOpaque(false);
+    root.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+    root.setName("intervention-tile");
+
+    JPanel head = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+    head.setOpaque(false);
+    Icon icon = iconForIntervention(it, headerIconSize);
+    if (icon != null){
+      head.add(new JLabel(icon));
+    }
+    JLabel title = new JLabel(ellipsize(titleOf(it), micro ? 14 : 28));
+    title.setForeground(CARD_TEXT);
+    title.setFont(title.getFont().deriveFont(Font.BOLD, titleSize));
+    head.add(title);
+
+    JPanel badges = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+    badges.setOpaque(false);
+    if (hasQuoteBadge(it)){
+      badges.add(badge("📄"));
+    }
+    if (boolCall(it, "isHasConflicts")){
+      badges.add(badge("⚠"));
+    }
+    if (boolCall(it, "isPriority") || it.isFavorite()){
+      badges.add(badge("★"));
+    }
+
+    JPanel top = new JPanel(new BorderLayout());
+    top.setOpaque(false);
+    top.add(head, BorderLayout.CENTER);
+    if (badges.getComponentCount() > 0){
+      top.add(badges, BorderLayout.EAST);
+    }
+    root.add(top, BorderLayout.NORTH);
+
+    JLabel sub = new JLabel(ellipsize(clientLabel(it) + " · " + formatTime(it, micro), micro ? 18 : 40));
+    sub.setForeground(CARD_SUBTEXT);
+    Font subtitleFont = sub.getFont().deriveFont(subtitleSize);
+    sub.setFont(subtitleFont);
+    root.add(sub, BorderLayout.CENTER);
+
+    JPanel chips = new JPanel(new FlowLayout(FlowLayout.LEFT, 3, 0));
+    chips.setOpaque(false);
+    java.util.List<ResourceRef> refs = new ArrayList<>();
+    for (ResourceRef ref : it.getResources()){
+      if (ref != null){
+        refs.add(ref);
+      }
+    }
+    int limit = micro ? 3 : 6;
+    int shown = 0;
+    for (ResourceRef ref : refs){
+      if (shown >= limit) break;
+      Icon chipIcon = iconForResource(ref, chipIconSize);
+      if (chipIcon != null){
+        chips.add(new JLabel(chipIcon));
+      }
+      shown++;
+    }
+    if (refs.size() > shown){
+      JLabel more = new JLabel("+" + (refs.size() - shown));
+      more.setForeground(CARD_SUBTEXT);
+      more.setFont(subtitleFont);
+      chips.add(more);
+    }
+    root.add(chips, BorderLayout.SOUTH);
+
+    root.setToolTipText(buildTooltip(it));
+    return micro ? shrink(root) : root;
+  }
+
+  private static boolean hasQuoteBadge(Intervention it){
+    if (it == null){
+      return false;
+    }
+    if (boolCall(it, "isQuoteGenerated")){
+      return true;
+    }
+    if (it.hasQuote()){
+      return true;
+    }
+    String step = workflowStep(it);
+    return step != null && step.equalsIgnoreCase("DEVIS");
+  }
+
+  private static boolean boolCall(Object target, String method){
+    Boolean value = call(target, method, Boolean.class);
+    return Boolean.TRUE.equals(value);
+  }
+
+  private static <T> T call(Object target, String method, Class<T> type){
+    if (target == null || method == null || method.isBlank() || type == null){
+      return null;
+    }
+    try {
+      var m = target.getClass().getMethod(method);
+      Object value = m.invoke(target);
+      if (value == null){
+        return null;
+      }
+      return type.cast(value);
+    } catch (ReflectiveOperationException | ClassCastException ex){
+      return null;
+    }
+  }
+
+  private static String titleOf(Intervention it){
+    if (it == null){
+      return "Intervention";
+    }
+    String title = call(it, "getTitle", String.class);
+    if (title != null && !title.isBlank()){
+      return title.trim();
+    }
+    return nonBlankOr(it.getLabel(), "Intervention");
+  }
+
+  private static String clientLabel(Intervention it){
+    if (it == null){
+      return "—";
+    }
+    String client = nonBlankOr(it.getClientName(), null);
+    if (client != null){
+      return client;
+    }
+    return nonBlankOr(it.getLabel(), "—");
+  }
+
+  private static String typeLabel(Intervention it){
+    if (it == null){
+      return "Intervention";
+    }
+    var type = it.getType();
+    if (type != null){
+      String label = nonBlankOr(type.getLabel(), null);
+      if (label != null){
+        return label;
+      }
+      String code = nonBlankOr(type.getCode(), null);
+      if (code != null){
+        return code;
+      }
+    }
+    String fallback = call(it, "getTypeLabel", String.class);
+    if (fallback != null && !fallback.isBlank()){
+      return fallback.trim();
+    }
+    fallback = call(it, "getTypeName", String.class);
+    if (fallback != null && !fallback.isBlank()){
+      return fallback.trim();
+    }
+    return "Intervention";
+  }
+
+  private static String ellipsize(String value, int max){
+    if (value == null){
+      return "";
+    }
+    if (max <= 0 || value.length() <= max){
+      return value;
+    }
+    int cut = Math.max(0, max - 1);
+    return value.substring(0, cut) + "…";
+  }
+
+  private static String nonBlankOr(String value, String fallback){
+    if (value == null){
+      return fallback;
+    }
+    String trimmed = value.trim();
+    return trimmed.isEmpty() ? fallback : trimmed;
+  }
+
+  private static String formatTime(Intervention it, boolean micro){
+    if (it == null){
+      return "—";
+    }
+    LocalDateTime start = it.getDateHeureDebut();
+    LocalDateTime end = it.getDateHeureFin();
+    String startText = start != null ? HM_FORMATTER.format(start) : "—";
+    if (micro){
+      return startText;
+    }
+    String endText = end != null ? HM_FORMATTER.format(end) : "—";
+    if ("—".equals(startText) && "—".equals(endText)){
+      String pretty = it.prettyTimeRange();
+      return pretty != null ? pretty : "—";
+    }
+    return startText + "–" + endText;
+  }
+
+  private static String tooltipTimeRange(Intervention it){
+    if (it == null){
+      return "—";
+    }
+    LocalDateTime start = it.getDateHeureDebut();
+    LocalDateTime end = it.getDateHeureFin();
+    if (start == null && end == null){
+      String pretty = it.prettyTimeRange();
+      return pretty != null ? pretty : "—";
+    }
+    String startText = start != null ? HM_FORMATTER.format(start) : "—";
+    String endText = end != null ? HM_FORMATTER.format(end) : "—";
+    return startText + " – " + endText;
+  }
+
+  private static String buildTooltip(Intervention it){
+    if (it == null){
+      return null;
+    }
+    String title = titleOf(it);
+    String client = clientLabel(it);
+    String type = typeLabel(it);
+    String status = nonBlankOr(it.getStatus(), "Planifiée");
+    String range = tooltipTimeRange(it);
+    return "<html><b>" + escape(title) + "</b><br/>"
+        + escape(client) + "<br/><i>" + escape(type) + "</i><br/>"
+        + escape(range) + " · " + escape(status) + "</html>";
+  }
+
+  private static Color stripeColor(String status){
+    if (status == null){
+      return STRIPE_PLANNED;
+    }
+    String normalized = status.trim().toUpperCase(Locale.ROOT)
+        .replace('-', '_').replace(' ', '_');
+    if (normalized.contains("EN_COURS") || normalized.contains("IN_PROGRESS")){
+      return STRIPE_IN_PROGRESS;
+    }
+    if (normalized.contains("TERMINEE") || normalized.contains("TERMINÉE")
+        || normalized.contains("TERMINE") || normalized.contains("DONE")
+        || normalized.contains("COMPLETED")){
+      return STRIPE_DONE;
+    }
+    if (normalized.contains("ANNULEE") || normalized.contains("ANNULÉE")
+        || normalized.contains("ANNULE") || normalized.contains("CANCELED")
+        || normalized.contains("CANCELLED")){
+      return STRIPE_CANCELLED;
+    }
+    return STRIPE_PLANNED;
+  }
+
+  private static Icon iconForIntervention(Intervention it, int size){
+    if (size <= 0){
+      return null;
+    }
+    String key = null;
+    if (it != null){
+      var type = it.getType();
+      if (type != null){
+        String iconKey = nonBlankOr(type.getIconKey(), null);
+        if (iconKey != null){
+          key = iconKey;
+        } else {
+          String label = nonBlankOr(type.getLabel(), null);
+          if (label != null){
+            key = mapToIconKey(label);
+          } else {
+            String code = nonBlankOr(type.getCode(), null);
+            if (code != null){
+              key = mapToIconKey(code);
+            }
+          }
+        }
+      }
+      if (key == null){
+        String fallback = call(it, "getTypeLabel", String.class);
+        if (fallback != null && !fallback.isBlank()){
+          key = mapToIconKey(fallback);
+        }
+      }
+      if (key == null){
+        String fallback = call(it, "getTypeName", String.class);
+        if (fallback != null && !fallback.isBlank()){
+          key = mapToIconKey(fallback);
+        }
+      }
+    }
+    if (key == null){
+      key = "task";
+    }
+    return IconRegistry.loadOrPlaceholder(key, size);
+  }
+
+  private static Icon iconForResource(ResourceRef ref, int size){
+    if (size <= 0){
+      return null;
+    }
+    if (ref == null){
+      return IconRegistry.placeholder(size);
+    }
+    String key = nonBlankOr(ref.getIcon(), null);
+    if (key == null){
+      key = mapToIconKey(ref.getName());
+    }
+    return IconRegistry.loadOrPlaceholder(key, size);
+  }
+
+  private static String mapToIconKey(String raw){
+    if (raw == null){
+      return "task";
+    }
+    String normalized = raw.trim().toLowerCase(Locale.ROOT);
+    if (normalized.isEmpty()){
+      return "task";
+    }
+    if (normalized.contains("grue")){
+      return "crane";
+    }
+    if (normalized.contains("camion")){
+      return "truck";
+    }
+    if (normalized.contains("manut")){
+      return "forklift";
+    }
+    if (normalized.contains("conteneur")){
+      return "container";
+    }
+    if (normalized.contains("pellete") || normalized.contains("excava")){
+      return "excavator";
+    }
+    if (normalized.contains("generateur") || normalized.contains("générateur")){
+      return "generator";
+    }
+    if (normalized.contains("crochet") || normalized.contains("levage")){
+      return "hook";
+    }
+    if (normalized.contains("casque") || normalized.contains("chantier")
+        || normalized.contains("securite") || normalized.contains("sécurité")){
+      return "helmet";
+    }
+    if (normalized.contains("palette")){
+      return "pallet";
+    }
+    if (normalized.contains("fact")){
+      return "file";
+    }
+    return normalized;
+  }
+
+  private static String workflowStep(Intervention it){
+    if (it == null){
+      return null;
+    }
+    String step = call(it, "getWorkflowStep", String.class);
+    if (step != null && !step.isBlank()){
+      return step.trim();
+    }
+    return nonBlankOr(it.getWorkflowStage(), null);
+  }
+
+  private static String escape(String value){
+    if (value == null){
+      return "";
+    }
+    return value.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;");
+  }
+
+  private static JComponent shrink(JComponent component){
+    if (component != null){
+      component.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
+    }
+    return component;
+  }
+
+  private static JComponent badge(String text){
+    JLabel label = new JLabel(text);
+    label.setFont(label.getFont().deriveFont(11f));
+    return label;
   }
 
   /** Calcul de hauteur dynamique (wrap + chips). */
