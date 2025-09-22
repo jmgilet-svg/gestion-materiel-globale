@@ -83,6 +83,8 @@ public final class InterventionTileRenderer {
     final String status = nonBlankOr(it.getStatus(), "Planifiée");
     final Color stripe = stripeColor(status);
 
+    // NOTE UX : on laisse 16px en haut pour éviter les collisions avec les badges du PlanningBoard.
+    final int topInset = 16;
     JPanel root = new JPanel(new BorderLayout()){
       @Override protected void paintComponent(Graphics g){
         super.paintComponent(g);
@@ -90,14 +92,21 @@ public final class InterventionTileRenderer {
         try {
           g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
           g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-          g2.setColor(CARD_BG);
-          g2.fillRoundRect(0, 0, getWidth()-1, getHeight()-1, 8, 8);
-          g2.setColor(stripe);
-          g2.fillRoundRect(0, 0, 4, getHeight()-1, 8, 8);
-          if (selected){
+          int width = Math.max(0, getWidth() - 1);
+          int height = Math.max(0, getHeight() - 1);
+          int contentHeight = Math.max(0, height - topInset);
+          if (contentHeight > 0 && width > 0){
+            g2.setColor(CARD_BG);
+            g2.fillRoundRect(0, topInset, width, contentHeight, 8, 8);
+          }
+          if (height > 0){
+            g2.setColor(stripe);
+            g2.fillRoundRect(0, 0, 4, height, 8, 8);
+          }
+          if (selected && contentHeight > 2 && width > 2){
             g2.setColor(CARD_SELECTION_HALO);
             g2.setStroke(new BasicStroke(2f));
-            g2.drawRoundRect(1, 1, getWidth()-3, getHeight()-3, 8, 8);
+            g2.drawRoundRect(1, topInset + 1, width - 2, contentHeight - 2, 8, 8);
           }
         } finally {
           g2.dispose();
@@ -105,7 +114,7 @@ public final class InterventionTileRenderer {
       }
     };
     root.setOpaque(false);
-    root.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+    root.setBorder(BorderFactory.createEmptyBorder(18, 8, 6, 8));
     root.setName("intervention-tile");
 
     JPanel head = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));

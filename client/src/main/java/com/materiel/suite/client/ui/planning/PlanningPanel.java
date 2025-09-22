@@ -3,6 +3,7 @@ package com.materiel.suite.client.ui.planning;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Dialog;
 import java.awt.Dimension;
@@ -22,6 +23,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseWheelListener;
 import java.io.File;
 import java.io.PrintWriter;
 import java.time.DayOfWeek;
@@ -65,6 +67,7 @@ import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JViewport;
 import javax.swing.JSeparator;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
@@ -171,6 +174,10 @@ public class PlanningPanel extends JPanel {
     add(buildToolbar(), BorderLayout.NORTH);
 
     var scroll = new JScrollPane(board, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
+    scroll.getVerticalScrollBar().setUnitIncrement(32);
+    scroll.getHorizontalScrollBar().setUnitIncrement(24);
+    scroll.getViewport().setScrollMode(JViewport.BLIT_SCROLL_MODE);
+    board.setAutoscrolls(true);
     DayHeader header = new DayHeader(board);
     scroll.setColumnHeaderView(header);
     scroll.getHorizontalScrollBar().addAdjustmentListener(e -> header.repaint());
@@ -312,6 +319,8 @@ public class PlanningPanel extends JPanel {
 
     // Ouvrir une intervention par double-clic + entrée menu contextuel
     installBoardOpenHandlers();
+
+    installGlobalWheelZoom(this, board, scroll, scroll.getViewport());
   }
 
   private JComponent buildToolbar(){
@@ -519,6 +528,25 @@ public class PlanningPanel extends JPanel {
     }catch(Exception ignore){}
   }
 
+  private void installGlobalWheelZoom(Component... components){
+    final int mask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+    MouseWheelListener listener = e -> {
+      if ((e.getModifiersEx() & mask) != 0){
+        if (e.getWheelRotation() < 0){
+          zoomInStep();
+        } else if (e.getWheelRotation() > 0){
+          zoomOutStep();
+        }
+        e.consume();
+      }
+    };
+    for (Component component : components){
+      if (component != null){
+        component.addMouseWheelListener(listener);
+      }
+    }
+  }
+
   private void zoomInStep(){
     setZoomSliderBy(1);
   }
@@ -700,6 +728,8 @@ public class PlanningPanel extends JPanel {
     int width = sliderToSlotWidth(zoomSlider.getValue());
     board.setZoom(width);
     agenda.setDayWidth(width * 10);
+    board.revalidate();
+    board.repaint();
     revalidate();
     repaint();
   }
@@ -1829,16 +1859,7 @@ public class PlanningPanel extends JPanel {
         openWeekPicker();
       }
     });
-    addMouseWheelListener(e -> {
-      if ((e.getModifiersEx() & mask) != 0){
-        if (e.getWheelRotation() < 0){
-          zoomInStep();
-        } else if (e.getWheelRotation() > 0){
-          zoomOutStep();
-        }
-        e.consume();
-      }
-    });
+    // Les raccourcis de zoom globaux sont ajoutés via installGlobalWheelZoom().
   }
 
   /* ---------- Raccourcis clavier locaux ---------- */

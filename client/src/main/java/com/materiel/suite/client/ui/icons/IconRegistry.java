@@ -23,11 +23,21 @@ public final class IconRegistry {
   );
   private static final Set<String> ICON_SET = Set.copyOf(ICON_KEYS);
   private static final Map<Integer, Icon> PLACEHOLDER_CACHE = new ConcurrentHashMap<>();
-  private static final Map<String, Icon> FALLBACK_CACHE = new ConcurrentHashMap<>();
-  private static final Color[] FALLBACK_COLORS = {
-      new Color(0x2962FF), new Color(0x00B8D4), new Color(0x00C853),
-      new Color(0xFF8F00), new Color(0xD81B60), new Color(0x8E24AA)
-  };
+  private static final Map<Integer, Icon> FALLBACK_CACHE = new ConcurrentHashMap<>();
+  private static final Map<String, String> ALIASES = Map.ofEntries(
+      Map.entry("ajouter", "plus"),
+      Map.entry("add", "plus"),
+      Map.entry("modifier", "edit"),
+      Map.entry("edit-outline", "edit"),
+      Map.entry("supprimer", "trash"),
+      Map.entry("delete", "trash"),
+      Map.entry("reload", "refresh"),
+      Map.entry("recharger", "refresh"),
+      Map.entry("file-add", "file-plus"),
+      Map.entry("calendar-outline", "calendar"),
+      Map.entry("user-outline", "user"),
+      Map.entry("search-outline", "search")
+  );
 
   private IconRegistry(){}
 
@@ -41,11 +51,11 @@ public final class IconRegistry {
     if (key == null){
       return false;
     }
-    String normalized = key.trim();
-    if (normalized.isEmpty()){
+    String canonical = canonicalKey(key);
+    if (canonical == null || canonical.isEmpty()){
       return false;
     }
-    return ICON_SET.contains(normalized);
+    return ICON_SET.contains(canonical);
   }
 
   /** Charge une icône SVG avec la taille souhaitée, ou {@code null} si absente. */
@@ -53,11 +63,12 @@ public final class IconRegistry {
     if (size <= 0){
       return null;
     }
-    if (!isKnownKey(key)){
+    String canonical = canonicalKey(key);
+    if (canonical == null || canonical.isEmpty() || !ICON_SET.contains(canonical)){
       return null;
     }
     try {
-      return new FlatSVGIcon("icons/" + key.trim() + ".svg", size, size);
+      return new FlatSVGIcon("icons/" + canonical + ".svg", size, size);
     } catch (Exception ex){
       return null;
     }
@@ -108,58 +119,38 @@ public final class IconRegistry {
     if (size <= 0){
       return null;
     }
-    String normalized = key == null ? "" : key.trim();
-    String cacheKey = normalized.toLowerCase(Locale.ROOT) + "|" + size;
-    return FALLBACK_CACHE.computeIfAbsent(cacheKey, k -> createFallbackIcon(normalized, size));
+    int normalizedSize = Math.max(12, size);
+    return FALLBACK_CACHE.computeIfAbsent(normalizedSize, IconRegistry::createFallbackIcon);
   }
 
-  private static Icon createFallbackIcon(String key, int size){
-    BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+  private static Icon createFallbackIcon(int size){
+    int effective = Math.max(12, size);
+    BufferedImage image = new BufferedImage(effective, effective, BufferedImage.TYPE_INT_ARGB);
     Graphics2D g = image.createGraphics();
     try {
       g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-      g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-
-      int diameter = size - 2;
-      Color base = fallbackColor(key);
-      g.setColor(base);
-      g.fillOval(1, 1, diameter, diameter);
-
-      g.setColor(Color.WHITE);
-      String letter = fallbackLetter(key);
-      Font font = new Font(Font.SANS_SERIF, Font.BOLD, Math.max(10, Math.round(size * 0.6f)));
-      g.setFont(font);
-      FontMetrics fm = g.getFontMetrics();
-      int textWidth = fm.stringWidth(letter);
-      int textX = (size - textWidth) / 2;
-      int textY = (size + fm.getAscent() - fm.getDescent()) / 2 - 1;
-      g.drawString(letter, Math.max(1, textX), Math.max(fm.getAscent(), textY));
+      g.setColor(new Color(0xECEFF1));
+      g.fillRoundRect(0, 0, effective - 1, effective - 1, 4, 4);
+      g.setColor(new Color(0x90A4AE));
+      g.drawRoundRect(0, 0, effective - 1, effective - 1, 4, 4);
+      g.fillOval(effective / 2 - 1, effective / 2 - 1, 2, 2);
     } finally {
       g.dispose();
     }
     return new ImageIcon(image);
   }
 
-  private static Color fallbackColor(String key){
-    if (FALLBACK_COLORS.length == 0){
-      return new Color(0x546E7A);
+  private static String canonicalKey(String key){
+    if (key == null){
+      return null;
     }
-    String normalized = key == null ? "" : key.toLowerCase(Locale.ROOT);
-    int idx = Math.abs(normalized.hashCode()) % FALLBACK_COLORS.length;
-    return FALLBACK_COLORS[idx];
-  }
-
-  private static String fallbackLetter(String key){
-    if (key == null || key.isBlank()){
-      return "?";
+    String trimmed = key.trim();
+    if (trimmed.isEmpty()){
+      return "";
     }
-    for (int i = 0; i < key.length(); i++){
-      char c = key.charAt(i);
-      if (Character.isLetterOrDigit(c)){
-        return String.valueOf(Character.toUpperCase(c));
-      }
-    }
-    return "?";
+    String lower = trimmed.toLowerCase(Locale.ROOT);
+    String alias = ALIASES.get(lower);
+    return alias != null ? alias : lower;
   }
 }
 
