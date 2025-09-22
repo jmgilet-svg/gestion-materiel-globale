@@ -140,6 +140,8 @@ public class PlanningPanel extends JPanel {
   private final JButton dryRunBtn = new JButton("Prévisualiser", IconRegistry.small("calculator"));
   private final JLabel weekBadge = new JLabel("Semaine —");
   private final JSlider zoomSlider = new JSlider(6, 24, board.getSlotWidth());
+  private final JPopupMenu displayMenu = new JPopupMenu();
+  private final JComboBox<Integer> slotCombo = new JComboBox<>(new Integer[]{5, 10, 15, 30, 60});
   private LocalDate pivotMonday = LocalDate.now().with(DayOfWeek.MONDAY);
   private final JComboBox<QuoteFilter> quoteFilter = new JComboBox<>(QuoteFilter.values());
   private final JTextField search = new JTextField(18);
@@ -700,45 +702,6 @@ public class PlanningPanel extends JPanel {
       start = LocalDate.now().with(DayOfWeek.MONDAY);
     }
     applyPivotMonday(start.plusWeeks(direction));
-  }
-
-  private void openWeekPicker(){
-    LocalDate base = pivotMonday != null ? pivotMonday : LocalDate.now().with(DayOfWeek.MONDAY);
-    int currentWeek = base.get(WeekFields.ISO.weekOfWeekBasedYear());
-    int currentYear = base.get(WeekFields.ISO.weekBasedYear());
-    SpinnerNumberModel weekModel = new SpinnerNumberModel(currentWeek, 1, 53, 1);
-    SpinnerNumberModel yearModel = new SpinnerNumberModel(currentYear, 2000, 2100, 1);
-    JSpinner weekSpinner = new JSpinner(weekModel);
-    JSpinner yearSpinner = new JSpinner(yearModel);
-    JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
-    panel.add(new JLabel("Semaine:"));
-    panel.add(weekSpinner);
-    panel.add(new JLabel("Année:"));
-    panel.add(yearSpinner);
-    int choice = JOptionPane.showConfirmDialog(this, panel, "Aller à la semaine", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-    if (choice != JOptionPane.OK_OPTION){
-      return;
-    }
-    Object weekValue = weekSpinner.getValue();
-    Object yearValue = yearSpinner.getValue();
-    if (!(weekValue instanceof Number) || !(yearValue instanceof Number)){
-      return;
-    }
-    int week = ((Number) weekValue).intValue();
-    int year = ((Number) yearValue).intValue();
-    LocalDate monday = isoWeekMonday(year, week);
-    applyPivotMonday(monday);
-  }
-
-  private static LocalDate isoWeekMonday(int year, int week){
-    if (week < 1){
-      week = 1;
-    } else if (week > 53){
-      week = 53;
-    }
-    LocalDate weekRef = LocalDate.of(year, 1, 4);
-    LocalDate firstMonday = weekRef.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-    return firstMonday.plusWeeks(week - 1L);
   }
 
   private void applyPivotMonday(LocalDate reference){
