@@ -8,9 +8,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Objects;
 
 public class RestClient {
 	private final String baseUrl;
@@ -51,15 +51,38 @@ public class RestClient {
 		return request("PUT", path, json, headers);
 	}
 
-	public String delete(String path, Map<String,String> headers) throws IOException, InterruptedException {
-		return request("DELETE", path, null, headers);
-	}
+        public String delete(String path, Map<String,String> headers) throws IOException, InterruptedException {
+                return request("DELETE", path, null, headers);
+        }
 
-	private static String ensure200(HttpResponse<String> res) throws IOException {
-		int s = res.statusCode();
-		if (s>=200 && s<300) return res.body();
-		throw new IOException("HTTP "+s+": "+res.body());
-	}
+        public byte[] postForBytes(String path, String json, String accept) throws IOException, InterruptedException {
+                HttpRequest.Builder builder = HttpRequest.newBuilder()
+                                .uri(URI.create(baseUrl + path));
+                if (accept == null || accept.isBlank()){
+                        builder.header("Accept", "*/*");
+                } else {
+                        builder.header("Accept", accept);
+                }
+                builder.header("Content-Type", "application/json");
+                AgencyHttp.apply(builder);
+                bearer.ifPresent(t -> builder.header("Authorization", "Bearer " + t));
+                builder.POST(HttpRequest.BodyPublishers.ofString(json == null ? "{}" : json));
+                HttpResponse<byte[]> res = http.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
+                return ensure200Bytes(res);
+        }
+
+        private static String ensure200(HttpResponse<String> res) throws IOException {
+                int s = res.statusCode();
+                if (s>=200 && s<300) return res.body();
+                throw new IOException("HTTP "+s+": "+res.body());
+        }
+
+        private static byte[] ensure200Bytes(HttpResponse<byte[]> res) throws IOException {
+                int s = res.statusCode();
+                if (s>=200 && s<300) return res.body();
+                String body = new String(res.body(), StandardCharsets.UTF_8);
+                throw new IOException("HTTP "+s+": "+body);
+        }
 
 	private String request(String method, String path, String json, Map<String, String> headers)
 			throws IOException, InterruptedException {

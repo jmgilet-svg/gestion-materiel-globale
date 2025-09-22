@@ -21,6 +21,7 @@ import java.awt.*;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
@@ -31,6 +32,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 
@@ -45,6 +47,7 @@ public class SalesPanel extends JPanel {
   private final JButton saveQuote = new JButton("Enregistrer");
   private final JButton reloadQuote = new JButton("Recharger");
   private final JButton pdfQuote = new JButton("Exporter PDF");
+  private final JButton pdfQuoteDetail = new JButton("PDF détaillé");
   private final JButton quoteToInvoice = new JButton("Générer facture");
   private final JButton quoteToInvoicesMulti = new JButton("Générer factures (sélection)");
   private final JButton csvQuote = new JButton("Exporter CSV");
@@ -61,6 +64,7 @@ public class SalesPanel extends JPanel {
   private final JButton saveInvoice = new JButton("Enregistrer");
   private final JButton reloadInvoice = new JButton("Recharger");
   private final JButton pdfInvoice = new JButton("Exporter PDF");
+  private final JButton pdfInvoiceDetail = new JButton("PDF détaillé");
   private final JButton csvInvoice = new JButton("Exporter CSV");
   private final JButton xlsInvoice = new JButton("Exporter Excel");
   private final JButton mailInvoice = new JButton("Envoyer PDF…");
@@ -79,6 +83,7 @@ public class SalesPanel extends JPanel {
     qbar.add(saveQuote);
     qbar.add(reloadQuote);
     qbar.add(pdfQuote);
+    qbar.add(pdfQuoteDetail);
     qbar.add(mailQuote);
     qbar.add(quoteToInvoice);
     qbar.add(quoteToInvoicesMulti);
@@ -106,6 +111,7 @@ public class SalesPanel extends JPanel {
     ibar.add(saveInvoice);
     ibar.add(reloadInvoice);
     ibar.add(pdfInvoice);
+    ibar.add(pdfInvoiceDetail);
     ibar.add(mailInvoice);
     ibar.add(csvInvoice);
     ibar.add(xlsInvoice);
@@ -133,6 +139,7 @@ public class SalesPanel extends JPanel {
     saveQuote.addActionListener(e -> onSaveQuote());
     reloadQuote.addActionListener(e -> reloadQuotes());
     pdfQuote.addActionListener(e -> onExportQuotesPdf());
+    pdfQuoteDetail.addActionListener(e -> onExportQuoteDetailedPdf());
     mailQuote.addActionListener(e -> onEmailQuotesPdf());
     quoteToInvoice.addActionListener(e -> onGenerateInvoiceFromQuote());
     quoteToInvoicesMulti.addActionListener(e -> onGenerateInvoicesFromSelection());
@@ -143,6 +150,7 @@ public class SalesPanel extends JPanel {
     saveInvoice.addActionListener(e -> onSaveInvoice());
     reloadInvoice.addActionListener(e -> reloadInvoices());
     pdfInvoice.addActionListener(e -> onExportInvoicesPdf());
+    pdfInvoiceDetail.addActionListener(e -> onExportInvoiceDetailedPdf());
     mailInvoice.addActionListener(e -> onEmailInvoicesPdf());
     csvInvoice.addActionListener(e -> onExportInvoicesCsv());
     xlsInvoice.addActionListener(e -> onExportInvoicesExcel());
@@ -286,6 +294,29 @@ public class SalesPanel extends JPanel {
       Toasts.success(this, "PDF exporté : " + file.getName());
     } catch (Exception ex){
       Toasts.error(this, "Export PDF devis : " + ex.getMessage());
+    }
+  }
+
+  private void onExportQuoteDetailedPdf(){
+    int row = quotesTable.getSelectedRow();
+    if (row < 0){
+      Toasts.info(this, "Sélectionnez un devis.");
+      return;
+    }
+    row = quotesTable.convertRowIndexToModel(row);
+    QuoteV2 quote = quotesModel.getAt(row);
+    JFileChooser chooser = new JFileChooser();
+    String name = "devis-" + nz(quote.getReference()).replaceAll("\\s+", "_") + ".pdf";
+    chooser.setSelectedFile(new File(name));
+    if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION){
+      return;
+    }
+    try {
+      byte[] pdf = PdfTemplateEngine.renderQuote(quote, loadAgencyLogoBase64());
+      Files.write(chooser.getSelectedFile().toPath(), pdf);
+      Toasts.success(this, "PDF exporté : " + chooser.getSelectedFile().getName());
+    } catch (Exception ex){
+      Toasts.error(this, "PDF détaillé devis : " + ex.getMessage());
     }
   }
 
@@ -478,6 +509,30 @@ public class SalesPanel extends JPanel {
     }
   }
 
+  private void onExportInvoiceDetailedPdf(){
+    int row = invoicesTable.getSelectedRow();
+    if (row < 0){
+      Toasts.info(this, "Sélectionnez une facture.");
+      return;
+    }
+    row = invoicesTable.convertRowIndexToModel(row);
+    InvoiceV2 invoice = invoicesModel.getAt(row);
+    JFileChooser chooser = new JFileChooser();
+    String name = "facture-" + nz(invoice.getNumber(), nz(invoice.getId(), "facture"))
+        .replaceAll("\\s+", "_") + ".pdf";
+    chooser.setSelectedFile(new File(name));
+    if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION){
+      return;
+    }
+    try {
+      byte[] pdf = PdfTemplateEngine.renderInvoice(invoice, loadAgencyLogoBase64());
+      Files.write(chooser.getSelectedFile().toPath(), pdf);
+      Toasts.success(this, "PDF exporté : " + chooser.getSelectedFile().getName());
+    } catch (Exception ex){
+      Toasts.error(this, "PDF détaillé facture : " + ex.getMessage());
+    }
+  }
+
   private void onExportQuotesCsv(){
     exportCsv("devis.csv", quotesTable, quotesModel);
   }
@@ -588,23 +643,27 @@ public class SalesPanel extends JPanel {
   }
 
   private void onEmailQuotesPdf(){
-    File pdf = buildQuotesPdfTemp();
+    File pdf = quotesTable.getSelectedRow() >= 0 ? buildQuoteDetailedPdfTemp() : buildQuotesPdfTemp();
     if (pdf == null){
       return;
     }
     EmailPrompt.Result prompt = EmailPrompt.ask(this, "Envoyer PDF Devis");
     if (prompt == null){
+      pdf.delete();
       return;
     }
     MailService mail = ServiceLocator.mail();
     if (mail == null){
       Toasts.error(this, "Service email indisponible.");
+      pdf.delete();
       return;
     }
     try {
       byte[] bytes = Files.readAllBytes(pdf.toPath());
-      mail.sendWithAttachment(prompt.to(), prompt.subject(), prompt.body(), pdf.getName(), bytes, "application/pdf");
-      Toasts.success(this, "Email envoyé à " + prompt.to());
+      List<MailService.Attachment> attachments = new ArrayList<>();
+      attachments.add(new MailService.Attachment(pdf.getName(), "application/pdf", bytes));
+      mail.sendWithAttachments(prompt.to(), prompt.cc(), prompt.bcc(), prompt.subject(), prompt.body(), attachments);
+      Toasts.success(this, "Email envoyé.");
     } catch (Exception ex){
       Toasts.error(this, "Envoi email : " + ex.getMessage());
     } finally {
@@ -613,23 +672,27 @@ public class SalesPanel extends JPanel {
   }
 
   private void onEmailInvoicesPdf(){
-    File pdf = buildInvoicesPdfTemp();
+    File pdf = invoicesTable.getSelectedRow() >= 0 ? buildInvoiceDetailedPdfTemp() : buildInvoicesPdfTemp();
     if (pdf == null){
       return;
     }
     EmailPrompt.Result prompt = EmailPrompt.ask(this, "Envoyer PDF Factures");
     if (prompt == null){
+      pdf.delete();
       return;
     }
     MailService mail = ServiceLocator.mail();
     if (mail == null){
       Toasts.error(this, "Service email indisponible.");
+      pdf.delete();
       return;
     }
     try {
       byte[] bytes = Files.readAllBytes(pdf.toPath());
-      mail.sendWithAttachment(prompt.to(), prompt.subject(), prompt.body(), pdf.getName(), bytes, "application/pdf");
-      Toasts.success(this, "Email envoyé à " + prompt.to());
+      List<MailService.Attachment> attachments = new ArrayList<>();
+      attachments.add(new MailService.Attachment(pdf.getName(), "application/pdf", bytes));
+      mail.sendWithAttachments(prompt.to(), prompt.cc(), prompt.bcc(), prompt.subject(), prompt.body(), attachments);
+      Toasts.success(this, "Email envoyé.");
     } catch (Exception ex){
       Toasts.error(this, "Envoi email : " + ex.getMessage());
     } finally {
@@ -687,6 +750,56 @@ public class SalesPanel extends JPanel {
       return file;
     } catch (Exception ex){
       Toasts.error(this, "Génération PDF : " + ex.getMessage());
+      return null;
+    }
+  }
+
+  private File buildQuoteDetailedPdfTemp(){
+    try {
+      int row = quotesTable.getSelectedRow();
+      if (row < 0){
+        return null;
+      }
+      row = quotesTable.convertRowIndexToModel(row);
+      QuoteV2 quote = quotesModel.getAt(row);
+      byte[] pdf = PdfTemplateEngine.renderQuote(quote, loadAgencyLogoBase64());
+      File file = File.createTempFile("devis-detail-", ".pdf");
+      file.deleteOnExit();
+      Files.write(file.toPath(), pdf);
+      return file;
+    } catch (Exception ex){
+      Toasts.error(this, "Génération PDF : " + ex.getMessage());
+      return null;
+    }
+  }
+
+  private File buildInvoiceDetailedPdfTemp(){
+    try {
+      int row = invoicesTable.getSelectedRow();
+      if (row < 0){
+        return null;
+      }
+      row = invoicesTable.convertRowIndexToModel(row);
+      InvoiceV2 invoice = invoicesModel.getAt(row);
+      byte[] pdf = PdfTemplateEngine.renderInvoice(invoice, loadAgencyLogoBase64());
+      File file = File.createTempFile("facture-detail-", ".pdf");
+      file.deleteOnExit();
+      Files.write(file.toPath(), pdf);
+      return file;
+    } catch (Exception ex){
+      Toasts.error(this, "Génération PDF : " + ex.getMessage());
+      return null;
+    }
+  }
+
+  private String loadAgencyLogoBase64(){
+    try (InputStream is = getClass().getResourceAsStream("/branding/logo.png")){
+      if (is == null){
+        return null;
+      }
+      byte[] bytes = is.readAllBytes();
+      return Base64.getEncoder().encodeToString(bytes);
+    } catch (IOException ex){
       return null;
     }
   }
