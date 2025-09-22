@@ -3,16 +3,22 @@ package com.materiel.suite.client.ui.planning;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
+import java.awt.Cursor;
 import java.awt.Dialog;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.FontMetrics;
 import java.awt.GraphicsEnvironment;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
 import java.awt.Rectangle;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.File;
 import java.io.PrintWriter;
 import java.time.DayOfWeek;
@@ -23,7 +29,6 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.time.format.TextStyle;
 import java.time.temporal.TemporalAdjusters;
 import java.time.temporal.WeekFields;
 import java.text.DecimalFormat;
@@ -62,9 +67,11 @@ import javax.swing.JToggleButton;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SpinnerDateModel;
+import javax.swing.SpinnerNumberModel;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingConstants;
+import javax.swing.JPopupMenu;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -128,6 +135,10 @@ public class PlanningPanel extends JPanel {
   private final JButton dispatcherBtn = new JButton("Mode Dispatcher", IconRegistry.colored("task"));
   private final JButton dryRunBtn = new JButton("Prévisualiser", IconRegistry.small("calculator"));
   private final JLabel weekBadge = new JLabel("Semaine —");
+  private final JButton displayBtn = new JButton("Affichage ▾");
+  private final JPopupMenu displayMenu = new JPopupMenu();
+  private final JSlider zoomSlider = new JSlider(25, 200, 100);
+  private final JComboBox<Integer> slotCombo = new JComboBox<>(new Integer[]{5, 10, 15, 30, 60});
   private LocalDate pivotMonday = LocalDate.now().with(DayOfWeek.MONDAY);
   private final JComboBox<QuoteFilter> quoteFilter = new JComboBox<>(QuoteFilter.values());
   private final JTextField search = new JTextField(18);
@@ -307,6 +318,7 @@ public class PlanningPanel extends JPanel {
     weekBadge.setOpaque(true);
     weekBadge.setBorder(new EmptyBorder(2, 8, 2, 8));
     weekBadge.setBackground(new Color(0xE8, 0xF0, 0xFF));
+    weekBadge.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
     Font badgeFont = weekBadge.getFont();
     if (badgeFont != null){
       weekBadge.setFont(badgeFont.deriveFont(Font.BOLD));
@@ -314,11 +326,6 @@ public class PlanningPanel extends JPanel {
     JButton prev = new JButton("◀");
     JButton next = new JButton("▶");
     JButton today = new JButton("Aujourd'hui");
-    JLabel zoomL = new JLabel("Zoom (slot):");
-    JSlider zoom = new JSlider(6,24,board.getSlotWidth());
-    JLabel granL = new JLabel("Pas:");
-    JComboBox<String> gran = new JComboBox<>(new String[]{"5 min","10 min","15 min","30 min","60 min"});
-    gran.setSelectedItem(board.getSlotMinutes()+" min");
     JLabel densL = new JLabel("Densité:");
     JComboBox<String> density = new JComboBox<>(new String[]{"COMPACT","NORMAL","SPACIOUS"});
     modeToggle = new JToggleButton("Agenda");
@@ -355,18 +362,9 @@ public class PlanningPanel extends JPanel {
     prev.addActionListener(e -> shiftWeek(-1));
     next.addActionListener(e -> shiftWeek(1));
     today.addActionListener(e -> goToday());
-    zoom.addChangeListener(e -> {
-      int w = zoom.getValue();
-      board.setZoom(w);
-      agenda.setDayWidth(w*10);
-      revalidate(); repaint();
-    });
-    gran.addActionListener(e -> {
-      String s = String.valueOf(gran.getSelectedItem());
-      int m = Integer.parseInt(s.replace(" min",""));
-      board.setSlotMinutes(m);
-      agenda.setSnapMinutes(m);
-      revalidate(); repaint();
+    displayBtn.addActionListener(e -> {
+      syncDisplayControls();
+      displayMenu.show(displayBtn, 0, displayBtn.getHeight());
     });
     addI.addActionListener(e -> addInterventionDialog());
     toAgenda.addActionListener(e -> navigate("agenda"));
@@ -381,8 +379,8 @@ public class PlanningPanel extends JPanel {
     bar.add(next);
     bar.add(today);
     bar.add(modeToggle);
-    bar.add(Box.createHorizontalStrut(16)); bar.add(zoomL); bar.add(zoom);
-    bar.add(Box.createHorizontalStrut(12)); bar.add(granL); bar.add(gran);
+    bar.add(Box.createHorizontalStrut(12));
+    bar.add(displayBtn);
     bar.add(Box.createHorizontalStrut(12)); bar.add(densL); bar.add(density);
     bar.add(Box.createHorizontalStrut(8)); bar.add(conflictsBtn);
     bar.add(Box.createHorizontalStrut(12)); bar.add(toAgenda);
@@ -401,6 +399,14 @@ public class PlanningPanel extends JPanel {
     bar.add(Box.createHorizontalStrut(12));
     bar.add(searchLabel);
     bar.add(search);
+    weekBadge.addMouseListener(new MouseAdapter(){
+      @Override public void mouseClicked(MouseEvent e){
+        if (SwingUtilities.isLeftMouseButton(e)){
+          openWeekPicker();
+        }
+      }
+    });
+    buildDisplayMenu();
     syncWeekBadgeFromBoard();
     return bar;
   }
@@ -501,6 +507,148 @@ public class PlanningPanel extends JPanel {
     refreshPlanning();
   }
 
+  // =====================  Affichage (Zoom + Pas)  =====================
+  private void buildDisplayMenu(){
+    displayMenu.removeAll();
+    JPanel panel = new JPanel(new GridBagLayout());
+    GridBagConstraints gc = new GridBagConstraints();
+    gc.insets = new Insets(6, 8, 6, 8);
+    gc.fill = GridBagConstraints.HORIZONTAL;
+    gc.gridx = 0;
+    gc.gridy = 0;
+    panel.add(new JLabel("Zoom"), gc);
+    gc.gridx = 1;
+    for (var listener : zoomSlider.getChangeListeners()){
+      zoomSlider.removeChangeListener(listener);
+    }
+    zoomSlider.setMajorTickSpacing(25);
+    zoomSlider.setPaintTicks(true);
+    zoomSlider.addChangeListener(e -> {
+      if (!zoomSlider.getValueIsAdjusting()){
+        applyZoom();
+      }
+    });
+    panel.add(zoomSlider, gc);
+    gc.gridx = 0;
+    gc.gridy = 1;
+    panel.add(new JLabel("Pas (minutes)"), gc);
+    gc.gridx = 1;
+    for (var listener : slotCombo.getActionListeners()){
+      slotCombo.removeActionListener(listener);
+    }
+    slotCombo.addActionListener(e -> applySlot());
+    panel.add(slotCombo, gc);
+    JPanel wrapper = new JPanel(new BorderLayout());
+    wrapper.add(panel, BorderLayout.CENTER);
+    displayMenu.add(wrapper);
+    syncDisplayControls();
+  }
+
+  private void syncDisplayControls(){
+    int width = board.getSlotWidth();
+    int sliderValue = slotWidthToSlider(width);
+    if (zoomSlider.getValue() != sliderValue){
+      zoomSlider.setValue(sliderValue);
+    }
+    Integer minutes = board.getSlotMinutes();
+    if (minutes != null){
+      boolean found = false;
+      for (int i = 0; i < slotCombo.getItemCount(); i++){
+        if (Objects.equals(slotCombo.getItemAt(i), minutes)){
+          found = true;
+          break;
+        }
+      }
+      if (!found){
+        slotCombo.addItem(minutes);
+      }
+      if (!Objects.equals(slotCombo.getSelectedItem(), minutes)){
+        slotCombo.setSelectedItem(minutes);
+      }
+    }
+  }
+
+  private void applyZoom(){
+    int width = sliderToSlotWidth(zoomSlider.getValue());
+    board.setZoom(width);
+    agenda.setDayWidth(width * 10);
+    revalidate();
+    repaint();
+  }
+
+  private int sliderToSlotWidth(int sliderValue){
+    int width = (int) Math.round(12 * sliderValue / 100.0);
+    return Math.max(6, Math.min(24, width));
+  }
+
+  private int slotWidthToSlider(int width){
+    int sliderValue = (int) Math.round(width / 12.0 * 100);
+    return Math.max(zoomSlider.getMinimum(), Math.min(zoomSlider.getMaximum(), sliderValue));
+  }
+
+  private void applySlot(){
+    Object selected = slotCombo.getSelectedItem();
+    if (selected instanceof Integer minutes){
+      board.setSlotMinutes(minutes);
+      agenda.setSnapMinutes(minutes);
+      revalidate();
+      repaint();
+    }
+  }
+
+  // =====================  Pickeur de semaine  =====================
+  private void openWeekPicker(){
+    JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(this), "Aller à la semaine", Dialog.ModalityType.APPLICATION_MODAL);
+    JPanel panel = new JPanel(new GridBagLayout());
+    GridBagConstraints gc = new GridBagConstraints();
+    gc.insets = new Insets(6, 8, 6, 8);
+    gc.fill = GridBagConstraints.HORIZONTAL;
+    int currentYear = pivotMonday != null ? pivotMonday.get(WeekFields.ISO.weekBasedYear()) : LocalDate.now().get(WeekFields.ISO.weekBasedYear());
+    int currentWeek = pivotMonday != null ? pivotMonday.get(WeekFields.ISO.weekOfWeekBasedYear()) : LocalDate.now().get(WeekFields.ISO.weekOfWeekBasedYear());
+    gc.gridx = 0;
+    gc.gridy = 0;
+    panel.add(new JLabel("Année"), gc);
+    gc.gridx = 1;
+    JSpinner yearSpinner = new JSpinner(new SpinnerNumberModel(currentYear, 2000, 2100, 1));
+    panel.add(yearSpinner, gc);
+    gc.gridx = 0;
+    gc.gridy = 1;
+    panel.add(new JLabel("Semaine (ISO)"), gc);
+    gc.gridx = 1;
+    JSpinner weekSpinner = new JSpinner(new SpinnerNumberModel(currentWeek, 1, 53, 1));
+    panel.add(weekSpinner, gc);
+    JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+    JButton ok = new JButton("Aller");
+    JButton cancel = new JButton("Annuler");
+    buttons.add(ok);
+    buttons.add(cancel);
+    gc.gridx = 0;
+    gc.gridy = 2;
+    gc.gridwidth = 2;
+    gc.fill = GridBagConstraints.NONE;
+    panel.add(buttons, gc);
+    dialog.setContentPane(panel);
+    dialog.pack();
+    dialog.setLocationRelativeTo(this);
+    dialog.getRootPane().setDefaultButton(ok);
+    ok.addActionListener(e -> {
+      int targetYear = (int) yearSpinner.getValue();
+      int targetWeek = (int) weekSpinner.getValue();
+      applyPivotMonday(isoWeekMonday(targetYear, targetWeek));
+      dialog.dispose();
+    });
+    cancel.addActionListener(e -> dialog.dispose());
+    dialog.setVisible(true);
+  }
+
+  private static LocalDate isoWeekMonday(int year, int week){
+    WeekFields wf = WeekFields.ISO;
+    LocalDate january4 = LocalDate.of(year, 1, 4);
+    LocalDate firstWeekMonday = january4.with(wf.dayOfWeek(), 1);
+    int normalizedWeek = Math.max(1, Math.min(week, 53));
+    return firstWeekMonday.plusWeeks(normalizedWeek - 1L);
+  }
+
   private void goToday(){
     applyPivotMonday(LocalDate.now());
   }
@@ -526,19 +674,9 @@ public class PlanningPanel extends JPanel {
 
   private void updateWeekBadge(){
     LocalDate monday = pivotMonday != null ? pivotMonday : LocalDate.now().with(DayOfWeek.MONDAY);
-    String month = monday.getMonth().getDisplayName(TextStyle.SHORT, Locale.getDefault());
-    if (month == null){
-      month = "";
-    }
-    String normalized = month.trim();
-    if (!normalized.isEmpty()){
-      normalized = normalized.substring(0, 1).toUpperCase(Locale.getDefault()) + normalized.substring(1);
-    }
     int isoWeek = monday.get(WeekFields.ISO.weekOfWeekBasedYear());
     int year = monday.get(WeekFields.ISO.weekBasedYear());
-    String label = normalized.isEmpty()
-        ? String.format("Semaine %d · %d", isoWeek, year)
-        : String.format("Semaine %d · %s %d", isoWeek, normalized, year);
+    String label = String.format("Semaine %d · %d-W%02d", isoWeek, year, isoWeek);
     weekBadge.setText(label);
     LocalDate sunday = monday.plusDays(6);
     weekBadge.setToolTipText("Du " + SIMPLE_DAY_FORMAT.format(monday) + " au " + SIMPLE_DAY_FORMAT.format(sunday));
