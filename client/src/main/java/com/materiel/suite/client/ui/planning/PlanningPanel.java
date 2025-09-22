@@ -175,8 +175,9 @@ public class PlanningPanel extends JPanel {
     add(buildToolbar(), BorderLayout.NORTH);
 
     planningScroll = new JScrollPane(board, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
-    planningScroll.getVerticalScrollBar().setUnitIncrement(32);
-    planningScroll.getHorizontalScrollBar().setUnitIncrement(24);
+    // SAFE: accélère un peu sans toucher au comportement natif.
+    planningScroll.getVerticalScrollBar().setUnitIncrement(28);
+    planningScroll.getHorizontalScrollBar().setUnitIncrement(20);
     planningScroll.getViewport().setScrollMode(JViewport.BLIT_SCROLL_MODE);
     board.setAutoscrolls(true);
     DayHeader header = new DayHeader(board);
@@ -317,12 +318,12 @@ public class PlanningPanel extends JPanel {
     putUndoRedoKeymap();
     installKeymap();
 
-    tryAttachTileRenderer();
+    // NOTE: on ne branche pas le renderer expérimental pour l'instant.
+    // tryAttachTileRenderer(); // ← activable plus tard si besoin
+    // Double-clic / clic droit : laissé en place si déjà existant côté board.
 
-    // Ouvrir une intervention par double-clic + entrée menu contextuel
-    installBoardOpenHandlers();
-
-    installGlobalWheelZoom(this, board, planningScroll, planningScroll.getViewport());
+    // Zoom global Ctrl+molette (non bloquant) — panel + board + viewport.
+    installGlobalWheelZoom(this, board, planningScroll.getViewport());
     planningScroll.getViewport().addChangeListener(e -> pushVisibleWindowToBoard());
     pushVisibleWindowToBoard();
   }
@@ -535,18 +536,19 @@ public class PlanningPanel extends JPanel {
   private void installGlobalWheelZoom(Component... components){
     final int mask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
     MouseWheelListener listener = e -> {
-      if ((e.getModifiersEx() & mask) != 0){
-        if (e.getWheelRotation() < 0){
-          zoomInStep();
-        } else if (e.getWheelRotation() > 0){
-          zoomOutStep();
-        }
-        e.consume();
+      if ((e.getModifiersEx() & mask) == 0){
+        return;
       }
+      if (e.getWheelRotation() < 0){
+        zoomInStep();
+      } else if (e.getWheelRotation() > 0){
+        zoomOutStep();
+      }
+      e.consume();
     };
     for (Component component : components){
-      if (component != null){
-        component.addMouseWheelListener(listener);
+      if (component instanceof JComponent jc){
+        jc.addMouseWheelListener(listener);
       }
     }
   }
@@ -1890,6 +1892,7 @@ public class PlanningPanel extends JPanel {
     InputMap inputMap = getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
     ActionMap actionMap = getActionMap();
     inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, mask), "planning-zoom-in");
+    inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_PLUS, mask), "planning-zoom-in");
     inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_ADD, mask), "planning-zoom-in");
     actionMap.put("planning-zoom-in", new AbstractAction(){
       @Override public void actionPerformed(ActionEvent e){

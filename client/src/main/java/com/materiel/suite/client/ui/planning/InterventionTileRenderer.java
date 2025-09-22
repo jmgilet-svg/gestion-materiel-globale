@@ -1,3 +1,4 @@
+/* Renderer conservé pour activation manuelle — voir PlanningPanel.tryAttachTileRenderer(). */
 package com.materiel.suite.client.ui.planning;
 
 import com.materiel.suite.client.model.Intervention;
