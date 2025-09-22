@@ -5,7 +5,9 @@ import com.materiel.suite.client.auth.AuthService;
 import com.materiel.suite.client.model.InterventionType;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.net.ServiceFactory;
+import com.materiel.suite.client.service.DocumentTemplateService;
 import com.materiel.suite.client.service.MailService;
+import com.materiel.suite.client.service.PdfService;
 import com.materiel.suite.client.service.impl.LocalSettingsService;
 import com.materiel.suite.client.service.TimelineService;
 import com.materiel.suite.client.settings.EmailSettings;
@@ -68,6 +70,14 @@ public final class ServiceLocator {
 
   public static MailService mail(){
     return ServiceFactory.mail();
+  }
+
+  public static DocumentTemplateService documentTemplates(){
+    return ServiceFactory.documentTemplates();
+  }
+
+  public static PdfService pdf(){
+    return ServiceFactory.pdf();
   }
 
   /** Identifiant d'agence actuellement sélectionné, peut être {@code null}. */

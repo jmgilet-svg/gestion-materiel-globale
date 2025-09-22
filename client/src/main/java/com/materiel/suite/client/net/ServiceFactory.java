@@ -26,6 +26,8 @@ public class ServiceFactory {
   private static AuthService authService;
   private static UserService userService;
   private static MailService mailService;
+  private static DocumentTemplateService documentTemplateService;
+  private static PdfService pdfService;
 
   public static void init(AppConfig c) {
     cfg = c;
@@ -36,6 +38,8 @@ public class ServiceFactory {
     salesService = null;
     timelineService = null;
     mailService = null;
+    documentTemplateService = null;
+    pdfService = null;
     switch (cfg.getMode()) {
       case "mock" -> initMock();
       case "backend" -> initBackend();
@@ -59,6 +63,8 @@ public class ServiceFactory {
     templateService = new MockTemplateService();
     timelineService = new MockTimelineService();
     mailService = new MockMailService();
+    documentTemplateService = new MockDocumentTemplateService();
+    pdfService = new MockPdfService();
     MockUserService mockUsers = new MockUserService();
     userService = mockUsers;
     authService = new MockAuthService(mockUsers);
@@ -83,6 +89,8 @@ public class ServiceFactory {
     templateService = new ApiTemplateService(rc, new MockTemplateService());
     timelineService = new ApiTimelineService(rc, new MockTimelineService());
     mailService = new ApiMailService(rc, new MockMailService());
+    documentTemplateService = new ApiDocumentTemplateService(rc, new MockDocumentTemplateService());
+    pdfService = new ApiPdfService(rc, new MockPdfService());
     MockUserService mockUsers = new MockUserService();
     userService = new ApiUserService(rc, mockUsers);
     authService = new ApiAuthService(rc, new MockAuthService(mockUsers));
@@ -101,6 +109,8 @@ public class ServiceFactory {
   public static TemplateService templates(){ return templateService; }
   public static TimelineService timeline(){ return timelineService; }
   public static MailService mail(){ return mailService; }
+  public static DocumentTemplateService documentTemplates(){ return documentTemplateService; }
+  public static PdfService pdf(){ return pdfService; }
   public static RestClient http(){ return restClient; }
   public static AuthService auth(){ return authService; }
   public static UserService users(){ return userService; }

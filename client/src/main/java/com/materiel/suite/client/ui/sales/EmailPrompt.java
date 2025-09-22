@@ -2,10 +2,14 @@ package com.materiel.suite.client.ui.sales;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.ArrayList;
+import java.util.List;
 
-/** Boîte de dialogue minimale pour saisir les informations d'envoi d'email. */
+/** Boîte de dialogue pour saisir les informations d'envoi d'email. */
 public class EmailPrompt extends JDialog {
   private final JTextField toField = new JTextField(28);
+  private final JTextField ccField = new JTextField(28);
+  private final JTextField bccField = new JTextField(28);
   private final JTextField subjectField = new JTextField(28);
   private final JTextArea bodyArea = new JTextArea(6, 28);
   private boolean confirmed;
@@ -18,11 +22,27 @@ public class EmailPrompt extends JDialog {
     gc.gridx = 0;
     gc.gridy = 0;
     gc.anchor = GridBagConstraints.LINE_END;
-    add(new JLabel("À"), gc);
+    add(new JLabel("À (séparés par ,)"), gc);
     gc.gridx = 1;
     gc.anchor = GridBagConstraints.LINE_START;
     gc.fill = GridBagConstraints.HORIZONTAL;
     add(toField, gc);
+
+    gc.gridx = 0;
+    gc.gridy++;
+    gc.anchor = GridBagConstraints.LINE_END;
+    add(new JLabel("CC"), gc);
+    gc.gridx = 1;
+    gc.anchor = GridBagConstraints.LINE_START;
+    add(ccField, gc);
+
+    gc.gridx = 0;
+    gc.gridy++;
+    gc.anchor = GridBagConstraints.LINE_END;
+    add(new JLabel("BCC"), gc);
+    gc.gridx = 1;
+    gc.anchor = GridBagConstraints.LINE_START;
+    add(bccField, gc);
 
     gc.gridx = 0;
     gc.gridy++;
@@ -67,7 +87,7 @@ public class EmailPrompt extends JDialog {
     setLocationRelativeTo(owner);
   }
 
-  public record Result(String to, String subject, String body){}
+  public record Result(List<String> to, List<String> cc, List<String> bcc, String subject, String body){}
 
   public static Result ask(Component parent, String title){
     Window window = parent == null ? null : SwingUtilities.getWindowAncestor(parent);
@@ -76,6 +96,24 @@ public class EmailPrompt extends JDialog {
     if (!dialog.confirmed){
       return null;
     }
-    return new Result(dialog.toField.getText().trim(), dialog.subjectField.getText().trim(), dialog.bodyArea.getText());
+    return new Result(split(dialog.toField.getText()),
+        split(dialog.ccField.getText()),
+        split(dialog.bccField.getText()),
+        dialog.subjectField.getText().trim(),
+        dialog.bodyArea.getText());
+  }
+
+  private static List<String> split(String value){
+    List<String> out = new ArrayList<>();
+    if (value == null){
+      return out;
+    }
+    for (String part : value.split(",")){
+      String trimmed = part.trim();
+      if (!trimmed.isEmpty()){
+        out.add(trimmed);
+      }
+    }
+    return out;
   }
 }
