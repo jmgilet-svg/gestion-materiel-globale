@@ -24,19 +24,36 @@ public final class IconRegistry {
   private static final Set<String> ICON_SET = Set.copyOf(ICON_KEYS);
   private static final Map<Integer, Icon> PLACEHOLDER_CACHE = new ConcurrentHashMap<>();
   private static final Map<Integer, Icon> FALLBACK_CACHE = new ConcurrentHashMap<>();
+  /** Alias “sécurité” : clés historiques → icônes existantes (évite les carrés rouges). */
   private static final Map<String, String> ALIASES = Map.ofEntries(
       Map.entry("ajouter", "plus"),
       Map.entry("add", "plus"),
+      Map.entry("ajouter-ligne", "plus"),
+      Map.entry("add-line", "plus"),
+      Map.entry("nouveau", "plus"),
       Map.entry("modifier", "edit"),
       Map.entry("edit-outline", "edit"),
       Map.entry("supprimer", "trash"),
       Map.entry("delete", "trash"),
+      Map.entry("remove", "trash"),
       Map.entry("reload", "refresh"),
       Map.entry("recharger", "refresh"),
       Map.entry("file-add", "file-plus"),
+      Map.entry("devis", "file"),
+      Map.entry("facture", "invoice"),
+      Map.entry("facturation", "invoice"),
+      Map.entry("bons-de-livraison", "pallet"),
+      Map.entry("bc", "file"),
+      Map.entry("bl", "pallet"),
+      Map.entry("from-resources", "hook"),
+      Map.entry("depuis-ressources", "hook"),
       Map.entry("calendar-outline", "calendar"),
       Map.entry("user-outline", "user"),
-      Map.entry("search-outline", "search")
+      Map.entry("search-outline", "search"),
+      Map.entry("parametres", "settings"),
+      Map.entry("modele", "file"),
+      Map.entry("modeles", "file"),
+      Map.entry("email", "info")
   );
 
   private IconRegistry(){}
@@ -150,7 +167,43 @@ public final class IconRegistry {
     }
     String lower = trimmed.toLowerCase(Locale.ROOT);
     String alias = ALIASES.get(lower);
-    return alias != null ? alias : lower;
+    if (alias != null){
+      return alias;
+    }
+    if (lower.contains("ajout") || lower.contains("add") || lower.contains("plus")){
+      return "plus";
+    }
+    if (lower.contains("suppr") || lower.contains("delete") || lower.contains("remove")){
+      return "trash";
+    }
+    if (lower.contains("edit") || lower.contains("modif")){
+      return "edit";
+    }
+    if (lower.contains("refresh") || lower.contains("reload") || lower.contains("recharg")){
+      return "refresh";
+    }
+    if (lower.contains("devis")){
+      return "file";
+    }
+    if (lower.contains("factur")){
+      return "invoice";
+    }
+    if (lower.contains("calendar") || lower.contains("agenda")){
+      return "calendar";
+    }
+    if (lower.contains("client")){
+      return "user";
+    }
+    if (lower.contains("search") || lower.contains("recherch")){
+      return "search";
+    }
+    if (lower.contains("param") || lower.contains("settings")){
+      return "settings";
+    }
+    if (lower.contains("ressource")){
+      return "hook";
+    }
+    return lower;
   }
 }
 
