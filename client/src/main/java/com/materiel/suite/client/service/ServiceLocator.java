@@ -23,6 +23,7 @@ import java.util.UUID;
 public final class ServiceLocator {
   private static final ResourcesGateway RESOURCES = new ResourcesGateway();
   private static final InterventionTypesGateway INTERVENTION_TYPES = new InterventionTypesGateway();
+  private static final TemplatesGateway TEMPLATES = new TemplatesGateway();
 
   private static SettingsService SETTINGS;
 
@@ -74,6 +75,10 @@ public final class ServiceLocator {
 
   public static DocumentTemplateService documentTemplates(){
     return ServiceFactory.documentTemplates();
+  }
+
+  public static TemplatesGateway templates(){
+    return TEMPLATES;
   }
 
   public static PdfService pdf(){

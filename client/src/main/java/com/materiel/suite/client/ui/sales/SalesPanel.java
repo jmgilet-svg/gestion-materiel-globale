@@ -33,8 +33,10 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /** Ecran Devis/Factures (édition inline) avec filtrage agence. */
 public class SalesPanel extends JPanel {
@@ -647,7 +649,7 @@ public class SalesPanel extends JPanel {
     if (pdf == null){
       return;
     }
-    EmailPrompt.Result prompt = EmailPrompt.ask(this, "Envoyer PDF Devis");
+    EmailPrompt.Result prompt = EmailPrompt.askWithTemplates(this, "Envoyer PDF Devis", buildQuoteEmailVars());
     if (prompt == null){
       pdf.delete();
       return;
@@ -676,7 +678,7 @@ public class SalesPanel extends JPanel {
     if (pdf == null){
       return;
     }
-    EmailPrompt.Result prompt = EmailPrompt.ask(this, "Envoyer PDF Factures");
+    EmailPrompt.Result prompt = EmailPrompt.askWithTemplates(this, "Envoyer PDF Factures", buildInvoiceEmailVars());
     if (prompt == null){
       pdf.delete();
       return;
@@ -698,6 +700,43 @@ public class SalesPanel extends JPanel {
     } finally {
       pdf.delete();
     }
+  }
+
+  private Map<String, String> buildQuoteEmailVars(){
+    Map<String, String> vars = new LinkedHashMap<>();
+    vars.put("agency.name", nz(AgencyContext.agencyLabel()));
+    int selectedRow = quotesTable.getSelectedRow();
+    if (selectedRow >= 0){
+      int modelRow = quotesTable.convertRowIndexToModel(selectedRow);
+      QuoteV2 quote = quotesModel.getAt(modelRow);
+      if (quote != null){
+        vars.put("client.name", nz(quote.getClientName()));
+        vars.put("quote.reference", nz(quote.getReference()));
+        vars.put("quote.date", quote.getDate() == null ? "" : formatDate(quote.getDate()));
+        vars.put("quote.totalHt", quote.getTotalHt() == null ? "" : formatAmount(quote.getTotalHt()));
+        vars.put("quote.totalTtc", quote.getTotalTtc() == null ? "" : formatAmount(quote.getTotalTtc()));
+      }
+    }
+    return vars;
+  }
+
+  private Map<String, String> buildInvoiceEmailVars(){
+    Map<String, String> vars = new LinkedHashMap<>();
+    vars.put("agency.name", nz(AgencyContext.agencyLabel()));
+    int selectedRow = invoicesTable.getSelectedRow();
+    if (selectedRow >= 0){
+      int modelRow = invoicesTable.convertRowIndexToModel(selectedRow);
+      InvoiceV2 invoice = invoicesModel.getAt(modelRow);
+      if (invoice != null){
+        vars.put("client.name", nz(invoice.getClientName()));
+        vars.put("invoice.number", nz(invoice.getNumber(), nz(invoice.getId(), "")));
+        vars.put("invoice.date", invoice.getDate() == null ? "" : formatDate(invoice.getDate()));
+        vars.put("invoice.totalHt", invoice.getTotalHt() == null ? "" : formatAmount(invoice.getTotalHt()));
+        vars.put("invoice.totalTtc", invoice.getTotalTtc() == null ? "" : formatAmount(invoice.getTotalTtc()));
+        vars.put("invoice.status", nz(invoice.getStatus(), ""));
+      }
+    }
+    return vars;
   }
 
   private File buildQuotesPdfTemp(){
