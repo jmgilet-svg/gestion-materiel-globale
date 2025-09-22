@@ -308,6 +308,8 @@ public class PlanningPanel extends JPanel {
     putUndoRedoKeymap();
     installKeymap();
 
+    tryAttachTileRenderer();
+
     // Ouvrir une intervention par double-clic + entrée menu contextuel
     installBoardOpenHandlers();
   }
@@ -486,6 +488,35 @@ public class PlanningPanel extends JPanel {
       return currentSelection.get(0);
     }
     return null;
+  }
+
+  private void tryAttachTileRenderer(){
+    InterventionTileRenderer renderer = new InterventionTileRenderer();
+    // API moderne : setCellRenderer(BiFunction<Intervention, Integer, JComponent>)
+    try{
+      var m = board.getClass().getMethod("setCellRenderer", java.util.function.BiFunction.class);
+      java.util.function.BiFunction<Intervention, Integer, JComponent> fn =
+          (it, width) -> renderer.render(it, false, width == null ? 200 : width);
+      m.invoke(board, fn);
+      return;
+    }catch(Exception ignore){}
+    // API alternative : setRenderer(… avec getComponent(Intervention, boolean, int))
+    try{
+      var m = board.getClass().getMethod("setRenderer", Object.class);
+      Class<?> iface = m.getParameterTypes()[0];
+      Object proxy = java.lang.reflect.Proxy.newProxyInstance(
+          getClass().getClassLoader(), new Class[]{iface},
+          (p, mm, args) -> {
+            if ("getComponent".equals(mm.getName()) && args != null && args.length >= 3){
+              Intervention it = (Intervention) args[0];
+              boolean sel = Boolean.TRUE.equals(args[1]);
+              int w = (args[2] instanceof Integer) ? (Integer) args[2] : 200;
+              return renderer.render(it, sel, w);
+            }
+            return null;
+          });
+      m.invoke(board, proxy);
+    }catch(Exception ignore){}
   }
 
   private void zoomInStep(){
