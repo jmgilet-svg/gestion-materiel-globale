@@ -1,6 +1,7 @@
 package com.materiel.suite.client.ui.settings;
 
 import com.materiel.suite.client.auth.AccessControl;
+import com.materiel.suite.client.service.AgencyConfigGateway;
 import com.materiel.suite.client.service.PdfService;
 import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.service.TemplatesGateway;
@@ -31,6 +32,9 @@ public class TemplatesSettingsPanel extends JPanel {
   private final JTextField name = new JTextField(24);
   private final HtmlEditorPanel content = new HtmlEditorPanel();
   private final VariablePalettePanel vars = new VariablePalettePanel("Variables disponibles");
+  private final JTextArea emailCss = new JTextArea(6, 50);
+  private final HtmlEditorPanel emailSignature = new HtmlEditorPanel();
+  private final JButton saveStyles = new JButton("Enregistrer styles agence");
   private final JButton newBtn = new JButton("Nouveau");
   private final JButton saveBtn = new JButton("Enregistrer");
   private final JButton deleteBtn = new JButton("Supprimer");
@@ -88,11 +92,46 @@ public class TemplatesSettingsPanel extends JPanel {
     gc.weightx = 1.0;
     gc.weighty = 1.0;
 
+    emailCss.setLineWrap(true);
+    emailCss.setWrapStyleWord(true);
+    emailSignature.setPreferredSize(new Dimension(420, 260));
+
     JPanel editorPanel = new JPanel(new BorderLayout(6, 6));
     editorPanel.add(content, BorderLayout.CENTER);
     vars.setPreferredSize(new Dimension(220, 360));
     editorPanel.add(vars, BorderLayout.EAST);
     form.add(editorPanel, gc);
+
+    gc.gridy++;
+    gc.gridx = 0;
+    gc.gridwidth = 2;
+    gc.weighty = 0;
+    gc.fill = GridBagConstraints.HORIZONTAL;
+    form.add(new JSeparator(), gc);
+
+    gc.gridy++;
+    gc.gridwidth = 1;
+    gc.fill = GridBagConstraints.HORIZONTAL;
+    form.add(new JLabel("CSS des emails (agence)"), gc);
+    gc.gridx = 1;
+    gc.weightx = 1.0;
+    form.add(new JScrollPane(emailCss), gc);
+
+    gc.gridx = 0;
+    gc.gridy++;
+    gc.weightx = 0;
+    form.add(new JLabel("Signature HTML (agence)"), gc);
+    gc.gridx = 1;
+    gc.fill = GridBagConstraints.BOTH;
+    gc.weighty = 0.5;
+    form.add(emailSignature, gc);
+
+    gc.gridy++;
+    gc.gridx = 1;
+    gc.weighty = 0;
+    gc.fill = GridBagConstraints.NONE;
+    gc.anchor = GridBagConstraints.LINE_END;
+    form.add(saveStyles, gc);
 
     JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 8));
     actions.add(newBtn);
@@ -118,10 +157,12 @@ public class TemplatesSettingsPanel extends JPanel {
       reload(null);
       refreshVars();
     });
+    saveStyles.addActionListener(e -> onSaveStyles());
 
     refreshVars();
     reload(null);
     updateAccess();
+    loadAgencyStyles();
   }
 
   private void onNew(){
@@ -247,6 +288,8 @@ public class TemplatesSettingsPanel extends JPanel {
     varsList.add("agency.addressHtml");
     varsList.add("agency.vatRate");
     varsList.add("agency.cgvHtml");
+    varsList.add("agency.emailCss");
+    varsList.add("agency.emailSignatureHtml");
     varsList.add("client.name");
     varsList.add("client.addressHtml");
     varsList.add("logo.cdi");
@@ -301,6 +344,60 @@ public class TemplatesSettingsPanel extends JPanel {
     name.setEditable(canEdit);
     content.setEditable(canEdit);
     vars.setEnabled(canEdit);
+    emailCss.setEditable(canEdit);
+    emailSignature.setEditable(canEdit);
+    saveStyles.setEnabled(canEdit);
+  }
+
+  private void loadAgencyStyles(){
+    AgencyConfigGateway gateway = ServiceLocator.agencyConfig();
+    if (gateway == null){
+      emailCss.setText("");
+      emailSignature.setHtml("<p></p>");
+      saveStyles.setEnabled(false);
+      return;
+    }
+    try {
+      AgencyConfigGateway.AgencyConfig cfg = gateway.get();
+      String css = cfg == null || cfg.emailCss() == null ? "" : cfg.emailCss();
+      String signature = cfg == null || cfg.emailSignatureHtml() == null ? "<p></p>" : cfg.emailSignatureHtml();
+      emailCss.setText(css);
+      emailSignature.setHtml(signature);
+    } catch (Exception ex){
+      emailCss.setText("");
+      emailSignature.setHtml("<p></p>");
+    }
+  }
+
+  private void onSaveStyles(){
+    if (!AccessControl.canEditSettings()){
+      Toasts.error(this, "Vous n'avez pas les droits pour modifier les styles d'agence.");
+      return;
+    }
+    AgencyConfigGateway gateway = ServiceLocator.agencyConfig();
+    if (gateway == null){
+      Toasts.error(this, "Service configuration indisponible.");
+      return;
+    }
+    try {
+      AgencyConfigGateway.AgencyConfig current = gateway.get();
+      AgencyConfigGateway.AgencyConfig payload = new AgencyConfigGateway.AgencyConfig(
+          current == null ? null : current.companyName(),
+          current == null ? null : current.companyAddressHtml(),
+          current == null ? null : current.vatRate(),
+          current == null ? null : current.cgvHtml(),
+          emailCss.getText(),
+          emailSignature.getHtml()
+      );
+      AgencyConfigGateway.AgencyConfig saved = gateway.save(payload);
+      if (saved != null){
+        emailCss.setText(saved.emailCss() == null ? "" : saved.emailCss());
+        emailSignature.setHtml(saved.emailSignatureHtml() == null ? "<p></p>" : saved.emailSignatureHtml());
+      }
+      Toasts.success(this, "Styles d'agence sauvegardés");
+    } catch (Exception ex){
+      Toasts.error(this, "Erreur styles: " + ex.getMessage());
+    }
   }
 
   private String defaultKey(){
@@ -346,11 +443,11 @@ public class TemplatesSettingsPanel extends JPanel {
     }
     if ("EMAIL".equalsIgnoreCase(selectedType)){
       return """
-<!DOCTYPE html><html><body>
+<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><style>{{agency.emailCss}}</style></head><body>
 <p>Bonjour {{client.name}},</p>
 <p>Veuillez trouver ci-joint votre document.</p>
 {{lines.tableHtml}}
-<p>Cordialement,<br/>{{agency.name}}</p>
+{{agency.emailSignatureHtml}}
 </body></html>
 """;
     }

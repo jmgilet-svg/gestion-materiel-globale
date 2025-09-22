@@ -3,6 +3,7 @@ package com.materiel.suite.client.ui.sales;
 import com.materiel.suite.client.agency.AgencyContext;
 import com.materiel.suite.client.model.InvoiceV2;
 import com.materiel.suite.client.model.QuoteV2;
+import com.materiel.suite.client.service.AgencyConfigGateway;
 import com.materiel.suite.client.service.MailService;
 import com.materiel.suite.client.service.SalesService;
 import com.materiel.suite.client.service.ServiceLocator;
@@ -711,7 +712,7 @@ public class SalesPanel extends JPanel {
 
   private Map<String, String> buildQuoteEmailVars(){
     Map<String, String> vars = new LinkedHashMap<>();
-    vars.put("agency.name", nz(AgencyContext.agencyLabel()));
+    populateAgencyVars(vars);
     vars.put("lines.tableHtml", "");
     int selectedRow = quotesTable.getSelectedRow();
     if (selectedRow >= 0){
@@ -731,7 +732,7 @@ public class SalesPanel extends JPanel {
 
   private Map<String, String> buildInvoiceEmailVars(){
     Map<String, String> vars = new LinkedHashMap<>();
-    vars.put("agency.name", nz(AgencyContext.agencyLabel()));
+    populateAgencyVars(vars);
     vars.put("lines.tableHtml", "");
     int selectedRow = invoicesTable.getSelectedRow();
     if (selectedRow >= 0){
@@ -748,6 +749,34 @@ public class SalesPanel extends JPanel {
       }
     }
     return vars;
+  }
+
+  private void populateAgencyVars(Map<String, String> vars){
+    vars.put("agency.name", nz(AgencyContext.agencyLabel()));
+    vars.put("agency.addressHtml", "");
+    vars.put("agency.vatRate", "");
+    vars.put("agency.cgvHtml", "");
+    vars.put("agency.emailCss", "");
+    vars.put("agency.emailSignatureHtml", "");
+    AgencyConfigGateway gateway = ServiceLocator.agencyConfig();
+    if (gateway == null){
+      return;
+    }
+    try {
+      AgencyConfigGateway.AgencyConfig cfg = gateway.get();
+      if (cfg != null){
+        if (cfg.companyName() != null && !cfg.companyName().isBlank()){
+          vars.put("agency.name", cfg.companyName());
+        }
+        vars.put("agency.addressHtml", nz(cfg.companyAddressHtml()));
+        vars.put("agency.vatRate", cfg.vatRate() == null ? "" : cfg.vatRate().toString());
+        vars.put("agency.cgvHtml", nz(cfg.cgvHtml()));
+        vars.put("agency.emailCss", nz(cfg.emailCss()));
+        vars.put("agency.emailSignatureHtml", nz(cfg.emailSignatureHtml()));
+      }
+    } catch (Exception ignore){
+      // valeurs par défaut déjà positionnées
+    }
   }
 
   private String buildQuoteLinesHtml(QuoteV2 quote){
