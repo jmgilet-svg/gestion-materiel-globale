@@ -328,11 +328,15 @@ public class PlanningPanel extends JPanel {
     contextWeekPill.setToolTipText("Période active");
     bulkBar.add(contextWeekPill);
     bulkBar.add(Box.createHorizontalStrut(14));
+    JSeparator selectionSeparator = new JSeparator(SwingConstants.VERTICAL);
+    selectionSeparator.setPreferredSize(new Dimension(1, 20));
+    bulkBar.add(selectionSeparator);
+    bulkBar.add(Box.createHorizontalStrut(14));
     bulkBar.add(selCountLabel);
     bulkBar.add(Box.createHorizontalStrut(12));
-    JSeparator bulkSep = new JSeparator(SwingConstants.VERTICAL);
-    bulkSep.setPreferredSize(new Dimension(1, 24));
-    bulkBar.add(bulkSep);
+    JSeparator actionsSeparator = new JSeparator(SwingConstants.VERTICAL);
+    actionsSeparator.setPreferredSize(new Dimension(1, 24));
+    bulkBar.add(actionsSeparator);
     bulkBar.add(Box.createHorizontalStrut(12));
     bulkBar.add(dryRunBtn);
     bulkBar.add(bulkQuoteBtn);
