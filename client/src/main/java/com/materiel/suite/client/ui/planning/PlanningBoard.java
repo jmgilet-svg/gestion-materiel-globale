@@ -621,7 +621,9 @@ public class PlanningBoard extends JComponent implements Scrollable {
     try {
       Graphics2D overlay = (Graphics2D) g.create();
       try {
-        overlay.setClip(g.getClip());
+        Rectangle vr = getVisibleRect();
+        overlay.setClip(vr);
+        overlay.translate(-vr.x, -vr.y);
         java.util.List<?> tiles = tryListTiles("visibleTiles");
         if (tiles == null){
           tiles = tryListTiles("getTiles");
@@ -630,7 +632,7 @@ public class PlanningBoard extends JComponent implements Scrollable {
           for (Object tileObj : tiles){
             Intervention it = extractIntervention(tileObj);
             Rectangle bounds = extractBounds(tileObj);
-            if (it == null || bounds == null){
+            if (it == null || bounds == null || !bounds.intersects(vr)){
               continue;
             }
             TileRenderer.State state = computeTileState(it);
@@ -649,7 +651,7 @@ public class PlanningBoard extends JComponent implements Scrollable {
           for (Object obj : list){
             if (obj instanceof Intervention it){
               Rectangle bounds = locateBounds(it);
-              if (bounds == null){
+              if (bounds == null || !bounds.intersects(vr)){
                 continue;
               }
               TileRenderer.State state = computeTileState(it);
