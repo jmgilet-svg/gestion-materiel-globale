@@ -16,8 +16,8 @@ import java.util.List;
  * Barre latérale rétractable : au repos = icônes seules ; en survol = icône + libellé.
  */
 public class CollapsibleSidebar extends JPanel {
-  public static final int COLLAPSED_WIDTH = 48;
-  public static final int EXPANDED_WIDTH = 200;
+  public static final int COLLAPSED_WIDTH = 56;
+  public static final int EXPANDED_WIDTH = 208;
 
   public enum PinMode { AUTO, PIN_EXPANDED, PIN_COLLAPSED }
 
@@ -35,14 +35,14 @@ public class CollapsibleSidebar extends JPanel {
 
   public CollapsibleSidebar() {
     super(new BorderLayout());
-    setBackground(new Color(245, 245, 245));
-    setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, new Color(220, 220, 220)));
+    setBackground(new Color(0xF7F8FA));
+    setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 
     buildHeader();
 
     itemsPanel.setOpaque(false);
     itemsPanel.setLayout(new BoxLayout(itemsPanel, BoxLayout.Y_AXIS));
-    itemsPanel.setBorder(BorderFactory.createEmptyBorder(8, 6, 8, 6));
+    itemsPanel.setBorder(BorderFactory.createEmptyBorder(2, 0, 2, 0));
 
     JScrollPane scroll = new JScrollPane(itemsPanel);
     scroll.setBorder(BorderFactory.createEmptyBorder());

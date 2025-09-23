@@ -1,118 +1,117 @@
 package com.materiel.suite.client.ui.shell;
 
-import com.materiel.suite.client.ui.common.Toasts;
-
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
-/** Élément cliquable de la barre latérale, rend icône + texte quand expanded=true. */
-public class SidebarButton extends JPanel {
-  private static final Color BASE_COLOR = new Color(245, 245, 245);
-  private static final Color HOVER_COLOR = new Color(234, 242, 255);
-  private static final Color PRESSED_COLOR = new Color(210, 230, 255);
-  private static final Color ACTIVE_COLOR = new Color(212, 232, 255);
-  private final JLabel icon = new JLabel();
-  private final Component spacer = Box.createHorizontalStrut(10);
-  private final JLabel text = new JLabel();
+/** Bouton de navigation de la barre latérale avec gestion compact/étendu. */
+public class SidebarButton extends JButton {
+  private static final int ITEM_HEIGHT = 36;
+  private static final int ITEM_HEIGHT_COMPACT = 32;
+  private static final int RADIUS = 10;
+
   private final Runnable action;
-  private final String iconKey;
-  private boolean hovered = false;
-  private boolean pressed = false;
-  private boolean active = false;
+  private final String fullLabel;
+  private boolean expanded;
+  private boolean active;
+  private boolean hover;
 
   public SidebarButton(String iconKey, Icon iconSvg, String label, Runnable action) {
-    super(new BorderLayout());
+    super(label, iconSvg);
     this.action = action;
-    this.iconKey = iconKey;
-    setOpaque(true);
-    setBackground(BASE_COLOR);
-    setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
+    this.fullLabel = label;
+
+    setHorizontalAlignment(SwingConstants.LEFT);
+    setIconTextGap(10);
+    setFocusPainted(false);
+    setFocusable(false);
+    setRolloverEnabled(false);
+    setBorderPainted(false);
+    setContentAreaFilled(false);
+    setOpaque(false);
+    setMargin(new Insets(0, 10, 0, 10));
     setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+    setToolTipText(label);
+    setAlignmentX(Component.CENTER_ALIGNMENT);
+    if (iconKey != null && !iconKey.isBlank()) {
+      putClientProperty("sidebar.iconKey", iconKey);
+    }
 
-    icon.setHorizontalAlignment(SwingConstants.CENTER);
-    icon.setPreferredSize(new Dimension(28, 24));
-    icon.setIcon(iconSvg);
+    Font baseFont = getFont();
+    if (baseFont != null) {
+      setFont(baseFont.deriveFont(Font.PLAIN, 13f));
+    }
 
-    text.setText(label);
-    text.setFont(text.getFont().deriveFont(Font.PLAIN, 12f));
+    addActionListener(e -> {
+      if (this.action != null) {
+        this.action.run();
+      }
+    });
 
-    JPanel line = new JPanel();
-    line.setOpaque(false);
-    line.setLayout(new BoxLayout(line, BoxLayout.X_AXIS));
-    line.add(icon);
-    line.add(spacer);
-    line.add(text);
-    line.add(Box.createHorizontalGlue());
-    add(line, BorderLayout.CENTER);
-
-    setExpanded(false);
-
-    MouseAdapter ma = new MouseAdapter() {
+    addMouseListener(new MouseAdapter() {
       @Override
       public void mouseEntered(MouseEvent e) {
-        hovered = true;
-        refreshBackground();
+        hover = true;
+        repaint();
       }
 
       @Override
       public void mouseExited(MouseEvent e) {
-        hovered = false;
-        refreshBackground();
+        hover = false;
+        repaint();
       }
+    });
 
-      @Override
-      public void mousePressed(MouseEvent e) {
-        pressed = true;
-        refreshBackground();
-      }
-
-      @Override
-      public void mouseReleased(MouseEvent e) {
-        boolean inside = contains(e.getPoint());
-        if (inside && action != null) {
-          action.run();
-        }
-        pressed = false;
-        refreshBackground();
-        if (inside) {
-          Window w = SwingUtilities.getWindowAncestor(SidebarButton.this);
-          Component anchor = w != null ? w : SidebarButton.this;
-          String key = iconKey != null && !iconKey.isBlank() ? iconKey : "info";
-          Toasts.show(anchor, "Ouverture : " + text.getText(), key);
-        }
-      }
-    };
-    addMouseListener(ma);
-    addMouseMotionListener(ma);
-    icon.addMouseListener(ma);
-    icon.addMouseMotionListener(ma);
-    text.addMouseListener(ma);
-    text.addMouseMotionListener(ma);
+    setExpanded(false);
   }
 
   public void setExpanded(boolean expanded) {
-    text.setVisible(expanded);
-    spacer.setVisible(expanded);
+    this.expanded = expanded;
+    super.setText(expanded ? fullLabel : "");
+    setHorizontalAlignment(expanded ? SwingConstants.LEFT : SwingConstants.CENTER);
     revalidate();
     repaint();
   }
 
   public void setActive(boolean active) {
     this.active = active;
-    refreshBackground();
+    repaint();
   }
 
-  private void refreshBackground() {
-    if (pressed) {
-      setBackground(PRESSED_COLOR);
-    } else if (hovered) {
-      setBackground(active ? PRESSED_COLOR : HOVER_COLOR);
-    } else if (active) {
-      setBackground(ACTIVE_COLOR);
-    } else {
-      setBackground(BASE_COLOR);
+  @Override
+  public Dimension getPreferredSize() {
+    Dimension d = super.getPreferredSize();
+    int minHeight = expanded ? ITEM_HEIGHT : ITEM_HEIGHT_COMPACT;
+    d.height = Math.max(minHeight, d.height);
+    int targetWidth = expanded ? CollapsibleSidebar.EXPANDED_WIDTH : CollapsibleSidebar.COLLAPSED_WIDTH;
+    d.width = Math.max(targetWidth, d.width);
+    return d;
+  }
+
+  @Override
+  public Dimension getMaximumSize() {
+    Dimension pref = getPreferredSize();
+    return new Dimension(Integer.MAX_VALUE, pref.height);
+  }
+
+  @Override
+  public Dimension getMinimumSize() {
+    return getPreferredSize();
+  }
+
+  @Override
+  protected void paintComponent(Graphics g) {
+    Graphics2D g2 = (Graphics2D) g.create();
+    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+    if (active) {
+      g2.setColor(new Color(0xE8F0FF));
+      g2.fillRoundRect(0, 0, getWidth(), getHeight(), RADIUS, RADIUS);
+    } else if (hover) {
+      g2.setColor(new Color(0xF2F4F7));
+      g2.fillRoundRect(0, 0, getWidth(), getHeight(), RADIUS, RADIUS);
     }
+    g2.dispose();
+    super.paintComponent(g);
   }
 }
