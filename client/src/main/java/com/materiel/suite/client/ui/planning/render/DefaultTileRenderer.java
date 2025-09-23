@@ -33,15 +33,6 @@ public final class DefaultTileRenderer implements TileRenderer {
 
     RoundRectangle2D rr = new RoundRectangle2D.Float(bounds.x, bounds.y, bounds.width, bounds.height,
         RADIUS, RADIUS);
-    Paint oldPaint = g2.getPaint();
-    Composite oldComposite = g2.getComposite();
-    g2.setComposite(AlphaComposite.SrcOver.derive(0.12f));
-    g2.setPaint(new GradientPaint(bounds.x, bounds.y, new Color(0, 0, 0, 40),
-        bounds.x, bounds.y + bounds.height, new Color(0, 0, 0, 0)));
-    g2.fill(rr);
-    g2.setComposite(oldComposite);
-    g2.setPaint(oldPaint);
-
     // Fond
     Color base = new Color(0xF8FAFF);
     Color border = new Color(0xC7D2FE);
@@ -51,6 +42,15 @@ public final class DefaultTileRenderer implements TileRenderer {
     }
     g2.setColor(base);
     g2.fill(rr);
+    // Ombre légère par dégradé (appliquée par-dessus le fond)
+    Paint paintBeforeShadow = g2.getPaint();
+    Composite compositeBeforeShadow = g2.getComposite();
+    g2.setComposite(AlphaComposite.SrcOver.derive(0.12f));
+    g2.setPaint(new GradientPaint(bounds.x, bounds.y, new Color(0, 0, 0, 40),
+        bounds.x, bounds.y + bounds.height, new Color(0, 0, 0, 0)));
+    g2.fill(rr);
+    g2.setComposite(compositeBeforeShadow);
+    g2.setPaint(paintBeforeShadow);
     g2.setColor(border);
     g2.draw(rr);
 
