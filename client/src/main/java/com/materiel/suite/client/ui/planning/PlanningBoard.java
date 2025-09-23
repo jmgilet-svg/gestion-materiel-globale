@@ -8,6 +8,7 @@ import com.materiel.suite.client.model.ResourceRef;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.PlanningValidation;
 import com.materiel.suite.client.ui.interventions.InterventionDialog;
+import com.materiel.suite.client.ui.planning.render.TileRenderer;
 
 import javax.swing.*;
 import java.awt.*;
@@ -50,6 +51,7 @@ public class PlanningBoard extends JComponent implements Scrollable {
   private Intervention hovered;
   private Intervention selected;
   private final InterventionTileRenderer tile = new InterventionTileRenderer();
+  private TileRenderer tileRenderer;
   private int rowGap = PlanningUx.ROW_GAP;
   private boolean compact = false; // compat
 
@@ -248,6 +250,15 @@ public class PlanningBoard extends JComponent implements Scrollable {
   }
   public void setSnapMinutes(int m){ setSlotMinutes(m); }
   public int tileHeight(){ return tile.heightBase(); }
+
+  public void setTileRenderer(TileRenderer renderer){
+    this.tileRenderer = renderer;
+    repaint();
+  }
+
+  public TileRenderer getTileRenderer(){
+    return tileRenderer;
+  }
 
   /**
    * API publique et stable pour trouver l'intervention sous un point pixel (coordonnées locales au board).
@@ -534,7 +545,32 @@ public class PlanningBoard extends JComponent implements Scrollable {
           if (!rect.intersects(new Rectangle(clip.x - 200, y, clip.width + 400, rowH))){
             continue;
           }
-          tile.paint(g2, rect, it, it == hovered, it == selected);
+          if (tileRenderer != null){
+            TileRenderer.State inferred = tileRenderer.inferState(it, it == selected);
+            TileRenderer.State state = inferred == null
+                ? new TileRenderer.State(
+                    it == selected,
+                    it == hovered,
+                    it.hasQuote(),
+                    it.getStatus(),
+                    it.getAgencyName(),
+                    null)
+                : new TileRenderer.State(
+                    inferred.selected(),
+                    it == hovered,
+                    inferred.hasQuote(),
+                    inferred.status(),
+                    inferred.agency(),
+                    inferred.smallIconKey());
+            Graphics2D tileG = (Graphics2D) g2.create();
+            try {
+              tileRenderer.paintTile(tileG, it, rect, state);
+            } finally {
+              tileG.dispose();
+            }
+          } else {
+            tile.paint(g2, rect, it, it == hovered, it == selected);
+          }
         }
         y += rowH;
       }
