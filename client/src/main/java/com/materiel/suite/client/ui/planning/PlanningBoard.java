@@ -484,6 +484,7 @@ public class PlanningBoard extends JComponent implements Scrollable {
   }
 
   @Override protected void paintComponent(Graphics g){
+    super.paintComponent(g);
     Graphics2D g2 = (Graphics2D) g.create();
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     g2.setColor(PlanningUx.BG);
@@ -492,6 +493,8 @@ public class PlanningBoard extends JComponent implements Scrollable {
     if (clip == null){
       clip = new Rectangle(0, 0, getWidth(), getHeight());
     }
+
+    boolean customRendererPainted = false;
 
     // Background grid
     int x=0, dayW = getDayPixelWidth();
@@ -546,27 +549,19 @@ public class PlanningBoard extends JComponent implements Scrollable {
             continue;
           }
           if (tileRenderer != null){
-            TileRenderer.State inferred = tileRenderer.inferState(it, it == selected);
-            TileRenderer.State state = inferred == null
-                ? new TileRenderer.State(
-                    it == selected,
-                    it == hovered,
-                    it.hasQuote(),
-                    it.getStatus(),
-                    it.getAgencyName(),
-                    null)
-                : new TileRenderer.State(
-                    inferred.selected(),
-                    it == hovered,
-                    inferred.hasQuote(),
-                    inferred.status(),
-                    inferred.agency(),
-                    inferred.smallIconKey());
-            Graphics2D tileG = (Graphics2D) g2.create();
-            try {
-              tileRenderer.paintTile(tileG, it, rect, state);
-            } finally {
-              tileG.dispose();
+            TileRenderer.State state = computeTileState(it);
+            if (state != null){
+              Graphics2D tileG = (Graphics2D) g2.create();
+              try {
+                tileRenderer.paintTile(tileG, it, rect, state);
+                customRendererPainted = true;
+              } catch (Exception ex){
+                tile.paint(g2, rect, it, it == hovered, it == selected);
+              } finally {
+                tileG.dispose();
+              }
+            } else {
+              tile.paint(g2, rect, it, it == hovered, it == selected);
             }
           } else {
             tile.paint(g2, rect, it, it == hovered, it == selected);
@@ -584,6 +579,175 @@ public class PlanningBoard extends JComponent implements Scrollable {
       g2.draw(dragRect);
     }
     g2.dispose();
+    if (tileRenderer != null && !customRendererPainted){
+      paintTileRendererOverlay(g);
+    }
+  }
+
+  private TileRenderer.State computeTileState(Intervention it){
+    TileRenderer renderer = tileRenderer;
+    if (renderer == null || it == null){
+      return null;
+    }
+    TileRenderer.State inferred;
+    try {
+      inferred = renderer.inferState(it, it == selected);
+    } catch (Exception ignore){
+      inferred = null;
+    }
+    if (inferred == null){
+      return new TileRenderer.State(
+          it == selected,
+          it == hovered,
+          it.hasQuote(),
+          it.getStatus(),
+          it.getAgencyName(),
+          null);
+    }
+    return new TileRenderer.State(
+        inferred.selected(),
+        it == hovered,
+        inferred.hasQuote(),
+        inferred.status(),
+        inferred.agency(),
+        inferred.smallIconKey());
+  }
+
+  private void paintTileRendererOverlay(Graphics g){
+    TileRenderer renderer = tileRenderer;
+    if (renderer == null){
+      return;
+    }
+    try {
+      Graphics2D overlay = (Graphics2D) g.create();
+      try {
+        overlay.setClip(g.getClip());
+        java.util.List<?> tiles = tryListTiles("visibleTiles");
+        if (tiles == null){
+          tiles = tryListTiles("getTiles");
+        }
+        if (tiles != null){
+          for (Object tileObj : tiles){
+            Intervention it = extractIntervention(tileObj);
+            Rectangle bounds = extractBounds(tileObj);
+            if (it == null || bounds == null){
+              continue;
+            }
+            TileRenderer.State state = computeTileState(it);
+            if (state != null){
+              renderer.paintTile(overlay, it, bounds, state);
+            }
+          }
+          return;
+        }
+
+        java.util.List<?> list = tryListInterventions("getVisibleInterventions");
+        if (list == null){
+          list = tryListInterventions("getInterventions");
+        }
+        if (list != null){
+          for (Object obj : list){
+            if (obj instanceof Intervention it){
+              Rectangle bounds = locateBounds(it);
+              if (bounds == null){
+                continue;
+              }
+              TileRenderer.State state = computeTileState(it);
+              if (state != null){
+                renderer.paintTile(overlay, it, bounds, state);
+              }
+            }
+          }
+        }
+      } finally {
+        overlay.dispose();
+      }
+    } catch (Exception ignore){
+      // Overlay best-effort : ne pas bloquer le rendu principal.
+    }
+  }
+
+  private java.util.List<?> tryListTiles(String method){
+    try {
+      Method m = getClass().getMethod(method);
+      Object result = m.invoke(this);
+      if (result instanceof java.util.List<?> list){
+        return list;
+      }
+    } catch (Exception ignore){
+    }
+    return null;
+  }
+
+  private java.util.List<?> tryListInterventions(String method){
+    try {
+      Method m = getClass().getMethod(method);
+      Object result = m.invoke(this);
+      if (result instanceof java.util.List<?> list){
+        return list;
+      }
+    } catch (Exception ignore){
+    }
+    return null;
+  }
+
+  private Rectangle extractBounds(Object tileObj){
+    if (tileObj == null){
+      return null;
+    }
+    try {
+      Method m = tileObj.getClass().getMethod("getBounds");
+      Object result = m.invoke(tileObj);
+      if (result instanceof Rectangle rect){
+        return rect;
+      }
+    } catch (Exception ignore){
+    }
+    return null;
+  }
+
+  private Intervention extractIntervention(Object tileObj){
+    if (tileObj == null){
+      return null;
+    }
+    try {
+      Method m = tileObj.getClass().getMethod("getIntervention");
+      Object result = m.invoke(tileObj);
+      if (result instanceof Intervention it){
+        return it;
+      }
+    } catch (Exception ignore){
+    }
+    return null;
+  }
+
+  private Rectangle locateBounds(Intervention it){
+    if (it == null){
+      return null;
+    }
+    Rectangle viaReflection = invokeBoundsMethod(it);
+    if (viaReflection != null){
+      return viaReflection;
+    }
+    Integer top = rowTops.get(it.getResourceId());
+    if (top == null){
+      return null;
+    }
+    return rectOf(it, top);
+  }
+
+  private Rectangle invokeBoundsMethod(Intervention it){
+    try {
+      Method m = getClass().getMethod("boundsOf", Intervention.class);
+      if (m.getDeclaringClass() != PlanningBoard.class){
+        Object result = m.invoke(this, it);
+        if (result instanceof Rectangle rect){
+          return rect;
+        }
+      }
+    } catch (Exception ignore){
+    }
+    return null;
   }
 
   private UUID resourceAtY(int yPx){
