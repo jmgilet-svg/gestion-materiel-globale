@@ -849,10 +849,28 @@ public class PlanningPanel extends JPanel {
 
   private void applyZoom(){
     int width = sliderToSlotWidth(zoomSlider.getValue());
-    board.setZoom(width);
+    // Préférence : API setSlotWidth (zone centrale). Fallback : setZoom si c'est ta version.
+    boolean applied = false;
+    try {
+      var method = board.getClass().getMethod("setSlotWidth", int.class);
+      method.invoke(board, width);
+      applied = true;
+    } catch (Exception ignore) {
+      try {
+        var fallback = board.getClass().getMethod("setZoom", int.class);
+        fallback.invoke(board, width);
+        applied = true;
+      } catch (Exception ignore2) {
+        // no-op
+      }
+    }
+    // Largeur de journée côté vue agenda (si utilisée)
     agenda.setDayWidth(width * 10);
-    board.revalidate();
-    board.repaint();
+    // Forcer un relayout/repaint du board et des entêtes
+    if (applied){
+      board.revalidate();
+      board.repaint();
+    }
     pushVisibleWindowToBoard();
     revalidate();
     repaint();
