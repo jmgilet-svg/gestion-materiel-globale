@@ -113,6 +113,8 @@ import com.materiel.suite.client.ui.icons.IconRegistry;
 import com.materiel.suite.client.ui.interventions.InterventionDialog;
 import com.materiel.suite.client.ui.interventions.PreDevisUtil;
 import com.materiel.suite.client.ui.interventions.QuoteGenerator;
+import com.materiel.suite.client.ui.planning.render.DefaultTileRenderer;
+import com.materiel.suite.client.ui.planning.render.TileRenderer;
 import com.materiel.suite.client.ui.theme.ThemeManager;
 import com.materiel.suite.client.util.MailSender;
 import org.apache.commons.text.StringEscapeUtils;
@@ -272,6 +274,14 @@ public class PlanningPanel extends JPanel {
       @Override public void changedUpdate(DocumentEvent e){ applySearch(); }
     });
     updateModeToggleState();
+
+    // Injecte un renderer « propre » si le board expose l’API.
+    try {
+      var m = board.getClass().getMethod("setTileRenderer", TileRenderer.class);
+      m.invoke(board, new DefaultTileRenderer());
+    } catch (Exception ignore) {
+      // API absente → ne rien faire (compatibilité ascendante).
+    }
 
     bulkBar.setBorder(new EmptyBorder(4, 8, 4, 8));
     bulkBar.add(new JLabel("Sélection :"));
