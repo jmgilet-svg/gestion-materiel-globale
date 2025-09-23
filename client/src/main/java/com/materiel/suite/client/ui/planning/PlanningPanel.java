@@ -163,6 +163,7 @@ public class PlanningPanel extends JPanel {
   private final KanbanPanel kanbanView = new KanbanPanel();
   private JScrollPane planningScroll;
   private JToggleButton modeToggle;
+  private JToggleButton compactToggle;
   private boolean agendaMode;
   private boolean updatingModeToggle;
   private JComboBox<String> simplePeriod;
@@ -410,6 +411,7 @@ public class PlanningPanel extends JPanel {
     gran.setSelectedItem(board.getSlotMinutes()+" min");
     JLabel densL = new JLabel("Densité:");
     JComboBox<String> density = new JComboBox<>(new String[]{"COMPACT","NORMAL","SPACIOUS"});
+    compactToggle = new JToggleButton("Compact");
     modeToggle = new JToggleButton("Agenda"); // conservé en mémoire si utilisé ailleurs
     conflictsBtn = new JButton("Conflits (0)");
     JButton toAgenda = new JButton("↔ Agenda"); // ne sera pas ajouté à la barre
@@ -433,8 +435,21 @@ public class PlanningPanel extends JPanel {
     });
     conflictsBtn.addActionListener(e -> openConflictsDialog());
     density.setSelectedItem(board.getDensity().name());
+    compactToggle.setSelected(board.getDensity() == UiDensity.COMPACT);
     density.addActionListener(e -> {
       board.setDensity(UiDensity.fromString(String.valueOf(density.getSelectedItem())));
+      compactToggle.setSelected(board.getDensity() == UiDensity.COMPACT);
+      revalidate(); repaint();
+    });
+    compactToggle.setToolTipText("Basculer rapidement entre COMPACT et NORMAL");
+    compactToggle.addActionListener(e -> {
+      boolean compact = compactToggle.isSelected();
+      board.setDensity(compact ? UiDensity.COMPACT : UiDensity.NORMAL);
+      String target = board.getDensity().name();
+      Object current = density.getSelectedItem();
+      if (!Objects.equals(current, target)){
+        density.setSelectedItem(target);
+      }
       revalidate(); repaint();
     });
 
@@ -467,7 +482,7 @@ public class PlanningPanel extends JPanel {
     // On n’ajoute PAS le toggle Agenda ici
     bar.add(Box.createHorizontalStrut(16)); bar.add(zoomL); bar.add(zoomSlider);
     bar.add(Box.createHorizontalStrut(12)); bar.add(granL); bar.add(gran);
-    bar.add(Box.createHorizontalStrut(12)); bar.add(densL); bar.add(density);
+    bar.add(Box.createHorizontalStrut(12)); bar.add(densL); bar.add(density); bar.add(compactToggle);
     bar.add(Box.createHorizontalStrut(8)); bar.add(conflictsBtn);
     // Suppression de “↔ Agenda” et du bloc “Période calendrier …”
     bar.add(Box.createHorizontalStrut(16)); bar.add(addI);

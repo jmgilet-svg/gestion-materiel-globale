@@ -1,8 +1,13 @@
 package com.materiel.suite.client.ui.planning.render;
 
+import java.awt.AlphaComposite;
 import java.awt.Color;
+import java.awt.Composite;
 import java.awt.Font;
+import java.awt.GradientPaint;
 import java.awt.Graphics2D;
+import java.awt.LinearGradientPaint;
+import java.awt.Paint;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.geom.RoundRectangle2D;
@@ -26,6 +31,17 @@ public final class DefaultTileRenderer implements TileRenderer {
     Object oldAA = g2.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
+    RoundRectangle2D rr = new RoundRectangle2D.Float(bounds.x, bounds.y, bounds.width, bounds.height,
+        RADIUS, RADIUS);
+    Paint oldPaint = g2.getPaint();
+    Composite oldComposite = g2.getComposite();
+    g2.setComposite(AlphaComposite.SrcOver.derive(0.12f));
+    g2.setPaint(new GradientPaint(bounds.x, bounds.y, new Color(0, 0, 0, 40),
+        bounds.x, bounds.y + bounds.height, new Color(0, 0, 0, 0)));
+    g2.fill(rr);
+    g2.setComposite(oldComposite);
+    g2.setPaint(oldPaint);
+
     // Fond
     Color base = new Color(0xF8FAFF);
     Color border = new Color(0xC7D2FE);
@@ -33,14 +49,12 @@ public final class DefaultTileRenderer implements TileRenderer {
       base = new Color(0xEEF2FF);
       border = new Color(0x6366F1);
     }
-    RoundRectangle2D rr = new RoundRectangle2D.Float(bounds.x, bounds.y, bounds.width, bounds.height,
-        RADIUS, RADIUS);
     g2.setColor(base);
     g2.fill(rr);
     g2.setColor(border);
     g2.draw(rr);
 
-    // Stripe statut (5px à gauche)
+    // Stripe statut (dégradé à gauche)
     Color stripe = new Color(0x60A5FA);
     if (state != null){
       String status = String.valueOf(state.status()).toUpperCase();
@@ -51,21 +65,30 @@ public final class DefaultTileRenderer implements TileRenderer {
         default -> new Color(0x60A5FA);
       };
     }
-    g2.setColor(stripe);
-    g2.fill(new RoundRectangle2D.Float(bounds.x, bounds.y, 5, bounds.height, RADIUS, RADIUS));
+    int stripeWidth = 6;
+    Paint paintBeforeStripe = g2.getPaint();
+    Paint gradient = new LinearGradientPaint(
+        bounds.x, bounds.y,
+        bounds.x + stripeWidth, bounds.y,
+        new float[]{0f, 1f},
+        new Color[]{stripe.brighter(), stripe.darker()}
+    );
+    g2.setPaint(gradient);
+    g2.fill(new RoundRectangle2D.Float(bounds.x, bounds.y, stripeWidth, bounds.height, RADIUS, RADIUS));
+    g2.setPaint(paintBeforeStripe);
 
     // Titre + sous-titre
     String title = it.getLabel() != null && !it.getLabel().isBlank() ? it.getLabel()
         : (it.getClientName() != null ? it.getClientName() : "Intervention");
     String subtitle = it.getAddress() != null ? it.getAddress() : "";
-    int tx = bounds.x + 10;
+    int tx = bounds.x + 10 + stripeWidth;
     int ty = bounds.y + 16;
     g2.setColor(new Color(0x0F172A));
     g2.setFont(g2.getFont().deriveFont(Font.BOLD, 12f));
-    g2.drawString(truncate(title, g2, bounds.width - 20), tx, ty);
+    g2.drawString(truncate(title, g2, bounds.width - stripeWidth - 20), tx, ty);
     g2.setColor(new Color(0x475569));
     g2.setFont(g2.getFont().deriveFont(Font.PLAIN, 11f));
-    g2.drawString(truncate(subtitle, g2, bounds.width - 20), tx, ty + 14);
+    g2.drawString(truncate(subtitle, g2, bounds.width - stripeWidth - 20), tx, ty + 14);
 
     // Pilule agence (en haut à droite)
     if (state != null && state.agency() != null && !state.agency().isBlank()){
