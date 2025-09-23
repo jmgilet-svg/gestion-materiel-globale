@@ -22,7 +22,6 @@ import com.materiel.suite.client.ui.common.KeymapUtil;
 import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.orders.OrdersPanel;
 import com.materiel.suite.client.ui.planning.PlanningPanel;
-import com.materiel.suite.client.ui.planning.agenda.AgendaPanel;
 import com.materiel.suite.client.ui.quotes.QuotesPanel;
 import com.materiel.suite.client.ui.resources.ResourcesPanel;
 import com.materiel.suite.client.ui.settings.SettingsPanel;
@@ -72,7 +71,6 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
     setJMenuBar(buildMenuBar());
 
     center.add(new PlanningPanel(), "planning");
-    center.add(new AgendaPanel(), "agenda");
     center.add(new QuotesPanel(), "quotes");
     center.add(new OrdersPanel(), "orders");
     center.add(new DeliveryNotesPanel(), "delivery");
@@ -240,7 +238,6 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
   private JComponent buildSidebar() {
     sidebar = new CollapsibleSidebar();
     addSidebarItem(sidebar, "planning", "calendar", "Planning");
-    addSidebarItem(sidebar, "agenda", "calendar", "Agenda");
     addSidebarItem(sidebar, "quotes", "file", "Devis");
     addSidebarItem(sidebar, "orders", "pallet", "Commandes");
     addSidebarItem(sidebar, "delivery", "truck", "Bons de livraison");
@@ -271,7 +268,6 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
     Supplier<List<CommandPalette.Command>> provider = () -> {
       List<CommandPalette.Command> commands = new ArrayList<>();
       commands.add(new CommandPalette.Command("Aller au planning", "Navigation", "", () -> openCard("planning")));
-      commands.add(new CommandPalette.Command("Aller à l'agenda", "Navigation", "", () -> openCard("agenda")));
       commands.add(new CommandPalette.Command("Aller aux devis", "Navigation", "", () -> openCard("quotes")));
       commands.add(new CommandPalette.Command("Aller aux commandes", "Navigation", "", () -> openCard("orders")));
       commands.add(new CommandPalette.Command("Aller aux bons de livraison", "Navigation", "", () -> openCard("delivery")));
@@ -336,7 +332,6 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
   private void applyNavigationPolicy(){
     boolean planning = AccessControl.canViewPlanning() && AgencyContext.hasFeature("PLANNING");
     setNavVisible("planning", planning);
-    setNavVisible("agenda", planning);
     boolean sales = AccessControl.canViewSales() && AgencyContext.hasFeature("SALES");
     setNavVisible("quotes", sales);
     setNavVisible("orders", sales);
