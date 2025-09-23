@@ -102,10 +102,12 @@ import com.materiel.suite.client.model.DocumentLine;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.InterventionTemplate;
 import com.materiel.suite.client.model.InterventionType;
+import com.materiel.suite.client.model.Invoice;
 import com.materiel.suite.client.model.QuoteV2;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.model.ResourceRef;
 import com.materiel.suite.client.model.TimelineEvent;
+import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.ClientService;
 import com.materiel.suite.client.service.InterventionTypeService;
 import com.materiel.suite.client.service.PlanningService;
@@ -159,6 +161,8 @@ public class InterventionDialog extends JDialog {
   private WorkflowStage currentStage = WorkflowStage.INTERVENTION;
   private final JButton prevStageButton = new JButton("← Précédent");
   private final JButton nextStageButton = new JButton("Suivant →");
+  private final JButton stageGenerateQuoteButton = new JButton("Générer le devis");
+  private final JButton stageGenerateInvoiceButton = new JButton("Générer la facture");
   private boolean ignoreTabChange;
   private int lastAccessibleTabIndex;
   private final DefaultListModel<TimelineEvent> historyModel = new DefaultListModel<>();
@@ -245,6 +249,10 @@ public class InterventionDialog extends JDialog {
     nextStageButton.setFocusable(false);
     prevStageButton.addActionListener(e -> goToPreviousStage());
     nextStageButton.addActionListener(e -> goToNextStage());
+    stageGenerateQuoteButton.addActionListener(e -> actionGenerateQuote());
+    stageGenerateInvoiceButton.addActionListener(e -> actionGenerateInvoice());
+    stageGenerateQuoteButton.setVisible(false);
+    stageGenerateInvoiceButton.setVisible(false);
     fullscreenButton.addActionListener(e -> toggleFullscreen());
     fullscreenButton.setFocusPainted(false);
     fullscreenButton.setToolTipText("Basculer plein écran (Alt+Entrée)");
@@ -796,6 +804,7 @@ public class InterventionDialog extends JDialog {
     boolean detailsReady = hasDetailsInformation();
     boolean billingReady = isBillingSectionReady();
     boolean quoted = current != null && current.hasQuote();
+    boolean canGenerateQuote = isInterventionStageReady();
     if (current != null){
       current.setGeneralDone(generalReady);
       current.setDetailsDone(detailsReady);
@@ -811,6 +820,12 @@ public class InterventionDialog extends JDialog {
     };
     workflowStepBar.setState(active, detailsReady, quoted, billingReady);
     quoteSummaryLabel.setText(quoteStatusLabel.getText());
+    boolean showQuoteAction = currentStage == WorkflowStage.INTERVENTION && !readOnly;
+    stageGenerateQuoteButton.setVisible(showQuoteAction);
+    stageGenerateQuoteButton.setEnabled(showQuoteAction && canGenerateQuote);
+    boolean showInvoiceAction = currentStage == WorkflowStage.DEVIS && !readOnly;
+    stageGenerateInvoiceButton.setVisible(showInvoiceAction);
+    stageGenerateInvoiceButton.setEnabled(showInvoiceAction && quoted);
     syncNavigationButtons();
   }
 
@@ -887,6 +902,10 @@ public class InterventionDialog extends JDialog {
     removeBillingLineButton.setEnabled(false);
     generateQuoteButton.setEnabled(false);
     openQuoteButton.setEnabled(false);
+    stageGenerateQuoteButton.setEnabled(false);
+    stageGenerateInvoiceButton.setEnabled(false);
+    stageGenerateQuoteButton.setVisible(false);
+    stageGenerateInvoiceButton.setVisible(false);
     saveButton.setEnabled(false);
     billingTable.setEnabled(false);
     billingTable.setRowSelectionAllowed(false);
@@ -1587,6 +1606,10 @@ public class InterventionDialog extends JDialog {
     navigation.add(prevStageButton);
     navigation.add(nextStageButton);
     panel.add(navigation, BorderLayout.WEST);
+    JPanel contextual = new JPanel(new FlowLayout(FlowLayout.CENTER));
+    contextual.add(stageGenerateQuoteButton);
+    contextual.add(stageGenerateInvoiceButton);
+    panel.add(contextual, BorderLayout.CENTER);
     JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
     JButton cancel = new JButton("Fermer");
     cancel.addActionListener(e -> closeDialog());
@@ -1909,6 +1932,86 @@ public class InterventionDialog extends JDialog {
     if (viewTarget >= 0){
       billingTable.getSelectionModel().setSelectionInterval(viewTarget, viewTarget);
       billingTable.scrollRectToVisible(billingTable.getCellRect(viewTarget, 0, true));
+    }
+  }
+
+  private void actionGenerateQuote(){
+    if (readOnly){
+      return;
+    }
+    if (!isInterventionStageReady()){
+      toastInfo("Compléter l'intervention avant de générer un devis.");
+      return;
+    }
+    try {
+      collect();
+    } catch (IllegalArgumentException ex){
+      toastInfo(ex.getMessage());
+      return;
+    } catch (RuntimeException ex){
+      String message = ex.getMessage();
+      if (message == null || message.isBlank()){
+        message = "Impossible de préparer le devis.";
+      }
+      toastError(message);
+      return;
+    }
+    generateQuoteFromPrebilling();
+    if (current != null && current.hasQuote()){
+      goToStage(WorkflowStage.DEVIS);
+    } else {
+      refreshWorkflowState();
+    }
+  }
+
+  private void actionGenerateInvoice(){
+    if (readOnly){
+      return;
+    }
+    if (current == null || !current.hasQuote()){
+      toastInfo("Aucun devis associé.");
+      return;
+    }
+    try {
+      var invoiceService = ServiceFactory.invoices();
+      if (invoiceService == null){
+        toastError("Service facturation indisponible.");
+        return;
+      }
+      UUID quoteId = current.getQuoteId();
+      if (quoteId == null){
+        toastInfo("Identifiant de devis manquant.");
+        return;
+      }
+      Invoice invoice = invoiceService.createFromQuote(quoteId);
+      if (invoice == null){
+        toastError("Le service n'a retourné aucune facture.");
+        return;
+      }
+      if (invoice.getNumber() != null && !invoice.getNumber().isBlank()){
+        current.setInvoiceNumber(invoice.getNumber());
+      }
+      if (onSaveCallback != null){
+        onSaveCallback.accept(current);
+      } else if (planningService != null){
+        planningService.saveIntervention(current);
+      }
+      toastSuccess("Facture générée.");
+      markSaved("Facture générée");
+      String ref = invoice.getNumber();
+      logEventAsync("ACTION", ref == null || ref.isBlank()
+          ? "Facture générée"
+          : "Facture générée : " + ref);
+      goToStage(WorkflowStage.FACTURATION);
+    } catch (Exception ex){
+      String message = ex.getMessage();
+      if (message == null || message.isBlank()){
+        toastError("Échec de génération de la facture.");
+        logEventAsync("SYSTEM", "Erreur génération facture");
+      } else {
+        toastError("Échec de génération de la facture : " + message);
+        logEventAsync("SYSTEM", "Erreur génération facture : " + message);
+      }
     }
   }
 
