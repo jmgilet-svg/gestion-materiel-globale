@@ -197,28 +197,54 @@ public class PlanningPanel extends JPanel {
     center.add(scrollAgenda, "agenda");
 
     JComponent rowHeader = new JComponent(){
-      @Override public Dimension getPreferredSize(){ return new Dimension(240, board.getPreferredSize().height); }
+      @Override public Dimension getPreferredSize(){
+        return new Dimension(240, board.getPreferredSize().height);
+      }
       @Override protected void paintComponent(Graphics g){
-        Graphics2D g2 = (Graphics2D) g;
-        g2.setColor(new Color(0xF7F7F7));
-        g2.fillRect(0,0,getWidth(),getHeight());
-        g2.setColor(new Color(0xDDDDDD));
-        g2.drawLine(getWidth()-1,0,getWidth()-1,getHeight());
-        int y=0;
-        java.util.List<Resource> rs = board.getResourcesList();
-        for (Resource r : rs){
-          int rowH = board.rowHeight(r.getId());
+        Graphics2D g2 = (Graphics2D) g.create();
+        try {
+          // Fond + séparateur
           g2.setColor(new Color(0xF7F7F7));
-          g2.fillRect(0,y,getWidth(),rowH);
-          g2.setColor(Color.DARK_GRAY);
-          // libellé (wrap simple si manque de place)
-          String name = r.getName()==null? "—" : r.getName();
-          FontMetrics fm = g2.getFontMetrics();
-          int textY = y + Math.max(fm.getAscent()+6, rowH/2 + fm.getAscent()/2);
-          g2.drawString(name, 12, textY);
-          g2.setColor(new Color(0xE0E0E0));
-          g2.drawLine(0, y+rowH-1, getWidth(), y+rowH-1);
-          y+=rowH;
+          g2.fillRect(0,0,getWidth(),getHeight());
+          g2.setColor(new Color(0xDDDDDD));
+          g2.drawLine(getWidth()-1,0,getWidth()-1,getHeight());
+
+          // Virtualisation : ne peindre que les ressources visibles
+          Rectangle vr = board.getVisibleRect();
+          java.util.List<Resource> rs = board.getResourcesList();
+          if (rs == null || rs.isEmpty()) return;
+
+          int y = 0;
+          int startY = vr.y;
+          int endY = vr.y + vr.height;
+
+          // Chercher le premier index visible en accumulant les hauteurs
+          int i = 0;
+          for (; i < rs.size(); i++){
+            int rowH = Math.max(16, board.rowHeight(rs.get(i).getId()));
+            if (y + rowH >= startY){
+              break;
+            }
+            y += rowH;
+          }
+
+          // Dessiner jusqu'à sortir de la fenêtre visible
+          for (; i < rs.size() && y <= endY; i++){
+            Resource r = rs.get(i);
+            int rowH = Math.max(16, board.rowHeight(r.getId()));
+            g2.setColor(new Color(0xF7F7F7));
+            g2.fillRect(0, y, getWidth(), rowH);
+            g2.setColor(Color.DARK_GRAY);
+            String name = r.getName()==null? "—" : r.getName();
+            FontMetrics fm = g2.getFontMetrics();
+            int textY = y + Math.max(fm.getAscent()+6, rowH/2 + fm.getAscent()/2);
+            g2.drawString(name, 12, textY);
+            g2.setColor(new Color(0xE0E0E0));
+            g2.drawLine(0, y+rowH-1, getWidth(), y+rowH-1);
+            y += rowH;
+          }
+        } finally {
+          g2.dispose();
         }
       }
     };

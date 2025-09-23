@@ -622,8 +622,8 @@ public class PlanningBoard extends JComponent implements Scrollable {
       Graphics2D overlay = (Graphics2D) g.create();
       try {
         Rectangle vr = getVisibleRect();
-        overlay.setClip(vr);
-        overlay.translate(-vr.x, -vr.y);
+        // Clip strict à la fenêtre visible pour aligner avec la virtualisation principale
+        overlay.setClip(vr.x, vr.y, vr.width, vr.height);
         java.util.List<?> tiles = tryListTiles("visibleTiles");
         if (tiles == null){
           tiles = tryListTiles("getTiles");
