@@ -175,9 +175,14 @@ public class PlanningPanel extends JPanel {
     add(buildToolbar(), BorderLayout.NORTH);
 
     planningScroll = new JScrollPane(board, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
-    // SAFE: accélère un peu sans toucher au comportement natif.
-    planningScroll.getVerticalScrollBar().setUnitIncrement(28);
-    planningScroll.getHorizontalScrollBar().setUnitIncrement(20);
+    // IMPORTANT : rétablit le comportement natif de scroll
+    planningScroll.setWheelScrollingEnabled(true);
+    if (planningScroll.getVerticalScrollBar() != null){
+      planningScroll.getVerticalScrollBar().setUnitIncrement(28);
+    }
+    if (planningScroll.getHorizontalScrollBar() != null){
+      planningScroll.getHorizontalScrollBar().setUnitIncrement(20);
+    }
     planningScroll.getViewport().setScrollMode(JViewport.BLIT_SCROLL_MODE);
     board.setAutoscrolls(true);
     DayHeader header = new DayHeader(board);
@@ -320,9 +325,11 @@ public class PlanningPanel extends JPanel {
 
     // NOTE: on ne branche pas le renderer expérimental pour l'instant.
     // tryAttachTileRenderer(); // ← activable plus tard si besoin
-    // Double-clic / clic droit : laissé en place si déjà existant côté board.
+    // Double-clic sur une tuile : on tente d’appeler setOnOpen(Consumer) si dispo,
+    // sinon on ouvre la 1re sélection courante.
+    hookBoardDoubleClickForOpen();
 
-    // Zoom global Ctrl+molette (non bloquant) — panel + board + viewport.
+    // Zoom global Ctrl+molette (non bloquant)
     installGlobalWheelZoom(this, board, planningScroll.getViewport());
     planningScroll.getViewport().addChangeListener(e -> pushVisibleWindowToBoard());
     pushVisibleWindowToBoard();
@@ -551,6 +558,28 @@ public class PlanningPanel extends JPanel {
         jc.addMouseWheelListener(listener);
       }
     }
+  }
+
+  /** Essaye d’activer l’ouverture par double-clic sur les tuiles du board. */
+  @SuppressWarnings("unchecked")
+  private void hookBoardDoubleClickForOpen(){
+    try {
+      var method = board.getClass().getMethod("setOnOpen", java.util.function.Consumer.class);
+      method.invoke(board, (java.util.function.Consumer<Intervention>) this::openInterventionEditor);
+      return;
+    } catch (Exception ignore){
+      // fallback plan B
+    }
+    board.addMouseListener(new MouseAdapter(){
+      @Override public void mouseClicked(MouseEvent e){
+        if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)){
+          java.util.List<Intervention> selection = selectedInterventions();
+          if (selection != null && !selection.isEmpty()){
+            openInterventionEditor(selection.get(0));
+          }
+        }
+      }
+    });
   }
 
   private void pushVisibleWindowToBoard(){
@@ -1912,7 +1941,7 @@ public class PlanningPanel extends JPanel {
         openWeekPicker();
       }
     });
-    // Les raccourcis de zoom globaux sont ajoutés via installGlobalWheelZoom().
+    // pas de listener bloquant ici; voir installGlobalWheelZoom()
   }
 
   /* ---------- Raccourcis clavier locaux ---------- */
