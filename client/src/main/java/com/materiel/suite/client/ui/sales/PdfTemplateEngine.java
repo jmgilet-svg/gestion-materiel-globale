@@ -7,9 +7,12 @@ import com.materiel.suite.client.service.DocumentTemplateService;
 import com.materiel.suite.client.service.PdfService;
 import com.materiel.suite.client.service.ServiceLocator;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -146,6 +149,36 @@ public final class PdfTemplateEngine {
   }
 
   private static String defaultQuoteTemplate(){
+    return loadDefaultTemplate("/templates/_default-quote.html", legacyQuoteTemplate());
+  }
+
+  private static String defaultInvoiceTemplate(){
+    return loadDefaultTemplate("/templates/_default-invoice.html", legacyInvoiceTemplate());
+  }
+
+  private static String loadDefaultTemplate(String resourcePath, String legacy){
+    String fromResource = loadResource(resourcePath);
+    if (fromResource != null && !fromResource.isBlank()){
+      return fromResource;
+    }
+    return legacy;
+  }
+
+  private static String loadResource(String path){
+    if (path == null){
+      return null;
+    }
+    try (InputStream in = PdfTemplateEngine.class.getResourceAsStream(path)){
+      if (in == null){
+        return null;
+      }
+      return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+    } catch (IOException ignore){
+      return null;
+    }
+  }
+
+  private static String legacyQuoteTemplate(){
     return """
 <!DOCTYPE html><html><head><meta charset=\"UTF-8\">
 <style>
@@ -182,7 +215,7 @@ public final class PdfTemplateEngine {
 """;
   }
 
-  private static String defaultInvoiceTemplate(){
+  private static String legacyInvoiceTemplate(){
     return """
 <!DOCTYPE html><html><head><meta charset=\"UTF-8\">
 <style>

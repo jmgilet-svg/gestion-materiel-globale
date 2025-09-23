@@ -174,16 +174,12 @@ public class PlanningPanel extends JPanel {
     super(new BorderLayout());
     add(buildToolbar(), BorderLayout.NORTH);
 
-    planningScroll = new JScrollPane(board, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
+    planningScroll = new JScrollPane(board, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
     // ===== Scroll natif rétabli + réglages douceur =====
     planningScroll.setWheelScrollingEnabled(true);
     if (planningScroll.getVerticalScrollBar() != null){
       planningScroll.getVerticalScrollBar().setUnitIncrement(28);
       planningScroll.getVerticalScrollBar().setBlockIncrement(120);
-    }
-    if (planningScroll.getHorizontalScrollBar() != null){
-      planningScroll.getHorizontalScrollBar().setUnitIncrement(24);
-      planningScroll.getHorizontalScrollBar().setBlockIncrement(120);
     }
     // Pour s'assurer que la roue agit sur la vue scrollée
     planningScroll.getViewport().setScrollMode(JViewport.BLIT_SCROLL_MODE);

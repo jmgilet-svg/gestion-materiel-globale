@@ -239,7 +239,8 @@ public class MainFrame extends JFrame implements SessionManager.SessionAware {
     sidebar = new CollapsibleSidebar();
     addSidebarItem(sidebar, "planning", "calendar", "Planning");
     addSidebarItem(sidebar, "quotes", "file", "Devis");
-    addSidebarItem(sidebar, "orders", "pallet", "Commandes");
+    // Commandes — retiré du menu (masquage simple, réversible)
+    // (entrée non ajoutée)
     addSidebarItem(sidebar, "delivery", "truck", "Bons de livraison");
     addSidebarItem(sidebar, "invoices", "invoice", "Factures");
     addSidebarItem(sidebar, "clients", "user", "Clients");
