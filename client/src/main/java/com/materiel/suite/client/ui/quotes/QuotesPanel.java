@@ -4,11 +4,14 @@ import com.materiel.suite.client.auth.AccessControl;
 import com.materiel.suite.client.model.Quote;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.ui.StatusBadgeRenderer;
+import com.materiel.suite.client.ui.common.Toasts;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 
@@ -42,6 +45,7 @@ public class QuotesPanel extends JPanel {
     table.getColumnModel().getColumn(7).setMinWidth(0);
     table.getColumnModel().getColumn(7).setMaxWidth(0);
     add(new JScrollPane(table), BorderLayout.CENTER);
+    installDoubleClickOpen();
 
     bNew.addActionListener(e -> edit(null));
     bEdit.addActionListener(e -> {
@@ -88,8 +92,65 @@ public class QuotesPanel extends JPanel {
   }
 
   private void edit(UUID id){
+    edit(id, false);
+  }
+
+  private void edit(UUID id, boolean fullscreen){
     QuoteEditor dlg = new QuoteEditor(SwingUtilities.getWindowAncestor(this), id);
+    if (fullscreen){
+      maximizeDialog(dlg);
+    }
     dlg.setVisible(true);
     reload();
+  }
+
+  private void installDoubleClickOpen(){
+    table.addMouseListener(new MouseAdapter(){
+      @Override public void mouseClicked(MouseEvent e){
+        if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)){
+          int row = table.rowAtPoint(e.getPoint());
+          if (row >= 0){
+            table.setRowSelectionInterval(row, row);
+            openSelectedQuoteFullscreen();
+          }
+        }
+      }
+    });
+  }
+
+  private void openSelectedQuoteFullscreen(){
+    UUID id = selectedId();
+    if (id == null){
+      Toasts.info(this, "Sélectionnez un devis.");
+      return;
+    }
+    edit(id, true);
+  }
+
+  private void maximizeDialog(JDialog dialog){
+    if (dialog == null){
+      return;
+    }
+    GraphicsConfiguration gc = dialog.getGraphicsConfiguration();
+    if (gc == null && dialog.getOwner() != null){
+      gc = dialog.getOwner().getGraphicsConfiguration();
+    }
+    Rectangle available = null;
+    if (gc != null){
+      Rectangle screenBounds = gc.getBounds();
+      Insets insets = Toolkit.getDefaultToolkit().getScreenInsets(gc);
+      available = new Rectangle(
+          screenBounds.x + insets.left,
+          screenBounds.y + insets.top,
+          screenBounds.width - insets.left - insets.right,
+          screenBounds.height - insets.top - insets.bottom
+      );
+    } else {
+      available = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+    }
+    if (available != null){
+      dialog.setBounds(available);
+    }
+    dialog.setResizable(true);
   }
 }
