@@ -65,6 +65,16 @@ public final class ThemeManager {
     configureTooltips();
   }
 
+  public static String brandPrimaryHex(){
+    GeneralSettings settings = loadSettingsSafely();
+    return settings != null ? settings.getBrandPrimaryHex() : null;
+  }
+
+  public static String brandSecondaryHex(){
+    GeneralSettings settings = loadSettingsSafely();
+    return settings != null ? settings.getBrandSecondaryHex() : null;
+  }
+
   public static void refreshAllFrames(){
     for (Frame frame : Frame.getFrames()){
       SwingUtilities.updateComponentTreeUI(frame);

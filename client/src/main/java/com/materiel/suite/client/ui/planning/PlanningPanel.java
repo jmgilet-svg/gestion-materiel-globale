@@ -115,7 +115,10 @@ import com.materiel.suite.client.ui.interventions.PreDevisUtil;
 import com.materiel.suite.client.ui.interventions.QuoteGenerator;
 import com.materiel.suite.client.ui.planning.render.DefaultTileRenderer;
 import com.materiel.suite.client.ui.planning.render.TileRenderer;
+import com.materiel.suite.client.ui.common.Badge;
+import com.materiel.suite.client.ui.common.Pill;
 import com.materiel.suite.client.ui.theme.ThemeManager;
+import com.materiel.suite.client.ui.theme.UiTokens;
 import com.materiel.suite.client.util.MailSender;
 import org.apache.commons.text.StringEscapeUtils;
 
@@ -152,9 +155,11 @@ public class PlanningPanel extends JPanel {
   private LocalDate pivotMonday = LocalDate.now().with(DayOfWeek.MONDAY);
   private final JComboBox<QuoteFilter> quoteFilter = new JComboBox<>(QuoteFilter.values());
   private final JTextField search = new JTextField(18);
-  private final JPanel bulkBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+  private final JPanel bulkBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 6));
   private final JLabel selCountLabel = new JLabel("0 interventions");
-  private final JLabel bulkBadges = new JLabel();
+  private final Pill contextWeekPill = new Pill("Semaine —");
+  private final Badge pendingBadge = new Badge("À deviser", Badge.Tone.INFO);
+  private final Badge quotedBadge = new Badge("Devisé", Badge.Tone.OK);
   private JButton conflictsBtn;
   private JPanel ganttContainer;
   private JTabbedPane tabs;
@@ -310,12 +315,25 @@ public class PlanningPanel extends JPanel {
       // API absente → ne rien faire (compatibilité ascendante).
     }
 
-    bulkBar.setBorder(new EmptyBorder(4, 8, 4, 8));
-    bulkBar.add(new JLabel("Sélection :"));
+    bulkBar.setBorder(new EmptyBorder(6, 12, 6, 12));
+    bulkBar.setBackground(UiTokens.bgAlt());
+    JLabel selectionLabel = new JLabel("Sélection");
+    Font selectionFont = selectionLabel.getFont();
+    if (selectionFont != null){
+      selectionLabel.setFont(selectionFont.deriveFont(Font.BOLD));
+    }
+    bulkBar.add(selectionLabel);
+    bulkBar.add(Box.createHorizontalStrut(6));
+    contextWeekPill.setText(weekBadge.getText());
+    contextWeekPill.setToolTipText("Période active");
+    bulkBar.add(contextWeekPill);
+    bulkBar.add(Box.createHorizontalStrut(14));
     bulkBar.add(selCountLabel);
+    bulkBar.add(Box.createHorizontalStrut(12));
     JSeparator bulkSep = new JSeparator(SwingConstants.VERTICAL);
     bulkSep.setPreferredSize(new Dimension(1, 24));
     bulkBar.add(bulkSep);
+    bulkBar.add(Box.createHorizontalStrut(12));
     bulkBar.add(dryRunBtn);
     bulkBar.add(bulkQuoteBtn);
     bulkBar.add(exportIcsBtn);
@@ -334,9 +352,22 @@ public class PlanningPanel extends JPanel {
     bulkBar.add(exportMissionBtn);
     bulkBar.add(sendBtn);
     bulkBar.add(dispatcherBtn);
-    bulkBar.add(Box.createHorizontalStrut(16));
-    bulkBar.add(bulkBadges);
-    bulkBadges.setText("");
+    bulkBar.add(Box.createHorizontalStrut(12));
+    JPanel badgesPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+    badgesPanel.setOpaque(false);
+    pendingBadge.setText("À deviser: 0");
+    quotedBadge.setText("Devisé: 0");
+    badgesPanel.add(pendingBadge);
+    badgesPanel.add(quotedBadge);
+    bulkBar.add(badgesPanel);
+    bulkBar.add(Box.createHorizontalStrut(12));
+    JLabel shortcutsLabel = new JLabel("Raccourcis : G (Devis) · P (PDF) · M (Email) · / (Recherche)");
+    Font shortcutsFont = shortcutsLabel.getFont();
+    if (shortcutsFont != null){
+      shortcutsLabel.setFont(shortcutsFont.deriveFont(Font.PLAIN, 11f));
+    }
+    shortcutsLabel.setForeground(UiTokens.textMuted());
+    bulkBar.add(shortcutsLabel);
     bulkBar.setVisible(false);
     dryRunBtn.setEnabled(false);
     bulkQuoteBtn.setEnabled(false);
@@ -1021,6 +1052,8 @@ public class PlanningPanel extends JPanel {
     weekBadge.setText(label);
     LocalDate sunday = monday.plusDays(6);
     weekBadge.setToolTipText("Du " + SIMPLE_DAY_FORMAT.format(monday) + " au " + SIMPLE_DAY_FORMAT.format(sunday));
+    contextWeekPill.setText(label);
+    contextWeekPill.setToolTipText(weekBadge.getToolTipText());
   }
 
   private void syncWeekBadgeFromBoard(){
@@ -1060,9 +1093,11 @@ public class PlanningPanel extends JPanel {
     if (active){
       long quoted = currentSelection.stream().filter(Intervention::hasQuote).count();
       long pending = count - quoted;
-      bulkBadges.setText(badge("À deviser", (int) pending) + "  " + badge("Devisé", (int) quoted));
+      pendingBadge.setText("À deviser: " + pending);
+      quotedBadge.setText("Devisé: " + quoted);
     } else {
-      bulkBadges.setText("");
+      pendingBadge.setText("À deviser: 0");
+      quotedBadge.setText("Devisé: 0");
     }
     revalidate();
     repaint();
@@ -1070,11 +1105,6 @@ public class PlanningPanel extends JPanel {
 
   private List<Intervention> selectedInterventions(){
     return currentSelection;
-  }
-
-  private static String badge(String label, int value){
-    return "<html><span style='background:#EEF3FE;border:1px solid #90CAF9;border-radius:9px;padding:2px 6px;font-size:11px'>"
-        + label + ": " + value + "</span></html>";
   }
 
   private List<Intervention> selectedInterventionsForQuotes(String action){

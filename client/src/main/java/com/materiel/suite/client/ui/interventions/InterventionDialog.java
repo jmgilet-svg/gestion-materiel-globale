@@ -119,6 +119,7 @@ import com.materiel.suite.client.ui.common.Accessible;
 import com.materiel.suite.client.ui.common.KeymapUtil;
 import com.materiel.suite.client.ui.common.OverridableCellRenderers;
 import com.materiel.suite.client.ui.common.ResourceChipsPanel;
+import com.materiel.suite.client.ui.common.SectionPanel;
 import com.materiel.suite.client.ui.common.TableUtils;
 import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.icons.IconRegistry;
@@ -143,6 +144,7 @@ public class InterventionDialog extends JDialog {
   private final JTextField durationField = new JTextField(6);
   private final JTextArea descriptionArea = new JTextArea(4, 30);
   private final JTextArea internalNoteArea = new JTextArea(3, 30);
+  private final JTextArea internalNoteQuick = new JTextArea(4, 60);
   private final JTextArea closingNoteArea = new JTextArea(3, 30);
   private final JTextField signatureByField = new JTextField(18);
   private final JSpinner signatureAtSpinner = new JSpinner(new SpinnerDateModel());
@@ -890,6 +892,7 @@ public class InterventionDialog extends JDialog {
     durationField.setEnabled(false);
     descriptionArea.setEditable(false);
     internalNoteArea.setEditable(false);
+    internalNoteQuick.setEditable(false);
     closingNoteArea.setEditable(false);
     resourcePicker.setReadOnly(true);
     contactPicker.setReadOnly(true);
@@ -1348,6 +1351,20 @@ public class InterventionDialog extends JDialog {
     JPanel panel = new JPanel(new BorderLayout(8, 8));
     panel.add(buildHeader(), BorderLayout.NORTH);
     panel.add(panelWithLabel("Description", new JScrollPane(descriptionArea)), BorderLayout.CENTER);
+
+    internalNoteQuick.setLineWrap(true);
+    internalNoteQuick.setWrapStyleWord(true);
+    internalNoteQuick.setRows(4);
+    internalNoteQuick.setDocument(internalNoteArea.getDocument());
+    SectionPanel quickHeader = new SectionPanel("Note interne");
+    JPanel quickContainer = new JPanel(new BorderLayout());
+    quickContainer.setBorder(new EmptyBorder(0, 8, 8, 8));
+    JScrollPane quickScroll = new JScrollPane(internalNoteQuick,
+        JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+        JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+    quickContainer.add(quickHeader, BorderLayout.NORTH);
+    quickContainer.add(quickScroll, BorderLayout.CENTER);
+    panel.add(quickContainer, BorderLayout.SOUTH);
     return panel;
   }
 
@@ -2327,6 +2344,7 @@ public class InterventionDialog extends JDialog {
       addressField.setText(s(current.getAddress()));
       descriptionArea.setText(s(current.getDescription()));
       internalNoteArea.setText(s(current.getInternalNote()));
+      internalNoteQuick.setText(s(current.getInternalNote()));
       closingNoteArea.setText(s(current.getClosingNote()));
       signatureByField.setText(s(current.getSignatureBy()));
       if (current.getSignatureAt() != null){
@@ -2559,7 +2577,7 @@ public class InterventionDialog extends JDialog {
     current.setType((InterventionType) typeCombo.getSelectedItem());
     current.setAddress(s(addressField.getText()));
     current.setDescription(descriptionArea.getText());
-    current.setInternalNote(internalNoteArea.getText());
+    current.setInternalNote(internalNoteQuick.getText());
     current.setClosingNote(closingNoteArea.getText());
     current.setDateHeureDebut(start);
     current.setDateHeureFin(end);
