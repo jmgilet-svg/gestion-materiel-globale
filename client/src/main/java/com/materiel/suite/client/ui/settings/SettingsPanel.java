@@ -30,6 +30,7 @@ public class SettingsPanel extends JPanel {
     }
 
     JTabbedPane tabs = new JTabbedPane();
+    // Formulaires scrollables alignés en haut pour éviter l'espace vide excessif
     tabs.addTab("Général", IconRegistry.small("lock"), TopAligned.wrap(new GeneralSettingsPanel()));
     tabs.addTab("Email", IconRegistry.small("info"), TopAligned.wrap(new EmailSettingsPanel()));
     tabs.addTab("Modèles", IconRegistry.small("file"), TopAligned.wrap(new TemplatesSettingsPanel()));

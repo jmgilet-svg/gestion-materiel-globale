@@ -220,6 +220,19 @@ public class GeneralSettingsPanel extends JPanel {
     form.add(new JScrollPane(cgvTextArea), gc);
     gc.fill = GridBagConstraints.HORIZONTAL;
 
+    row++;
+    gc.gridx = 0;
+    gc.gridy = row;
+    gc.gridwidth = 2;
+    gc.weightx = 1;
+    gc.weighty = 1;
+    gc.fill = GridBagConstraints.BOTH;
+    form.add(Box.createVerticalGlue(), gc);
+    gc.gridwidth = 1;
+    gc.weighty = 0;
+    gc.weightx = 0;
+    gc.fill = GridBagConstraints.HORIZONTAL;
+
     JButton save = new JButton("Enregistrer");
     boolean canEdit = AccessControl.canEditSettings();
     timeoutSpinner.setEnabled(canEdit);
