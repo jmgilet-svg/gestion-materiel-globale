@@ -1,6 +1,7 @@
 package com.materiel.suite.client.ui.settings;
 
 import com.materiel.suite.client.auth.AccessControl;
+import com.materiel.suite.client.ui.common.TopAligned;
 import com.materiel.suite.client.ui.icons.IconPickerDialog;
 import com.materiel.suite.client.ui.icons.IconRegistry;
 import com.materiel.suite.client.ui.resources.ResourceTypeEditor;
@@ -29,9 +30,9 @@ public class SettingsPanel extends JPanel {
     }
 
     JTabbedPane tabs = new JTabbedPane();
-    tabs.addTab("Général", IconRegistry.small("lock"), new GeneralSettingsPanel());
-    tabs.addTab("Email", IconRegistry.small("info"), new EmailSettingsPanel());
-    tabs.addTab("Modèles", IconRegistry.small("file"), new TemplatesSettingsPanel());
+    tabs.addTab("Général", IconRegistry.small("lock"), TopAligned.wrap(new GeneralSettingsPanel()));
+    tabs.addTab("Email", IconRegistry.small("info"), TopAligned.wrap(new EmailSettingsPanel()));
+    tabs.addTab("Modèles", IconRegistry.small("file"), TopAligned.wrap(new TemplatesSettingsPanel()));
     tabs.addTab("Types de ressources", IconRegistry.small("wrench"), new ResourceTypeEditor());
     tabs.addTab("Types d'intervention", IconRegistry.small("task"), new InterventionTypeEditor());
     tabs.addTab("Bibliothèque d'icônes", IconRegistry.small("settings"), buildIconLibraryPanel());
