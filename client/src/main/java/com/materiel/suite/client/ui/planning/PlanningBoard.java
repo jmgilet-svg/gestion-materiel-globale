@@ -13,6 +13,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -247,6 +248,118 @@ public class PlanningBoard extends JComponent {
   }
   public void setSnapMinutes(int m){ setSlotMinutes(m); }
   public int tileHeight(){ return tile.heightBase(); }
+
+  /**
+   * API publique et stable pour trouver l'intervention sous un point pixel (coordonnées locales au board).
+   * <p>
+   * Implémentation tolérante : si le board dispose déjà d’un mécanisme interne
+   * (ex. {@code findTileAt(Point)}, {@code getInterventionAt(int,int)}, {@code hitTest(Point)}),
+   * on le réutilise par réflexion pour ne rien casser. À défaut, on retombe sur {@link #hitTile(Point)}.
+   */
+  public Intervention findInterventionAt(Point p){
+    if (p == null){
+      return null;
+    }
+
+    Intervention viaTile = tryTileBasedHit(p, "findTileAt");
+    if (viaTile != null){
+      return viaTile;
+    }
+    viaTile = tryTileBasedHit(p, "tileAt");
+    if (viaTile != null){
+      return viaTile;
+    }
+
+    Method direct = findCompatibleMethod(getClass(), "getInterventionAt", int.class, int.class);
+    if (direct != null && direct.getDeclaringClass() != PlanningBoard.class){
+      try {
+        Object res = direct.invoke(this, p.x, p.y);
+        if (res instanceof Intervention it){
+          return it;
+        }
+      } catch (Exception ignore){
+      }
+    }
+
+    Method hitTest = findCompatibleMethod(getClass(), "hitTest", Point.class);
+    if (hitTest != null){
+      try {
+        Object hit = hitTest.invoke(this, p);
+        if (hit instanceof Intervention it){
+          return it;
+        }
+        if (hit != null){
+          Method gi = findCompatibleMethod(hit.getClass(), "getIntervention");
+          if (gi != null){
+            Object res = gi.invoke(hit);
+            if (res instanceof Intervention it){
+              return it;
+            }
+          }
+        }
+      } catch (Exception ignore){
+      }
+    }
+
+    return hitTile(p);
+  }
+
+  /** Surcharge utilitaire : signature simple au format (x,y). */
+  public Intervention getInterventionAt(int x, int y){
+    return findInterventionAt(new Point(x, y));
+  }
+
+  /** Essaie des helpers « tile » renvoyant un objet qui expose getIntervention(). */
+  private Intervention tryTileBasedHit(Point p, String methodName){
+    Method m = findCompatibleMethod(getClass(), methodName, Point.class);
+    if (m == null || m.getDeclaringClass() == PlanningBoard.class){
+      return null;
+    }
+    try {
+      Object tile = m.invoke(this, p);
+      if (tile instanceof Intervention it){
+        return it;
+      }
+      if (tile != null){
+        Method gi = findCompatibleMethod(tile.getClass(), "getIntervention");
+        if (gi != null){
+          Object res = gi.invoke(tile);
+          if (res instanceof Intervention ii){
+            return ii;
+          }
+        }
+      }
+    } catch (Exception ignore){
+    }
+    return null;
+  }
+
+  private Method findCompatibleMethod(Class<?> type, String name, Class<?>... parameterTypes){
+    if (type == null || name == null){
+      return null;
+    }
+    try {
+      return type.getMethod(name, parameterTypes);
+    } catch (NoSuchMethodException ignore){
+    } catch (Exception ignore){
+    }
+    Class<?> current = type;
+    while (current != null){
+      try {
+        Method declared = current.getDeclaredMethod(name, parameterTypes);
+        declared.setAccessible(true);
+        return declared;
+      } catch (NoSuchMethodException ignore){
+      } catch (Exception ignore){
+      }
+      current = current.getSuperclass();
+    }
+    return null;
+  }
+
+  private Method findCompatibleMethod(Class<?> type, String name){
+    return findCompatibleMethod(type, name, new Class<?>[0]);
+  }
 
   public void reload(){
     visibleStart = -1;
