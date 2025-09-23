@@ -175,14 +175,17 @@ public class PlanningPanel extends JPanel {
     add(buildToolbar(), BorderLayout.NORTH);
 
     planningScroll = new JScrollPane(board, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
-    // IMPORTANT : rétablit le comportement natif de scroll
+    // ===== Scroll natif rétabli + réglages douceur =====
     planningScroll.setWheelScrollingEnabled(true);
     if (planningScroll.getVerticalScrollBar() != null){
       planningScroll.getVerticalScrollBar().setUnitIncrement(28);
+      planningScroll.getVerticalScrollBar().setBlockIncrement(120);
     }
     if (planningScroll.getHorizontalScrollBar() != null){
-      planningScroll.getHorizontalScrollBar().setUnitIncrement(20);
+      planningScroll.getHorizontalScrollBar().setUnitIncrement(24);
+      planningScroll.getHorizontalScrollBar().setBlockIncrement(120);
     }
+    // Pour s'assurer que la roue agit sur la vue scrollée
     planningScroll.getViewport().setScrollMode(JViewport.BLIT_SCROLL_MODE);
     board.setAutoscrolls(true);
     DayHeader header = new DayHeader(board);
@@ -325,12 +328,12 @@ public class PlanningPanel extends JPanel {
 
     // NOTE: on ne branche pas le renderer expérimental pour l'instant.
     // tryAttachTileRenderer(); // ← activable plus tard si besoin
-    // Double-clic sur une tuile : on tente d’appeler setOnOpen(Consumer) si dispo,
-    // sinon on ouvre la 1re sélection courante.
-    hookBoardDoubleClickForOpen();
 
-    // Zoom global Ctrl+molette (non bloquant)
-    installGlobalWheelZoom(this, board, planningScroll.getViewport());
+    // ===== Double-clic & clic-droit : ouvrir intervention =====
+    installBoardOpenHandlers(planningScroll);
+
+    // Zoom global Ctrl+molette (non bloquant, n’intercepte rien sans Ctrl)
+    installWheelZoom(planningScroll, board);
     planningScroll.getViewport().addChangeListener(e -> pushVisibleWindowToBoard());
     pushVisibleWindowToBoard();
   }
@@ -459,54 +462,106 @@ public class PlanningPanel extends JPanel {
     return bar;
   }
 
-  /**
-   * Branches : double-clic ouvre l’édition de l’intervention ; clic droit -> “Ouvrir l’intervention”.
-   * Ne dépend pas d’une API spécifique du board : on essaie plusieurs méthodes usuelles par réflexion.
-   */
-  private void installBoardOpenHandlers(){
-    board.addMouseListener(new MouseAdapter(){
-      @Override public void mouseClicked(MouseEvent e){
-        if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)){
-          Intervention it = resolveInterventionAt(e.getPoint());
-          if (it != null){
-            openInterventionEditor(it);
+  /** Ouvre l’intervention par double-clic; offre aussi un menu contextuel “Ouvrir”. */
+  @SuppressWarnings("unchecked")
+  private void installBoardOpenHandlers(JScrollPane scroll){
+    Objects.requireNonNull(scroll, "scroll");
+    boolean delegated = false;
+    try {
+      var method = board.getClass().getMethod("setOnOpen", java.util.function.Consumer.class);
+      method.invoke(board, (java.util.function.Consumer<Intervention>) this::openInterventionEditor);
+      delegated = true;
+    } catch (Exception ignore){
+      // fallback plan ci-dessous
+    }
+    if (!delegated){
+      board.addMouseListener(new MouseAdapter(){
+        @Override public void mouseClicked(MouseEvent e){
+          if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2){
+            Intervention hit = tryHitTestOnBoard(e);
+            if (hit != null){
+              openInterventionEditor(hit);
+            } else {
+              List<Intervention> sel = selectedInterventions();
+              if (sel != null && !sel.isEmpty()){
+                openInterventionEditor(sel.get(0));
+              }
+            }
           }
         }
+      });
+    }
+
+    JPopupMenu menu = new JPopupMenu();
+    JMenuItem open = new JMenuItem("Ouvrir l’intervention");
+    open.addActionListener(ev -> {
+      Point p = board.getMousePosition();
+      Intervention hit = null;
+      if (p != null){
+        MouseEvent fake = new MouseEvent(board, MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(), 0, p.x, p.y, 1, false);
+        hit = tryHitTestOnBoard(fake);
       }
-
-      @Override public void mousePressed(MouseEvent e){ maybePopup(e); }
-      @Override public void mouseReleased(MouseEvent e){ maybePopup(e); }
-
-      private void maybePopup(MouseEvent e){
+      if (hit == null){
+        List<Intervention> sel = selectedInterventions();
+        if (sel != null && !sel.isEmpty()){
+          hit = sel.get(0);
+        }
+      }
+      if (hit != null){
+        openInterventionEditor(hit);
+      }
+    });
+    menu.add(open);
+    board.addMouseListener(new MouseAdapter(){
+      @Override public void mousePressed(MouseEvent e){ maybeShow(e); }
+      @Override public void mouseReleased(MouseEvent e){ maybeShow(e); }
+      private void maybeShow(MouseEvent e){
         if (e.isPopupTrigger()){
-          Intervention it = resolveInterventionAt(e.getPoint());
-          JPopupMenu m = new JPopupMenu();
-          JMenuItem open = new JMenuItem("Ouvrir l’intervention…");
-          open.addActionListener(a -> { if (it != null) openInterventionEditor(it); });
-          m.add(open);
-          m.show(board, e.getX(), e.getY());
+          menu.show(board, e.getX(), e.getY());
         }
       }
     });
   }
 
-  /** Tente de trouver l’intervention sous le point souris, sans dépendre d’une signature précise. */
-  private Intervention resolveInterventionAt(Point p){
-    // 1) try getInterventionAt(Point)
-    try{
-      var m = board.getClass().getMethod("getInterventionAt", Point.class);
-      Object o = m.invoke(board, p);
-      if (o instanceof Intervention it) return it;
-    }catch(Exception ignore){}
-    // 2) try itemAt(Point)
-    try{
-      var m = board.getClass().getMethod("itemAt", Point.class);
-      Object o = m.invoke(board, p);
-      if (o instanceof Intervention it) return it;
-    }catch(Exception ignore){}
-    // 3) fallback : si une seule sélection courante existe déjà
-    if (currentSelection != null && currentSelection.size() == 1){
-      return currentSelection.get(0);
+  /** Essaie d’appeler un hit-test du board si disponible (par noms usuels), sinon null. */
+  private Intervention tryHitTestOnBoard(MouseEvent e){
+    if (e == null){
+      return null;
+    }
+    try {
+      Point p = SwingUtilities.convertPoint(e.getComponent(), e.getPoint(), board);
+      try {
+        var m = board.getClass().getMethod("findInterventionAt", Point.class);
+        Object res = m.invoke(board, p);
+        if (res instanceof Intervention it){
+          return it;
+        }
+      } catch (NoSuchMethodException ignore){
+      }
+      try {
+        var m2 = board.getClass().getMethod("getInterventionAt", int.class, int.class);
+        Object res2 = m2.invoke(board, p.x, p.y);
+        if (res2 instanceof Intervention it){
+          return it;
+        }
+      } catch (NoSuchMethodException ignore){
+      }
+      try {
+        var m3 = board.getClass().getMethod("hitTest", Point.class);
+        Object hit = m3.invoke(board, p);
+        if (hit != null){
+          try {
+            var getIt = hit.getClass().getMethod("getIntervention");
+            Object it = getIt.invoke(hit);
+            if (it instanceof Intervention ii){
+              return ii;
+            }
+          } catch (Exception ignore){
+          }
+        }
+      } catch (NoSuchMethodException ignore){
+      }
+    } catch (Exception ignore){
     }
     return null;
   }
@@ -540,7 +595,8 @@ public class PlanningPanel extends JPanel {
     }catch(Exception ignore){}
   }
 
-  private void installGlobalWheelZoom(Component... components){
+  /** Ctrl+molette non bloquant : branché sur le scroll + board, ne consomme que si Ctrl. */
+  private void installWheelZoom(JScrollPane scroll, JComponent content){
     final int mask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
     MouseWheelListener listener = e -> {
       if ((e.getModifiersEx() & mask) == 0){
@@ -548,38 +604,20 @@ public class PlanningPanel extends JPanel {
       }
       if (e.getWheelRotation() < 0){
         zoomInStep();
-      } else if (e.getWheelRotation() > 0){
+      } else {
         zoomOutStep();
       }
       e.consume();
     };
-    for (Component component : components){
-      if (component instanceof JComponent jc){
-        jc.addMouseWheelListener(listener);
+    if (scroll != null){
+      JViewport viewport = scroll.getViewport();
+      if (viewport != null){
+        viewport.addMouseWheelListener(listener);
       }
     }
-  }
-
-  /** Essaye d’activer l’ouverture par double-clic sur les tuiles du board. */
-  @SuppressWarnings("unchecked")
-  private void hookBoardDoubleClickForOpen(){
-    try {
-      var method = board.getClass().getMethod("setOnOpen", java.util.function.Consumer.class);
-      method.invoke(board, (java.util.function.Consumer<Intervention>) this::openInterventionEditor);
-      return;
-    } catch (Exception ignore){
-      // fallback plan B
+    if (content != null){
+      content.addMouseWheelListener(listener);
     }
-    board.addMouseListener(new MouseAdapter(){
-      @Override public void mouseClicked(MouseEvent e){
-        if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)){
-          java.util.List<Intervention> selection = selectedInterventions();
-          if (selection != null && !selection.isEmpty()){
-            openInterventionEditor(selection.get(0));
-          }
-        }
-      }
-    });
   }
 
   private void pushVisibleWindowToBoard(){
@@ -1935,13 +1973,14 @@ public class PlanningPanel extends JPanel {
         zoomOutStep();
       }
     });
+    // Important : ne JAMAIS consommer la molette ici → le scroll reste natif
     inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_G, mask), "planning-go-week");
     actionMap.put("planning-go-week", new AbstractAction(){
       @Override public void actionPerformed(ActionEvent e){
         openWeekPicker();
       }
     });
-    // pas de listener bloquant ici; voir installGlobalWheelZoom()
+    // pas de listener bloquant ici; voir installWheelZoom()
   }
 
   /* ---------- Raccourcis clavier locaux ---------- */
