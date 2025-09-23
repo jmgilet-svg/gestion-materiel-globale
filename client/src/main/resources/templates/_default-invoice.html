@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<style>
+  :root { --c1:#0F62FE; --muted:#6b7280; --line:#e5e7eb; }
+  body{ font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Ubuntu,"Helvetica Neue",Arial; margin:24px; color:#111827; }
+  h1{ font-size:22px; margin:0 0 4px; }
+  header{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px; }
+  .brand{ font-weight:700; color:var(--c1); }
+  .badge{ display:inline-block; background:#E9FBEE; color:#14532d; padding:4px 8px; border-radius:999px; font-size:12px; border:1px solid #BFE7C7; }
+  table{ width:100%; border-collapse:collapse; margin-top:12px; }
+  th,td{ padding:10px 8px; border-bottom:1px solid var(--line); }
+  th{ text-align:left; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  tfoot td{ border-top:2px solid #111827; font-weight:600; }
+  .right{ text-align:right; }
+  .muted{ color:var(--muted); font-size:12px; }
+  .logo{ height:56px; object-fit:contain; }
+</style></head>
+<body>
+  <header>
+    <div>
+      <div class="brand">{{agency.name}}</div>
+      <div class="muted">{{agency.addressHtml}}</div>
+    </div>
+    <div style="text-align:right">
+      <div class="badge">Facture</div>
+      <div class="muted">N° {{invoice.number}}</div>
+      <div class="muted">Date {{invoice.date}}</div>
+    </div>
+    <div>
+      <img class="logo" src="{{logo.cdi}}" alt="Logo">
+    </div>
+  </header>
+  <h1>{{client.name}}</h1>
+  <div class="muted">{{client.addressHtml}}</div>
+
+  <table>
+    <thead><tr>
+      <th>Désignation</th><th class="right">Qté</th><th class="right">PU HT</th><th class="right">Total HT</th>
+    </tr></thead>
+    <tbody>
+      {{lines.rows}}
+    </tbody>
+    <tfoot>
+      <tr><td colspan="3" class="right">Total HT</td><td class="right">{{invoice.totalHt}} €</td></tr>
+      <tr><td colspan="3" class="right">TVA</td><td class="right">{{agency.vatRate}}</td></tr>
+      <tr><td colspan="3" class="right">Total TTC</td><td class="right">{{invoice.totalTtc}} €</td></tr>
+      <tr><td colspan="3" class="right">Statut</td><td class="right">{{invoice.status}}</td></tr>
+    </tfoot>
+  </table>
+
+  <p class="muted">{{agency.cgvHtml}}</p>
+</body></html>

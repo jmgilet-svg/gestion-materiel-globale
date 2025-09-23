@@ -21,7 +21,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 import com.materiel.suite.client.ui.MainFrame;
 
-public class PlanningBoard extends JComponent {
+public class PlanningBoard extends JComponent implements Scrollable {
   // Modèle de données & état
   private LocalDate startDate = LocalDate.now().with(java.time.DayOfWeek.MONDAY);
   private int days = 7;
@@ -334,6 +334,39 @@ public class PlanningBoard extends JComponent {
     return null;
   }
 
+  /* ==================== Scrollable ==================== */
+  @Override public Dimension getPreferredScrollableViewportSize(){
+    return getPreferredSize();
+  }
+
+  @Override public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction){
+    if (orientation == SwingConstants.VERTICAL){
+      int laneHeight = tile.heightBase() + rowGap;
+      return Math.max(24, Math.min(laneHeight, 96));
+    }
+    return Math.max(24, slotWidth * 4);
+  }
+
+  @Override public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction){
+    if (orientation == SwingConstants.VERTICAL){
+      int base = tile.heightBase() + rowGap;
+      int viewport = visibleRect == null ? 0 : visibleRect.height;
+      return Math.max(Math.max(base, viewport - 32), 120);
+    }
+    int viewport = visibleRect == null ? 0 : visibleRect.width;
+    return Math.max(getDayPixelWidth(), Math.max(viewport - 64, 160));
+  }
+
+  /** Le board occupe toute la largeur disponible pour éviter le scroll horizontal. */
+  @Override public boolean getScrollableTracksViewportWidth(){
+    return true;
+  }
+
+  /** Autorise le scroll vertical lorsque le contenu dépasse la hauteur visible. */
+  @Override public boolean getScrollableTracksViewportHeight(){
+    return false;
+  }
+
   private Method findCompatibleMethod(Class<?> type, String name, Class<?>... parameterTypes){
     if (type == null || name == null){
       return null;
@@ -424,7 +457,19 @@ public class PlanningBoard extends JComponent {
   }
 
   @Override public Dimension getPreferredSize(){
-    return new Dimension(days*getDayPixelWidth(), Math.max(totalHeight, 400));
+    Dimension base = super.getPreferredSize();
+    int width = getDayPixelWidth() * days;
+    if (base != null){
+      width = Math.max(width, base.width);
+    }
+    int rows = resources == null ? 0 : resources.size();
+    int estimated = rows * (tile.heightBase() + rowGap);
+    int height = Math.max(totalHeight, estimated);
+    height = Math.max(height + 64, 400);
+    if (base != null){
+      height = Math.max(height, base.height);
+    }
+    return new Dimension(width, height);
   }
 
   @Override protected void paintComponent(Graphics g){
