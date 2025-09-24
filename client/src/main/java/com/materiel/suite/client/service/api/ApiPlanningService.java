@@ -521,7 +521,7 @@ public class ApiPlanningService implements PlanningService {
     } else {
       target.setId(null);
     }
-    target.setName(SimpleJson.str(data.getOrDefault("name", "")));
+    target.setName(SimpleJson.str(data.get("name")));
     target.setType(parseResourceType(data.get("type")));
     target.setUnitPriceHt(parseBigDecimal(data.get("unitPriceHt")));
     target.setColor(SimpleJson.str(data.get("color")));
