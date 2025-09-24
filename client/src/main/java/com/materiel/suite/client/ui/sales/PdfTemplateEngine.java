@@ -11,7 +11,8 @@ import com.materiel.suite.client.service.DocumentTemplateService;
 import com.materiel.suite.client.service.PdfService;
 import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.service.TemplatesGateway;
-import com.materiel.suite.client.util.Money;
+import com.materiel.suite.client.settings.GeneralSettings;
+
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -20,12 +21,15 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.Base64;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -33,18 +37,13 @@ import java.util.regex.Pattern;
 public final class PdfTemplateEngine {
   private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ISO_LOCAL_DATE;
   private static final Pattern PARTIAL_PATTERN = Pattern.compile("\\{\\{>partial:([a-zA-Z0-9._-]+)\\}\\}");
-  private static final Pattern ASSET_PATTERN = Pattern.compile("\\{\\{asset:([a-zA-Z0-9._-]+)\\}\\}");
-  private static final Pattern QR_PATTERN = Pattern.compile("\\{\\{qr:([^}]+)\\}\\}");
 
   private PdfTemplateEngine(){
   }
 
   public static byte[] renderQuote(QuoteV2 quote, String logoBase64){
-    return renderQuote(quote, logoBase64, null);
-  }
-
-  public static byte[] renderQuote(QuoteV2 quote, String logoBase64, String templateKey){
-    String html = loadTemplate("QUOTE", templateKey, defaultQuoteTemplate());
+    String html = loadTemplate("QUOTE", "default", defaultQuoteTemplate());
+    html = applyPartials(html);
     Map<String, String> values = new LinkedHashMap<>();
     populateAgency(values);
     values.put("client.name", nz(quote == null ? null : quote.getClientName()));
@@ -55,19 +54,16 @@ public final class PdfTemplateEngine {
     values.put("quote.totalTtc", formatAmount(quote == null ? null : quote.getTotalTtc()));
     values.put("lines.rows", EmailTableBuilder.rowsHtml(quote == null ? null : quote.getLines()));
     values.put("lines.tableHtml", EmailTableBuilder.tableHtml(quote == null ? null : quote.getLines()));
-    values.put("tax.rate", vatPercent());
-    values.put("amount.netToPay", formatAmount(quote == null ? null : quote.getTotalTtc()));
-    html = mergeValues(html, values);
-    html = enrichAssetsAndMacros(html, logoBase64);
+    html = merge(html, values);
+    html = applyPartials(html);
+    html = html.replace("{{logo.cdi}}", logoBase64 == null ? "" : "cid:logo");
+
     return renderHtml(html, logoBase64);
   }
 
   public static byte[] renderInvoice(InvoiceV2 invoice, String logoBase64){
-    return renderInvoice(invoice, logoBase64, null);
-  }
-
-  public static byte[] renderInvoice(InvoiceV2 invoice, String logoBase64, String templateKey){
-    String html = loadTemplate("INVOICE", templateKey, defaultInvoiceTemplate());
+    String html = loadTemplate("INVOICE", "default", defaultInvoiceTemplate());
+    html = applyPartials(html);
     Map<String, String> values = new LinkedHashMap<>();
     populateAgency(values);
     values.put("client.name", nz(invoice == null ? null : invoice.getClientName()));
@@ -79,10 +75,10 @@ public final class PdfTemplateEngine {
     values.put("invoice.status", nz(invoice == null ? null : invoice.getStatus()));
     values.put("lines.rows", EmailTableBuilder.rowsHtml(invoice == null ? null : invoice.getLines()));
     values.put("lines.tableHtml", EmailTableBuilder.tableHtml(invoice == null ? null : invoice.getLines()));
-    values.put("tax.rate", vatPercent());
-    values.put("amount.netToPay", formatAmount(invoice == null ? null : invoice.getTotalTtc()));
-    html = mergeValues(html, values);
-    html = enrichAssetsAndMacros(html, logoBase64);
+    html = merge(html, values);
+    html = applyPartials(html);
+    html = html.replace("{{logo.cdi}}", logoBase64 == null ? "" : "cid:logo");
+
     return renderHtml(html, logoBase64);
   }
 
@@ -93,6 +89,7 @@ public final class PdfTemplateEngine {
       throw new IllegalStateException("Service PDF indisponible");
     }
     String safeHtml = html == null ? "" : html;
+    safeHtml = applyPartials(safeHtml);
     return svc.render(safeHtml, Map.of(), baseUrl);
   }
 
@@ -209,69 +206,65 @@ public final class PdfTemplateEngine {
     return out;
   }
 
-  private static String replaceAssetTokens(String html){
+  private static String applyPartials(String html){
+    String safe = html == null ? "" : html;
+    if (safe.isBlank() || !safe.contains("{{>partial:")){
+      return safe;
+    }
+    Map<String, String> partials = loadPartialContents();
+    GeneralSettings general = loadGeneralSettings();
+    String fallbackCgv = fallbackCgvHtml(general);
+    String current = safe;
+    for (int depth = 0; depth < 5; depth++){
+      Matcher matcher = PARTIAL_PATTERN.matcher(current);
+      if (!matcher.find()){
+        break;
+      }
+      StringBuffer sb = new StringBuffer();
+      do {
+        String key = matcher.group(1);
+        String normalized = key == null ? "" : key.toLowerCase(Locale.ROOT);
+        String content = partials.getOrDefault(normalized, "");
+        if (content.isBlank() && "cgv".equalsIgnoreCase(key)){
+          content = fallbackCgv;
+        }
+        matcher.appendReplacement(sb, Matcher.quoteReplacement(content));
+      } while (matcher.find());
+      matcher.appendTail(sb);
+      String replaced = sb.toString();
+      if (replaced.equals(current)){
+        break;
+      }
+      current = replaced;
+    }
+    return current;
+  }
+
+  private static Map<String, String> loadPartialContents(){
     TemplatesGateway gateway = ServiceLocator.templates();
     if (gateway == null){
-      return html;
+      return Collections.emptyMap();
     }
-    Map<String, TemplatesGateway.Asset> assets = new HashMap<>();
     try {
-      List<TemplatesGateway.Asset> list = gateway.listAssets();
-      for (TemplatesGateway.Asset asset : list){
-        if (asset != null && asset.key() != null){
-          assets.put(asset.key().toLowerCase(Locale.ROOT), asset);
-        }
+      List<TemplatesGateway.Template> list = gateway.list("PARTIAL");
+      if (list == null || list.isEmpty()){
+        return Collections.emptyMap();
       }
+      Map<String, String> map = new HashMap<>();
+      for (TemplatesGateway.Template template : list){
+        if (template == null){
+          continue;
+        }
+        String key = template.key();
+        if (key == null || key.isBlank()){
+          continue;
+        }
+        String normalized = key.toLowerCase(Locale.ROOT);
+        map.put(normalized, template.content() == null ? "" : template.content());
+      }
+      return map;
     } catch (Exception ignore){
-      return html;
-    }
-    if (assets.isEmpty()){
-      return html;
-    }
-    Matcher matcher = ASSET_PATTERN.matcher(html);
-    StringBuffer buffer = new StringBuffer();
-    while (matcher.find()){
-      String key = matcher.group(1);
-      TemplatesGateway.Asset asset = key == null ? null : assets.get(key.toLowerCase(Locale.ROOT));
-      String replacement = "";
-      if (asset != null && asset.base64() != null && !asset.base64().isBlank()){
-        String type = asset.contentType();
-        if (type == null || type.isBlank()){
-          type = "application/octet-stream";
-        }
-        replacement = "data:" + type + ";base64," + asset.base64();
-      }
-      matcher.appendReplacement(buffer, Matcher.quoteReplacement(replacement));
-    }
-    matcher.appendTail(buffer);
-    return buffer.toString();
-  }
-
-  private static String replaceQrTokens(String html){
-    Matcher matcher = QR_PATTERN.matcher(html);
-    if (!matcher.find()){
-      return html;
-    }
-    matcher.reset();
-    StringBuffer buffer = new StringBuffer();
-    while (matcher.find()){
-      String payload = matcher.group(1);
-      String replacement = createQrDataUri(payload);
-      matcher.appendReplacement(buffer, Matcher.quoteReplacement(replacement));
-    }
-    matcher.appendTail(buffer);
-    return buffer.toString();
-  }
-
-  private static String createQrDataUri(String payload){
-    try {
-      String text = payload == null ? "" : payload;
-      BitMatrix matrix = new MultiFormatWriter().encode(text, BarcodeFormat.QR_CODE, 256, 256);
-      ByteArrayOutputStream out = new ByteArrayOutputStream();
-      MatrixToImageWriter.writeToStream(matrix, "PNG", out);
-      return "data:image/png;base64," + Base64.getEncoder().encodeToString(out.toByteArray());
-    } catch (Exception ex){
-      return "";
+      return Collections.emptyMap();
     }
   }
 
@@ -283,24 +276,78 @@ public final class PdfTemplateEngine {
     values.put("agency.emailCss", "");
     values.put("agency.emailSignatureHtml", "");
     AgencyConfigGateway gateway = ServiceLocator.agencyConfig();
-    if (gateway == null){
-      return;
-    }
-    try {
-      AgencyConfigGateway.AgencyConfig cfg = gateway.get();
-      if (cfg != null){
-        if (cfg.companyName() != null && !cfg.companyName().isBlank()){
-          values.put("agency.name", cfg.companyName());
+    if (gateway != null){
+      try {
+        AgencyConfigGateway.AgencyConfig cfg = gateway.get();
+        if (cfg != null){
+          if (cfg.companyName() != null && !cfg.companyName().isBlank()){
+            values.put("agency.name", cfg.companyName());
+          }
+          values.put("agency.addressHtml", nz(cfg.companyAddressHtml()));
+          values.put("agency.vatRate", cfg.vatRate() == null ? "" : cfg.vatRate().toString());
+          values.put("agency.cgvHtml", nz(cfg.cgvHtml()));
+          values.put("agency.emailCss", nz(cfg.emailCss()));
+          values.put("agency.emailSignatureHtml", nz(cfg.emailSignatureHtml()));
         }
-        values.put("agency.addressHtml", nz(cfg.companyAddressHtml()));
-        values.put("agency.vatRate", cfg.vatRate() == null ? "" : cfg.vatRate().toString());
-        values.put("agency.cgvHtml", nz(cfg.cgvHtml()));
-        values.put("agency.emailCss", nz(cfg.emailCss()));
-        values.put("agency.emailSignatureHtml", nz(cfg.emailSignatureHtml()));
+      } catch (Exception ignore){
+        // valeurs par défaut déjà renseignées
       }
-    } catch (Exception ignore){
-      // valeurs par défaut déjà renseignées
     }
+    GeneralSettings general = loadGeneralSettings();
+    if (general != null){
+      String vat = values.get("agency.vatRate");
+      String fallbackVat = fallbackVatRate(general);
+      if ((vat == null || vat.isBlank()) && !fallbackVat.isBlank()){
+        values.put("agency.vatRate", fallbackVat);
+      }
+      String cgv = values.get("agency.cgvHtml");
+      String fallbackCgv = fallbackCgvHtml(general);
+      if ((cgv == null || cgv.isBlank()) && !fallbackCgv.isBlank()){
+        values.put("agency.cgvHtml", fallbackCgv);
+      }
+    }
+  }
+
+  private static GeneralSettings loadGeneralSettings(){
+    try {
+      return ServiceLocator.settings().getGeneral();
+    } catch (RuntimeException ex){
+      return null;
+    }
+  }
+
+  private static String fallbackVatRate(GeneralSettings settings){
+    if (settings == null){
+      return "";
+    }
+    Double percent = settings.getDefaultVatPercent();
+    if (percent == null){
+      return "";
+    }
+    BigDecimal rate = BigDecimal.valueOf(percent).divide(BigDecimal.valueOf(100), 6, java.math.RoundingMode.HALF_UP);
+    return stripTrailingZeros(rate);
+  }
+
+  private static String fallbackCgvHtml(GeneralSettings settings){
+    if (settings == null){
+      return "";
+    }
+    String text = settings.getCgvText();
+    if (text == null){
+      return "";
+    }
+    String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
+    if (normalized.trim().isEmpty()){
+      return "";
+    }
+    return normalized.trim().replace("\n", "<br>");
+  }
+
+  private static String stripTrailingZeros(BigDecimal value){
+    if (value == null){
+      return "";
+    }
+    return value.stripTrailingZeros().toPlainString();
   }
 
   private static byte[] renderHtml(String html, String logoBase64){

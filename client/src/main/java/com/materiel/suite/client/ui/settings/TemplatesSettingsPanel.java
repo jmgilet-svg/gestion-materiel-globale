@@ -295,15 +295,17 @@ public class TemplatesSettingsPanel extends JPanel {
     varsList.add("logo.cdi");
     varsList.add("lines.rows");
     varsList.add("lines.tableHtml");
-    varsList.add("tax.rate");
-    varsList.add("amount.netToPay");
     varsList.add(">partial:cgv");
-    varsList.add("asset:mon-image");
-    varsList.add("qr:https://votre-lien");
-    if ("QUOTE".equalsIgnoreCase(selectedType) || "EMAIL".equalsIgnoreCase(selectedType)){
+    boolean includeQuote = "QUOTE".equalsIgnoreCase(selectedType)
+        || "EMAIL".equalsIgnoreCase(selectedType)
+        || "PARTIAL".equalsIgnoreCase(selectedType);
+    boolean includeInvoice = "INVOICE".equalsIgnoreCase(selectedType)
+        || "EMAIL".equalsIgnoreCase(selectedType)
+        || "PARTIAL".equalsIgnoreCase(selectedType);
+    if (includeQuote){
       varsList.addAll(List.of("quote.reference", "quote.date", "quote.totalHt", "quote.totalTtc"));
     }
-    if ("INVOICE".equalsIgnoreCase(selectedType) || "EMAIL".equalsIgnoreCase(selectedType)){
+    if (includeInvoice){
       varsList.addAll(List.of("invoice.number", "invoice.date", "invoice.totalHt", "invoice.totalTtc", "invoice.status"));
     }
     vars.setVariables(varsList);
@@ -433,6 +435,13 @@ public class TemplatesSettingsPanel extends JPanel {
 
   private String sampleForType(){
     String selectedType = (String) type.getSelectedItem();
+    if ("PARTIAL".equalsIgnoreCase(selectedType)){
+      return """
+<div>
+  <p>Contenu partiel…</p>
+</div>
+""";
+    }
     if ("INVOICE".equalsIgnoreCase(selectedType)){
       return """
 <!DOCTYPE html><html><body>
