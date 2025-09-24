@@ -2142,61 +2142,8 @@ public class PlanningPanel extends JPanel {
   }
 
   private void renderCards(List<Intervention> list){
-    cardsContainer.removeAll();
-    GridBagConstraints gc = new GridBagConstraints();
-    gc.gridx = 0;
-    gc.gridy = 0;
-    gc.insets = new Insets(0, 0, 8, 0);
-    gc.fill = GridBagConstraints.HORIZONTAL;
-    gc.weightx = 1.0;
-
-    if (list == null || list.isEmpty()){
-      JLabel empty = new JLabel("Aucune intervention", JLabel.CENTER);
-      empty.setForeground(UiTokens.textMuted());
-      JPanel wrapper = new JPanel(new BorderLayout());
-      wrapper.setOpaque(false);
-      wrapper.add(empty, BorderLayout.CENTER);
-      cardsContainer.add(wrapper, gc);
-      gc.gridy++;
-    } else {
-      for (Intervention intervention : list){
-        if (intervention == null){
-          continue;
-        }
-        InterventionTilePanel tile = new InterventionTilePanel(intervention, new InterventionTilePanel.Listener(){
-          @Override public void onOpen(Intervention value){
-            showInterventionSummary(value);
-          }
-
-          @Override public void onEdit(Intervention value){
-            openInterventionEditor(value);
-          }
-
-          @Override public void onMarkDone(Intervention value){
-            markInterventionDone(value);
-          }
-
-		  @Override
-		public void onTimeAdjust(Intervention intervention, boolean start, int minutesDelta) {
-			// TODO Auto-generated method stub
-			
-		}
-        });
-        tile.setAlignmentX(Component.LEFT_ALIGNMENT);
-        cardsContainer.add(tile, gc);
-        gc.gridy++;
-      }
-    }
-
-    GridBagConstraints filler = new GridBagConstraints();
-    filler.gridx = 0;
-    filler.gridy = gc.gridy;
-    filler.weighty = 1.0;
-    filler.fill = GridBagConstraints.VERTICAL;
-    cardsContainer.add(Box.createVerticalGlue(), filler);
-
-    cardsContainer.revalidate();
-    cardsContainer.repaint();
+    boolean compact = cardsDensityToggle != null && cardsDensityToggle.isSelected();
+    renderCards(list, compact);
   }
 
   private void showInterventionSummary(Intervention intervention){
@@ -2475,7 +2422,7 @@ public class PlanningPanel extends JPanel {
         first = false;
         Intervention current = intervention;
         InterventionTilePanel tile = new InterventionTilePanel(current, new InterventionTilePanel.Listener(){
-          @Override public void onOpen(Intervention it){ openInterventionEditor(it); }
+          @Override public void onOpen(Intervention it){ showInterventionSummary(it); }
           @Override public void onEdit(Intervention it){ openInterventionEditor(it); }
           @Override public void onMarkDone(Intervention it){ markInterventionDone(it); }
           @Override public void onTimeAdjust(Intervention it, boolean start, int minutesDelta){
