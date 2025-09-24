@@ -94,6 +94,7 @@ import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.JViewport;
 import javax.swing.KeyStroke;
+import javax.swing.OverlayLayout;
 import javax.swing.SpinnerDateModel;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
@@ -161,10 +162,11 @@ public class PlanningPanel extends JPanel {
   private static final DateTimeFormatter SIMPLE_DAY_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
   private static final DateTimeFormatter SIMPLE_DAY_TIME_FORMAT = DateTimeFormatter.ofPattern("dd/MM HH:mm");
   private final PlanningBoard board = new PlanningBoard();
-  // Canvas calendrier avec peinture custom (hover/ghost)
-  private final JPanel calendarContainer = new JPanel(new BorderLayout()){
-    @Override public void paint(Graphics g){
-      super.paint(g);
+  // Conteneur scrollable du board (grille) avec couche d'overlay pour le hover/ghost.
+  private final JPanel calendarContainer = new JPanel();
+  private final JComponent calendarOverlay = new JComponent(){
+    @Override protected void paintComponent(Graphics g){
+      super.paintComponent(g);
       Graphics2D g2 = (Graphics2D) g.create();
       try {
         Rectangle hoverRect = PlanningPanel.this.rowBoundsToContainer(hoverRowBounds);
@@ -185,6 +187,16 @@ public class PlanningPanel extends JPanel {
       } finally {
         g2.dispose();
       }
+    }
+
+    @Override
+    public boolean isOpaque(){
+      return false;
+    }
+
+    @Override
+    public boolean contains(int x, int y){
+      return false;
     }
   };
   private RowBounds hoverRowBounds;
@@ -243,7 +255,15 @@ public class PlanningPanel extends JPanel {
     super(new BorderLayout());
     add(buildToolbar(), BorderLayout.NORTH);
 
-    calendarContainer.add(board, BorderLayout.CENTER);
+    calendarContainer.setLayout(new OverlayLayout(calendarContainer));
+    board.setAlignmentX(0f);
+    board.setAlignmentY(0f);
+    calendarOverlay.setAlignmentX(0f);
+    calendarOverlay.setAlignmentY(0f);
+    calendarOverlay.setOpaque(false);
+    calendarOverlay.setFocusable(false);
+    calendarContainer.add(board);
+    calendarContainer.add(calendarOverlay);
     planningScroll = new JScrollPane(calendarContainer, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
     // ===== Scroll natif rétabli + réglages douceur =====
     planningScroll.setWheelScrollingEnabled(true);
@@ -2781,9 +2801,9 @@ public class PlanningPanel extends JPanel {
       return null;
     }
     Rectangle boardRect = new Rectangle(0, bounds.y, 1, bounds.height);
-    Rectangle containerRect = SwingUtilities.convertRectangle(board, boardRect, calendarContainer);
+    Rectangle containerRect = SwingUtilities.convertRectangle(board, boardRect, calendarOverlay);
     containerRect.x = 0;
-    containerRect.width = calendarContainer.getWidth();
+    containerRect.width = calendarOverlay.getWidth();
     return containerRect;
   }
 
@@ -2791,7 +2811,7 @@ public class PlanningPanel extends JPanel {
     if (rect == null){
       return null;
     }
-    return SwingUtilities.convertRectangle(board, rect, calendarContainer);
+    return SwingUtilities.convertRectangle(board, rect, calendarOverlay);
   }
 
   private void clearDropPreview(){
@@ -2817,7 +2837,7 @@ public class PlanningPanel extends JPanel {
   }
 
   private void repaintCalendarOverlay(){
-    calendarContainer.repaint();
+    calendarOverlay.repaint();
   }
 
   private ResourceRef toResourceRef(Resource resource){
