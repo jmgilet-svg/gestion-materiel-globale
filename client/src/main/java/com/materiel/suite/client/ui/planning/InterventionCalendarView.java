@@ -525,10 +525,14 @@ public class InterventionCalendarView extends JPanel implements InterventionView
 
   private class DayColumn extends JPanel {
     private final LocalDate day;
+    private Integer hoverGuideY;
+    private final JLabel dragTip;
 
     DayColumn(LocalDate day, List<Intervention> items){
       super(null);
       this.day = day;
+      this.hoverGuideY = null;
+      this.dragTip = createDragTip();
       setOpaque(true);
       setBackground(Color.WHITE);
       setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, new Color(235, 235, 235)));
@@ -544,6 +548,18 @@ public class InterventionCalendarView extends JPanel implements InterventionView
         }
         add(makeBlock(it, start, end));
       }
+      add(dragTip);
+      setComponentZOrder(dragTip, 0);
+      addMouseMotionListener(new java.awt.event.MouseMotionAdapter(){
+        @Override public void mouseMoved(MouseEvent e){
+          setHoverGuide(snapY(e.getY()));
+        }
+      });
+      addMouseListener(new MouseAdapter(){
+        @Override public void mouseExited(MouseEvent e){
+          setHoverGuide(null);
+        }
+      });
     }
 
     @Override protected void paintComponent(Graphics g){
@@ -558,6 +574,11 @@ public class InterventionCalendarView extends JPanel implements InterventionView
           g2.drawLine(0, y + HOUR_HEIGHT / 2, getWidth(), y + HOUR_HEIGHT / 2);
           g2.setColor(new Color(245, 245, 245));
         }
+      }
+      if (hoverGuideY != null){
+        int y = Math.max(0, Math.min(hoverGuideY, columnHeight()));
+        g2.setColor(new Color(60, 60, 60, 90));
+        g2.drawLine(0, y, getWidth(), y);
       }
       g2.dispose();
     }
@@ -608,10 +629,15 @@ public class InterventionCalendarView extends JPanel implements InterventionView
               pressBlockY = getY();
               resizing = e.getY() >= getHeight() - RESIZE_HANDLE;
               setCursor(Cursor.getPredefinedCursor(resizing ? Cursor.S_RESIZE_CURSOR : Cursor.MOVE_CURSOR));
+              updateDragTip(it, getBounds());
+              setHoverGuide(resizing ? getY() + getHeight() : getY());
             }
             @Override public void mouseReleased(MouseEvent e){
               setCursor(Cursor.getDefaultCursor());
-              if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)){
+              boolean popup = e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e);
+              if (popup){
+                hideDragTip();
+                setHoverGuide(null);
                 menu.show(InterventionCalendarView.this, e.getX(), e.getY());
                 return;
               }
@@ -623,17 +649,28 @@ public class InterventionCalendarView extends JPanel implements InterventionView
                 LocalDateTime newStart = snapQuarter(baseStart);
                 onMoveDateTime.accept(it, toDate(newStart));
               }
+              hideDragTip();
+              setHoverGuide(null);
             }
           });
           addMouseMotionListener(new java.awt.event.MouseMotionAdapter(){
             @Override public void mouseDragged(MouseEvent e){
               int dy = e.getYOnScreen() - pressY;
+              int limit = columnHeight();
               if (resizing){
-                int nh = clamp(pressHeight + dy, slotStep(), getParent().getHeight() - getY());
-                setSize(getWidth(), snapHeight(nh));
+                int nh = clamp(pressHeight + dy, slotStep(), Math.max(slotStep(), limit - getY()));
+                nh = snapHeight(nh);
+                setSize(getWidth(), nh);
+                Rectangle bounds = getBounds();
+                updateDragTip(it, bounds);
+                setHoverGuide(bounds.y + bounds.height);
               } else {
-                int ny = clamp(pressBlockY + dy, 0, getParent().getHeight() - getHeight());
-                setLocation(getX(), snapY(ny));
+                int ny = clamp(pressBlockY + dy, 0, Math.max(0, limit - getHeight()));
+                ny = snapY(ny);
+                setLocation(getX(), ny);
+                Rectangle bounds = getBounds();
+                updateDragTip(it, bounds);
+                setHoverGuide(bounds.y);
               }
               getParent().repaint();
             }
@@ -672,7 +709,7 @@ public class InterventionCalendarView extends JPanel implements InterventionView
         return y;
       }
       int snapped = (y / step) * step;
-      int max = getParent() != null ? getParent().getHeight() - step : y;
+      int max = columnHeight() - step;
       return Math.max(0, Math.min(snapped, Math.max(0, max)));
     }
 
@@ -694,6 +731,68 @@ public class InterventionCalendarView extends JPanel implements InterventionView
 
     private int clamp(int value, int min, int max){
       return Math.max(min, Math.min(max, value));
+    }
+
+    private int columnHeight(){
+      int h = getHeight();
+      if (h <= 0){
+        h = getPreferredSize().height;
+      }
+      return Math.max(h, 0);
+    }
+
+    private void setHoverGuide(Integer y){
+      Integer target = y;
+      if (target != null){
+        target = Math.max(0, Math.min(target, columnHeight()));
+      }
+      if (!Objects.equals(hoverGuideY, target)){
+        hoverGuideY = target;
+        repaint();
+      }
+    }
+
+    private JLabel createDragTip(){
+      JLabel tip = new JLabel("", SwingConstants.LEFT);
+      tip.setOpaque(true);
+      tip.setBackground(new Color(255, 255, 255, 230));
+      tip.setBorder(BorderFactory.createCompoundBorder(
+          BorderFactory.createLineBorder(new Color(160, 160, 160)),
+          BorderFactory.createEmptyBorder(3, 6, 3, 6)
+      ));
+      tip.setFont(tip.getFont().deriveFont(tip.getFont().getSize2D() - 1f));
+      tip.setVisible(false);
+      tip.setFocusable(false);
+      return tip;
+    }
+
+    private void updateDragTip(Intervention it, Rectangle bounds){
+      if (it == null || bounds == null){
+        hideDragTip();
+        return;
+      }
+      LocalDateTime start = snapQuarter(startOfY(bounds.y));
+      LocalDateTime end = snapQuarter(start.plusMinutes(heightToMinutes(bounds.height)));
+      String startText = start != null ? timeFormatter.format(start) : "";
+      String endText = end != null ? timeFormatter.format(end) : "";
+      String rawLabel = it.getLabel();
+      if (rawLabel == null || rawLabel.isBlank()){
+        rawLabel = "Intervention";
+      }
+      String label = escape(rawLabel);
+      dragTip.setText("<html><b>" + startText + "–" + endText + "</b> • " + label + "</html>");
+      Dimension pref = dragTip.getPreferredSize();
+      int width = Math.max(getWidth(), COLUMN_WIDTH);
+      int tx = Math.max(4, Math.min(bounds.x + 6, width - pref.width - 4));
+      int ty = Math.max(4, bounds.y - pref.height - 6);
+      dragTip.setBounds(tx, ty, pref.width, pref.height);
+      dragTip.setVisible(true);
+      setComponentZOrder(dragTip, 0);
+      dragTip.repaint();
+    }
+
+    private void hideDragTip(){
+      dragTip.setVisible(false);
     }
 
     private LocalDateTime startOfY(int y){
