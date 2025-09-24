@@ -59,6 +59,16 @@ public final class PdfTemplateEngine {
     return renderHtml(html, logoBase64);
   }
 
+  /** Aperçu brut d'un HTML saisi manuellement (sans image inline). */
+  public static byte[] renderHtmlForPreview(String html, String baseUrl){
+    PdfService svc = ServiceLocator.pdf();
+    if (svc == null){
+      throw new IllegalStateException("Service PDF indisponible");
+    }
+    String safeHtml = html == null ? "" : html;
+    return svc.render(safeHtml, Map.of(), baseUrl);
+  }
+
   private static String loadTemplate(String type, String key, String fallback){
     DocumentTemplateService svc = ServiceLocator.documentTemplates();
     if (svc != null){
