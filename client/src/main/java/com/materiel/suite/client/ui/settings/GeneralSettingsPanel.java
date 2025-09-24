@@ -6,12 +6,17 @@ import com.materiel.suite.client.events.AppEventBus;
 import com.materiel.suite.client.events.SettingsEvents;
 import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.settings.GeneralSettings;
+import com.materiel.suite.client.ui.common.PdfPreviewPanel;
+import com.materiel.suite.client.ui.common.RichHtmlToolbar;
 import com.materiel.suite.client.ui.common.Toasts;
+import com.materiel.suite.client.ui.sales.PdfTemplateEngine;
 import com.materiel.suite.client.ui.theme.ThemeIO;
 import com.materiel.suite.client.ui.theme.ThemeManager;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -39,7 +44,9 @@ public class GeneralSettingsPanel extends JPanel {
   private final JTextArea agencyAddressArea;
   private final JLabel cgvPdfPreview;
   private String cgvPdfBase64;
-  private final JTextArea cgvTextArea;
+  private final JEditorPane cgvArea;
+  private final PdfPreviewPanel cgvPreview;
+  private final JCheckBox cgvLive;
 
   public GeneralSettingsPanel(){
     super(new BorderLayout(8, 8));
@@ -54,9 +61,10 @@ public class GeneralSettingsPanel extends JPanel {
     agencyAddressArea.setLineWrap(true);
     agencyAddressArea.setWrapStyleWord(true);
     cgvPdfPreview = new JLabel();
-    cgvTextArea = new JTextArea(settings.getCgvText() == null ? "" : settings.getCgvText(), 6, 24);
-    cgvTextArea.setLineWrap(true);
-    cgvTextArea.setWrapStyleWord(true);
+    cgvArea = new JEditorPane("text/html", settings.getCgvText() == null ? "" : settings.getCgvText());
+    cgvArea.setCaretPosition(0);
+    cgvPreview = new PdfPreviewPanel();
+    cgvLive = new JCheckBox("Prévisualisation PDF live", true);
     int initialScale = Math.max(80, Math.min(130, settings.getUiScalePercent()));
     uiScaleSpinner = new JSpinner(new SpinnerNumberModel(initialScale, 80, 130, 5));
     highContrastCheck = new JCheckBox("Contraste élevé (focus renforcé)");
@@ -217,8 +225,16 @@ public class GeneralSettingsPanel extends JPanel {
     form.add(new JLabel("CGV (texte fallback)"), gc);
     gc.gridx = 1; gc.weightx = 1;
     gc.fill = GridBagConstraints.BOTH;
-    form.add(new JScrollPane(cgvTextArea), gc);
+    JSplitPane cgvSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(cgvArea), cgvPreview);
+    cgvSplit.setResizeWeight(0.6);
+    form.add(cgvSplit, gc);
     gc.fill = GridBagConstraints.HORIZONTAL;
+
+    row++;
+    gc.gridx = 1; gc.gridy = row; gc.weightx = 1;
+    JPanel cgvControls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+    cgvControls.add(cgvLive);
+    form.add(cgvControls, gc);
 
     row++;
     gc.gridx = 0;
@@ -255,15 +271,64 @@ public class GeneralSettingsPanel extends JPanel {
     agencyAddressArea.setEditable(canEdit);
     chooseCgvPdf.setEnabled(canEdit);
     clearCgvPdf.setEnabled(canEdit);
-    cgvTextArea.setEnabled(canEdit);
-    cgvTextArea.setEditable(canEdit);
+    cgvArea.setEnabled(canEdit);
+    cgvArea.setEditable(canEdit);
+    cgvLive.setEnabled(canEdit);
     importThemeBtn.setEnabled(canEdit);
 
-    JPanel south = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-    south.add(save);
+    JPanel savePanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+    savePanel.add(save);
+    JPanel bottom = new JPanel(new BorderLayout());
+    bottom.add(new RichHtmlToolbar(cgvArea), BorderLayout.CENTER);
+    bottom.add(savePanel, BorderLayout.SOUTH);
 
     add(form, BorderLayout.CENTER);
-    add(south, BorderLayout.SOUTH);
+    add(bottom, BorderLayout.SOUTH);
+
+    Timer cgvTimer = new Timer(500, e -> {
+      if (!cgvLive.isSelected()){
+        return;
+      }
+      String html = cgvArea.getText();
+      if (html == null || html.isBlank()){
+        cgvPreview.setPdf(null);
+        return;
+      }
+      try {
+        String wrapped = "<html><body>" + html + "</body></html>";
+        byte[] pdf = PdfTemplateEngine.renderHtmlForPreview(wrapped, null);
+        cgvPreview.setPdf(pdf);
+      } catch (Exception ignore){
+      }
+    });
+    cgvTimer.setRepeats(false);
+    DocumentListener cgvListener = new DocumentListener() {
+      private void trigger(){
+        cgvTimer.restart();
+      }
+
+      @Override
+      public void insertUpdate(DocumentEvent e){
+        trigger();
+      }
+
+      @Override
+      public void removeUpdate(DocumentEvent e){
+        trigger();
+      }
+
+      @Override
+      public void changedUpdate(DocumentEvent e){
+        trigger();
+      }
+    };
+    cgvArea.getDocument().addDocumentListener(cgvListener);
+    cgvLive.addActionListener(e -> {
+      if (cgvLive.isSelected()){
+        cgvTimer.restart();
+      }
+    });
+    SwingUtilities.invokeLater(cgvTimer::restart);
 
     save.addActionListener(e -> saveSettings());
     chooseLogo.addActionListener(e -> chooseLogo());
@@ -314,7 +379,7 @@ public class GeneralSettingsPanel extends JPanel {
     updated.setAgencyPhone(agencyPhoneField.getText());
     updated.setAgencyAddress(agencyAddressArea.getText());
     updated.setCgvPdfBase64(cgvPdfBase64);
-    updated.setCgvText(cgvTextArea.getText());
+    updated.setCgvText(cgvArea.getText());
 
     try {
       ServiceLocator.settings().saveGeneral(updated);
@@ -341,6 +406,19 @@ public class GeneralSettingsPanel extends JPanel {
           updated.getBrandPrimaryHex()
       ));
       Toasts.success(this, "Paramètres généraux mis à jour");
+      SwingUtilities.invokeLater(() -> {
+        String html = cgvArea.getText();
+        if (html == null || html.isBlank()){
+          cgvPreview.setPdf(null);
+          return;
+        }
+        try {
+          String wrapped = "<html><body>" + html + "</body></html>";
+          byte[] pdf = PdfTemplateEngine.renderHtmlForPreview(wrapped, null);
+          cgvPreview.setPdf(pdf);
+        } catch (Exception ignore){
+        }
+      });
     } catch (RuntimeException ex){
       Toasts.error(this, "Échec de l'enregistrement des paramètres");
     }
