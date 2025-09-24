@@ -36,6 +36,7 @@ import java.awt.event.MouseMotionAdapter;
 import java.awt.event.MouseWheelListener;
 import java.io.File;
 import java.io.PrintWriter;
+import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
@@ -222,6 +223,7 @@ public class PlanningPanel extends JPanel {
   private JToggleButton compactToggle;
   private boolean agendaMode;
   private boolean updatingModeToggle;
+  private boolean boardDoubleClickDelegated;
   private JComboBox<String> simplePeriod;
   private JSpinner simpleRefDate;
   private boolean updatingSimpleRange;
@@ -663,53 +665,65 @@ public class PlanningPanel extends JPanel {
     } catch (Exception ignore){
       // fallback plan ci-dessous
     }
-    if (!delegated){
-      board.addMouseListener(new MouseAdapter(){
-        @Override public void mouseClicked(MouseEvent e){
-          if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2){
-            Intervention hit = tryHitTestOnBoard(e);
-            if (hit != null){
-              openInterventionEditor(hit);
-            } else {
-              List<Intervention> sel = selectedInterventions();
-              if (sel != null && !sel.isEmpty()){
-                openInterventionEditor(sel.get(0));
-              }
-            }
-          }
-        }
-      });
-    }
-
+    boardDoubleClickDelegated = delegated;
     JPopupMenu menu = new JPopupMenu();
     JMenuItem open = new JMenuItem("Ouvrir l’intervention");
-    open.addActionListener(ev -> {
-      Point p = board.getMousePosition();
-      Intervention hit = null;
-      if (p != null){
-        MouseEvent fake = new MouseEvent(board, MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(), 0, p.x, p.y, 1, false);
-        hit = tryHitTestOnBoard(fake);
-      }
-      if (hit == null){
-        List<Intervention> sel = selectedInterventions();
-        if (sel != null && !sel.isEmpty()){
-          hit = sel.get(0);
-        }
-      }
-      if (hit != null){
-        openInterventionEditor(hit);
-      }
-    });
+    open.addActionListener(ev -> onOpenInterventionAt(board.getMousePosition()));
     menu.add(open);
-    board.addMouseListener(new MouseAdapter(){
-      @Override public void mousePressed(MouseEvent e){ maybeShow(e); }
-      @Override public void mouseReleased(MouseEvent e){ maybeShow(e); }
-      private void maybeShow(MouseEvent e){
-        if (e.isPopupTrigger()){
-          menu.show(board, e.getX(), e.getY());
+    installBoardOpenHandlers(board, menu);
+  }
+
+  // Installe le menu contextuel/handlers sur le “board” (grille calendrier)
+  private void installBoardOpenHandlers(JComponent board, JPopupMenu popup){
+    board.addMouseListener(new BoardOpenHandler(this, popup));
+  }
+
+  /**
+   * Handler contextuel pour la grille : clic droit → popup, double-clic gauche → ouvrir.
+   * Conçu pour stabiliser la signature de constructeur recherchée par l’ancien bytecode.
+   */
+  private static final class BoardOpenHandler extends MouseAdapter {
+    private final WeakReference<PlanningPanel> owner;
+    private final JPopupMenu popup;
+
+    BoardOpenHandler(PlanningPanel owner, JPopupMenu popup){
+      this.owner = new WeakReference<>(owner);
+      this.popup = popup;
+    }
+
+    @Override public void mousePressed(MouseEvent e){ maybePopup(e); }
+    @Override public void mouseReleased(MouseEvent e){ maybePopup(e); }
+
+    @Override public void mouseClicked(MouseEvent e){
+      if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)){
+        PlanningPanel panel = owner.get();
+        if (panel == null || panel.boardDoubleClickDelegated){
+          return;
         }
+        panel.onOpenInterventionAt(e.getPoint());
       }
-    });
+    }
+
+    private void maybePopup(MouseEvent e){
+      if (!e.isPopupTrigger() || popup == null){
+        return;
+      }
+      Component c = (Component) e.getSource();
+      popup.show(c, e.getX(), e.getY());
+    }
+  }
+
+  // Ouvre l’intervention située au point (si une tuile est trouvée)
+  private void onOpenInterventionAt(Point point){
+    Intervention hit = tryHitTestOnBoard(point);
+    if (hit != null){
+      openInterventionEditor(hit);
+      return;
+    }
+    List<Intervention> sel = selectedInterventions();
+    if (sel != null && !sel.isEmpty()){
+      openInterventionEditor(sel.get(0));
+    }
   }
 
   /** Essaie d’appeler un hit-test du board si disponible (par noms usuels), sinon null. */
@@ -719,9 +733,20 @@ public class PlanningPanel extends JPanel {
     }
     try {
       Point p = SwingUtilities.convertPoint(e.getComponent(), e.getPoint(), board);
+      return tryHitTestOnBoard(p);
+    } catch (Exception ignore){
+    }
+    return null;
+  }
+
+  private Intervention tryHitTestOnBoard(Point point){
+    if (point == null){
+      return null;
+    }
+    try {
       try {
         var m = board.getClass().getMethod("findInterventionAt", Point.class);
-        Object res = m.invoke(board, p);
+        Object res = m.invoke(board, point);
         if (res instanceof Intervention it){
           return it;
         }
@@ -729,7 +754,7 @@ public class PlanningPanel extends JPanel {
       }
       try {
         var m2 = board.getClass().getMethod("getInterventionAt", int.class, int.class);
-        Object res2 = m2.invoke(board, p.x, p.y);
+        Object res2 = m2.invoke(board, point.x, point.y);
         if (res2 instanceof Intervention it){
           return it;
         }
@@ -737,7 +762,7 @@ public class PlanningPanel extends JPanel {
       }
       try {
         var m3 = board.getClass().getMethod("hitTest", Point.class);
-        Object hit = m3.invoke(board, p);
+        Object hit = m3.invoke(board, point);
         if (hit != null){
           try {
             var getIt = hit.getClass().getMethod("getIntervention");
