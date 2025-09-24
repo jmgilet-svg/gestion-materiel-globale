@@ -403,5 +403,6 @@ public class InterventionTilePanel extends JPanel {
     }
     this.compact = compact;
     buildUI();
+
   }
 }
