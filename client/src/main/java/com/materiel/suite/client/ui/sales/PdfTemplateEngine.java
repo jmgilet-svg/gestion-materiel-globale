@@ -6,6 +6,8 @@ import com.materiel.suite.client.service.AgencyConfigGateway;
 import com.materiel.suite.client.service.DocumentTemplateService;
 import com.materiel.suite.client.service.PdfService;
 import com.materiel.suite.client.service.ServiceLocator;
+import com.materiel.suite.client.service.TemplatesGateway;
+import com.materiel.suite.client.settings.GeneralSettings;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -13,19 +15,26 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** Fusion très simple {{var}} + appel backend HTML->PDF. */
 public final class PdfTemplateEngine {
   private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ISO_LOCAL_DATE;
+  private static final Pattern PARTIAL_PATTERN = Pattern.compile("\\{\\{>partial:([a-zA-Z0-9._-]+)\\}\\}");
 
   private PdfTemplateEngine(){
   }
 
   public static byte[] renderQuote(QuoteV2 quote, String logoBase64){
     String html = loadTemplate("QUOTE", "default", defaultQuoteTemplate());
+    html = applyPartials(html);
     Map<String, String> values = new LinkedHashMap<>();
     populateAgency(values);
     values.put("client.name", nz(quote == null ? null : quote.getClientName()));
@@ -37,12 +46,14 @@ public final class PdfTemplateEngine {
     values.put("lines.rows", EmailTableBuilder.rowsHtml(quote == null ? null : quote.getLines()));
     values.put("lines.tableHtml", EmailTableBuilder.tableHtml(quote == null ? null : quote.getLines()));
     html = merge(html, values);
+    html = applyPartials(html);
     html = html.replace("{{logo.cdi}}", logoBase64 == null ? "" : "cid:logo");
     return renderHtml(html, logoBase64);
   }
 
   public static byte[] renderInvoice(InvoiceV2 invoice, String logoBase64){
     String html = loadTemplate("INVOICE", "default", defaultInvoiceTemplate());
+    html = applyPartials(html);
     Map<String, String> values = new LinkedHashMap<>();
     populateAgency(values);
     values.put("client.name", nz(invoice == null ? null : invoice.getClientName()));
@@ -55,6 +66,7 @@ public final class PdfTemplateEngine {
     values.put("lines.rows", EmailTableBuilder.rowsHtml(invoice == null ? null : invoice.getLines()));
     values.put("lines.tableHtml", EmailTableBuilder.tableHtml(invoice == null ? null : invoice.getLines()));
     html = merge(html, values);
+    html = applyPartials(html);
     html = html.replace("{{logo.cdi}}", logoBase64 == null ? "" : "cid:logo");
     return renderHtml(html, logoBase64);
   }
@@ -66,6 +78,7 @@ public final class PdfTemplateEngine {
       throw new IllegalStateException("Service PDF indisponible");
     }
     String safeHtml = html == null ? "" : html;
+    safeHtml = applyPartials(safeHtml);
     return svc.render(safeHtml, Map.of(), baseUrl);
   }
 
@@ -97,6 +110,68 @@ public final class PdfTemplateEngine {
     return out;
   }
 
+  private static String applyPartials(String html){
+    String safe = html == null ? "" : html;
+    if (safe.isBlank() || !safe.contains("{{>partial:")){
+      return safe;
+    }
+    Map<String, String> partials = loadPartialContents();
+    GeneralSettings general = loadGeneralSettings();
+    String fallbackCgv = fallbackCgvHtml(general);
+    String current = safe;
+    for (int depth = 0; depth < 5; depth++){
+      Matcher matcher = PARTIAL_PATTERN.matcher(current);
+      if (!matcher.find()){
+        break;
+      }
+      StringBuffer sb = new StringBuffer();
+      do {
+        String key = matcher.group(1);
+        String normalized = key == null ? "" : key.toLowerCase(Locale.ROOT);
+        String content = partials.getOrDefault(normalized, "");
+        if (content.isBlank() && "cgv".equalsIgnoreCase(key)){
+          content = fallbackCgv;
+        }
+        matcher.appendReplacement(sb, Matcher.quoteReplacement(content));
+      } while (matcher.find());
+      matcher.appendTail(sb);
+      String replaced = sb.toString();
+      if (replaced.equals(current)){
+        break;
+      }
+      current = replaced;
+    }
+    return current;
+  }
+
+  private static Map<String, String> loadPartialContents(){
+    TemplatesGateway gateway = ServiceLocator.templates();
+    if (gateway == null){
+      return Collections.emptyMap();
+    }
+    try {
+      List<TemplatesGateway.Template> list = gateway.list("PARTIAL");
+      if (list == null || list.isEmpty()){
+        return Collections.emptyMap();
+      }
+      Map<String, String> map = new HashMap<>();
+      for (TemplatesGateway.Template template : list){
+        if (template == null){
+          continue;
+        }
+        String key = template.key();
+        if (key == null || key.isBlank()){
+          continue;
+        }
+        String normalized = key.toLowerCase(Locale.ROOT);
+        map.put(normalized, template.content() == null ? "" : template.content());
+      }
+      return map;
+    } catch (Exception ignore){
+      return Collections.emptyMap();
+    }
+  }
+
   private static void populateAgency(Map<String, String> values){
     values.put("agency.name", nz(ServiceLocator.agencyLabel()));
     values.put("agency.addressHtml", "");
@@ -105,24 +180,78 @@ public final class PdfTemplateEngine {
     values.put("agency.emailCss", "");
     values.put("agency.emailSignatureHtml", "");
     AgencyConfigGateway gateway = ServiceLocator.agencyConfig();
-    if (gateway == null){
-      return;
-    }
-    try {
-      AgencyConfigGateway.AgencyConfig cfg = gateway.get();
-      if (cfg != null){
-        if (cfg.companyName() != null && !cfg.companyName().isBlank()){
-          values.put("agency.name", cfg.companyName());
+    if (gateway != null){
+      try {
+        AgencyConfigGateway.AgencyConfig cfg = gateway.get();
+        if (cfg != null){
+          if (cfg.companyName() != null && !cfg.companyName().isBlank()){
+            values.put("agency.name", cfg.companyName());
+          }
+          values.put("agency.addressHtml", nz(cfg.companyAddressHtml()));
+          values.put("agency.vatRate", cfg.vatRate() == null ? "" : cfg.vatRate().toString());
+          values.put("agency.cgvHtml", nz(cfg.cgvHtml()));
+          values.put("agency.emailCss", nz(cfg.emailCss()));
+          values.put("agency.emailSignatureHtml", nz(cfg.emailSignatureHtml()));
         }
-        values.put("agency.addressHtml", nz(cfg.companyAddressHtml()));
-        values.put("agency.vatRate", cfg.vatRate() == null ? "" : cfg.vatRate().toString());
-        values.put("agency.cgvHtml", nz(cfg.cgvHtml()));
-        values.put("agency.emailCss", nz(cfg.emailCss()));
-        values.put("agency.emailSignatureHtml", nz(cfg.emailSignatureHtml()));
+      } catch (Exception ignore){
+        // valeurs par défaut déjà renseignées
       }
-    } catch (Exception ignore){
-      // valeurs par défaut déjà renseignées
     }
+    GeneralSettings general = loadGeneralSettings();
+    if (general != null){
+      String vat = values.get("agency.vatRate");
+      String fallbackVat = fallbackVatRate(general);
+      if ((vat == null || vat.isBlank()) && !fallbackVat.isBlank()){
+        values.put("agency.vatRate", fallbackVat);
+      }
+      String cgv = values.get("agency.cgvHtml");
+      String fallbackCgv = fallbackCgvHtml(general);
+      if ((cgv == null || cgv.isBlank()) && !fallbackCgv.isBlank()){
+        values.put("agency.cgvHtml", fallbackCgv);
+      }
+    }
+  }
+
+  private static GeneralSettings loadGeneralSettings(){
+    try {
+      return ServiceLocator.settings().getGeneral();
+    } catch (RuntimeException ex){
+      return null;
+    }
+  }
+
+  private static String fallbackVatRate(GeneralSettings settings){
+    if (settings == null){
+      return "";
+    }
+    Double percent = settings.getDefaultVatPercent();
+    if (percent == null){
+      return "";
+    }
+    BigDecimal rate = BigDecimal.valueOf(percent).divide(BigDecimal.valueOf(100), 6, java.math.RoundingMode.HALF_UP);
+    return stripTrailingZeros(rate);
+  }
+
+  private static String fallbackCgvHtml(GeneralSettings settings){
+    if (settings == null){
+      return "";
+    }
+    String text = settings.getCgvText();
+    if (text == null){
+      return "";
+    }
+    String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
+    if (normalized.trim().isEmpty()){
+      return "";
+    }
+    return normalized.trim().replace("\n", "<br>");
+  }
+
+  private static String stripTrailingZeros(BigDecimal value){
+    if (value == null){
+      return "";
+    }
+    return value.stripTrailingZeros().toPlainString();
   }
 
   private static byte[] renderHtml(String html, String logoBase64){

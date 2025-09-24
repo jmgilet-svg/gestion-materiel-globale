@@ -16,7 +16,7 @@ import java.util.Locale;
  * Dialog simple pour gérer les modèles HTML (devis, factures, emails) par agence.
  */
 public class TemplateManagerDialog extends JDialog {
-  private final JComboBox<String> typeCombo = new JComboBox<>(new String[]{"QUOTE", "INVOICE", "EMAIL"});
+  private final JComboBox<String> typeCombo = new JComboBox<>(new String[]{"QUOTE", "INVOICE", "EMAIL", "PARTIAL"});
   private final DefaultListModel<TemplatesGateway.Template> listModel = new DefaultListModel<>();
   private final JList<TemplatesGateway.Template> list = new JList<>(listModel);
   private final JTextField keyField = new JTextField();
@@ -236,7 +236,11 @@ public class TemplateManagerDialog extends JDialog {
     if (selectedType == null){
       return "default";
     }
-    return "EMAIL".equalsIgnoreCase(selectedType) ? "email" : "default";
+    return switch (selectedType.toUpperCase(Locale.ROOT)) {
+      case "EMAIL" -> "email";
+      case "PARTIAL" -> "partial";
+      default -> "default";
+    };
   }
 
   private String defaultName(){
@@ -248,6 +252,7 @@ public class TemplateManagerDialog extends JDialog {
       case "QUOTE" -> "Modèle devis";
       case "INVOICE" -> "Modèle facture";
       case "EMAIL" -> "Modèle email";
+      case "PARTIAL" -> "Bloc partiel";
       default -> "Modèle";
     };
   }

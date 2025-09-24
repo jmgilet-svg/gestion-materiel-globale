@@ -25,7 +25,7 @@ import java.util.Map;
  * Panneau d'administration des modèles HTML (devis, factures, emails).
  */
 public class TemplatesSettingsPanel extends JPanel {
-  private final JComboBox<String> type = new JComboBox<>(new String[]{"QUOTE", "INVOICE", "EMAIL"});
+  private final JComboBox<String> type = new JComboBox<>(new String[]{"QUOTE", "INVOICE", "EMAIL", "PARTIAL"});
   private final DefaultListModel<TemplatesGateway.Template> listModel = new DefaultListModel<>();
   private final JList<TemplatesGateway.Template> list = new JList<>(listModel);
   private final JTextField key = new JTextField(16);
@@ -295,10 +295,17 @@ public class TemplatesSettingsPanel extends JPanel {
     varsList.add("logo.cdi");
     varsList.add("lines.rows");
     varsList.add("lines.tableHtml");
-    if ("QUOTE".equalsIgnoreCase(selectedType) || "EMAIL".equalsIgnoreCase(selectedType)){
+    varsList.add(">partial:cgv");
+    boolean includeQuote = "QUOTE".equalsIgnoreCase(selectedType)
+        || "EMAIL".equalsIgnoreCase(selectedType)
+        || "PARTIAL".equalsIgnoreCase(selectedType);
+    boolean includeInvoice = "INVOICE".equalsIgnoreCase(selectedType)
+        || "EMAIL".equalsIgnoreCase(selectedType)
+        || "PARTIAL".equalsIgnoreCase(selectedType);
+    if (includeQuote){
       varsList.addAll(List.of("quote.reference", "quote.date", "quote.totalHt", "quote.totalTtc"));
     }
-    if ("INVOICE".equalsIgnoreCase(selectedType) || "EMAIL".equalsIgnoreCase(selectedType)){
+    if (includeInvoice){
       varsList.addAll(List.of("invoice.number", "invoice.date", "invoice.totalHt", "invoice.totalTtc", "invoice.status"));
     }
     vars.setVariables(varsList);
@@ -407,6 +414,7 @@ public class TemplatesSettingsPanel extends JPanel {
     }
     return switch (selectedType.toUpperCase(Locale.ROOT)) {
       case "EMAIL" -> "email";
+      case "PARTIAL" -> "partial";
       default -> "default";
     };
   }
@@ -420,12 +428,20 @@ public class TemplatesSettingsPanel extends JPanel {
       case "QUOTE" -> "Modèle devis";
       case "INVOICE" -> "Modèle facture";
       case "EMAIL" -> "Modèle email";
+      case "PARTIAL" -> "Bloc partiel";
       default -> "Modèle";
     };
   }
 
   private String sampleForType(){
     String selectedType = (String) type.getSelectedItem();
+    if ("PARTIAL".equalsIgnoreCase(selectedType)){
+      return """
+<div>
+  <p>Contenu partiel…</p>
+</div>
+""";
+    }
     if ("INVOICE".equalsIgnoreCase(selectedType)){
       return """
 <!DOCTYPE html><html><body>

@@ -7,6 +7,7 @@ import com.materiel.suite.client.service.AgencyConfigGateway;
 import com.materiel.suite.client.service.MailService;
 import com.materiel.suite.client.service.SalesService;
 import com.materiel.suite.client.service.ServiceLocator;
+import com.materiel.suite.client.settings.GeneralSettings;
 import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.sales.pdf.PdfMini;
 import com.materiel.suite.client.ui.sales.xls.ExcelXml;
@@ -762,24 +763,71 @@ public class SalesPanel extends JPanel {
     vars.put("agency.emailCss", "");
     vars.put("agency.emailSignatureHtml", "");
     AgencyConfigGateway gateway = ServiceLocator.agencyConfig();
-    if (gateway == null){
-      return;
-    }
-    try {
-      AgencyConfigGateway.AgencyConfig cfg = gateway.get();
-      if (cfg != null){
-        if (cfg.companyName() != null && !cfg.companyName().isBlank()){
-          vars.put("agency.name", cfg.companyName());
+    if (gateway != null){
+      try {
+        AgencyConfigGateway.AgencyConfig cfg = gateway.get();
+        if (cfg != null){
+          if (cfg.companyName() != null && !cfg.companyName().isBlank()){
+            vars.put("agency.name", cfg.companyName());
+          }
+          vars.put("agency.addressHtml", nz(cfg.companyAddressHtml()));
+          vars.put("agency.vatRate", cfg.vatRate() == null ? "" : cfg.vatRate().toString());
+          vars.put("agency.cgvHtml", nz(cfg.cgvHtml()));
+          vars.put("agency.emailCss", nz(cfg.emailCss()));
+          vars.put("agency.emailSignatureHtml", nz(cfg.emailSignatureHtml()));
         }
-        vars.put("agency.addressHtml", nz(cfg.companyAddressHtml()));
-        vars.put("agency.vatRate", cfg.vatRate() == null ? "" : cfg.vatRate().toString());
-        vars.put("agency.cgvHtml", nz(cfg.cgvHtml()));
-        vars.put("agency.emailCss", nz(cfg.emailCss()));
-        vars.put("agency.emailSignatureHtml", nz(cfg.emailSignatureHtml()));
+      } catch (Exception ignore){
+        // valeurs par défaut déjà positionnées
       }
-    } catch (Exception ignore){
-      // valeurs par défaut déjà positionnées
     }
+    GeneralSettings settings = loadGeneralSettingsSafely();
+    if (settings != null){
+      String vat = vars.get("agency.vatRate");
+      String fallbackVat = fallbackVatRate(settings);
+      if ((vat == null || vat.isBlank()) && !fallbackVat.isBlank()){
+        vars.put("agency.vatRate", fallbackVat);
+      }
+      String cgv = vars.get("agency.cgvHtml");
+      String fallbackCgv = fallbackCgvHtml(settings);
+      if ((cgv == null || cgv.isBlank()) && !fallbackCgv.isBlank()){
+        vars.put("agency.cgvHtml", fallbackCgv);
+      }
+    }
+  }
+
+  private GeneralSettings loadGeneralSettingsSafely(){
+    try {
+      return ServiceLocator.settings().getGeneral();
+    } catch (RuntimeException ex){
+      return null;
+    }
+  }
+
+  private static String fallbackVatRate(GeneralSettings settings){
+    if (settings == null){
+      return "";
+    }
+    Double percent = settings.getDefaultVatPercent();
+    if (percent == null){
+      return "";
+    }
+    BigDecimal rate = BigDecimal.valueOf(percent).divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP);
+    return rate.stripTrailingZeros().toPlainString();
+  }
+
+  private static String fallbackCgvHtml(GeneralSettings settings){
+    if (settings == null){
+      return "";
+    }
+    String text = settings.getCgvText();
+    if (text == null){
+      return "";
+    }
+    String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
+    if (normalized.trim().isEmpty()){
+      return "";
+    }
+    return normalized.trim().replace("\n", "<br>");
   }
 
   private String buildQuoteLinesHtml(QuoteV2 quote){
