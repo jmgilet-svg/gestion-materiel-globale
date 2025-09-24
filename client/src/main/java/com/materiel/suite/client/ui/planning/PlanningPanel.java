@@ -222,6 +222,7 @@ public class PlanningPanel extends JPanel {
   private final Badge quotedBadge = new Badge("Devisé", Badge.Tone.OK);
   private JButton conflictsBtn;
   private JPanel ganttContainer;
+  private Component planningTabContainer;
   private JTabbedPane tabs;
   private final InterventionView calendarView = new InterventionCalendarView();
   private final InterventionView tableView = new InterventionTableView();
@@ -367,8 +368,9 @@ public class PlanningPanel extends JPanel {
     tableView.setSelectionListener(this::updateSelectionLater);
 
     ganttContainer = center;
+    planningTabContainer = PlanningOverlay.wrap(center);
     tabs = new JTabbedPane();
-    tabs.addTab("Planning", IconRegistry.small("task"), center);
+    tabs.addTab("Planning", IconRegistry.small("task"), planningTabContainer);
     tabs.addTab("Calendrier", IconRegistry.small("calendar"), buildCalendarTab());
     tabs.addTab("Liste", IconRegistry.small("file"), tableView.getComponent());
     tabs.addTab("Pipeline", IconRegistry.small("invoice"), kanbanView);
@@ -376,6 +378,8 @@ public class PlanningPanel extends JPanel {
     tabs.addTab("Cartes", IconRegistry.small("info"), cardsPanel);
     tabs.addChangeListener(e -> updateModeToggleState());
     add(tabs, BorderLayout.CENTER);
+    removeTabIfPresent("Calendrier");
+    removeTabIfPresent("Cartes");
     kanbanView.setListener(new KanbanPanel.Listener(){
       @Override public void onOpen(Intervention intervention){
         openInterventionEditor(intervention);
@@ -929,17 +933,31 @@ public class PlanningPanel extends JPanel {
       CardLayout cl = (CardLayout) ganttContainer.getLayout();
       cl.show(ganttContainer, agendaMode ? "agenda" : "gantt");
     }
-    if (tabs != null && ganttContainer != null && tabs.getSelectedComponent() != ganttContainer){
-      tabs.setSelectedComponent(ganttContainer);
+    if (tabs != null && planningTabContainer != null && tabs.getSelectedComponent() != planningTabContainer){
+      tabs.setSelectedComponent(planningTabContainer);
     }
     updateModeToggleState();
+  }
+
+  private void removeTabIfPresent(String title){
+    if (tabs == null || title == null){
+      return;
+    }
+    for (int i = tabs.getTabCount() - 1; i >= 0; i--){
+      String tabTitle = tabs.getTitleAt(i);
+      if (tabTitle != null && tabTitle.equalsIgnoreCase(title)){
+        tabs.removeTabAt(i);
+      }
+    }
   }
 
   private void updateModeToggleState(){
     if (modeToggle == null){
       return;
     }
-    boolean onPlanningTab = tabs != null && ganttContainer != null && tabs.getSelectedComponent() == ganttContainer;
+    Component selected = tabs != null ? tabs.getSelectedComponent() : null;
+    boolean onPlanningTab = planningTabContainer != null && ganttContainer != null && selected != null
+        && (selected == planningTabContainer || SwingUtilities.isDescendingFrom(ganttContainer, selected));
     updatingModeToggle = true;
     try {
       modeToggle.setEnabled(onPlanningTab);
