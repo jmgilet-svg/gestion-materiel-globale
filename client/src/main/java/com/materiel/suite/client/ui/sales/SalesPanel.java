@@ -58,6 +58,7 @@ public class SalesPanel extends JPanel {
   private final JButton xlsQuote = new JButton("Exporter Excel");
   private final JButton mailQuote = new JButton("Envoyer PDF…");
   private final JButton mailQuoteInsertLines = new JButton("Insérer lignes (HTML)");
+  private final JButton templatesBtn = new JButton("Modèles…");
   private final JTextField searchQuote = new JTextField(18);
   private final JLabel searchQuoteLbl = new JLabel("Recherche:");
   private TableRowSorter<QuoteTableModel> quoteSorter;
@@ -92,6 +93,7 @@ public class SalesPanel extends JPanel {
     qbar.add(pdfQuoteDetail);
     qbar.add(mailQuote);
     qbar.add(mailQuoteInsertLines);
+    qbar.add(templatesBtn);
     qbar.add(quoteToInvoice);
     qbar.add(quoteToInvoicesMulti);
     qbar.add(csvQuote);
@@ -150,6 +152,7 @@ public class SalesPanel extends JPanel {
     pdfQuoteDetail.addActionListener(e -> onExportQuoteDetailedPdf());
     mailQuote.addActionListener(e -> onEmailQuotesPdf());
     mailQuoteInsertLines.addActionListener(e -> onInsertQuoteLinesHtml());
+    templatesBtn.addActionListener(e -> onOpenTemplates());
     quoteToInvoice.addActionListener(e -> onGenerateInvoiceFromQuote());
     quoteToInvoicesMulti.addActionListener(e -> onGenerateInvoicesFromSelection());
     csvQuote.addActionListener(e -> onExportQuotesCsv());
@@ -946,6 +949,12 @@ public class SalesPanel extends JPanel {
     } catch (IOException ex){
       return null;
     }
+  }
+
+  private void onOpenTemplates(){
+    Window owner = SwingUtilities.getWindowAncestor(this);
+    TemplateManagerDialog dialog = new TemplateManagerDialog(owner);
+    dialog.setVisible(true);
   }
 
   private void filterQuotes(){
