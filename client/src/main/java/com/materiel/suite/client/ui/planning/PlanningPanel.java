@@ -25,11 +25,14 @@ import java.awt.datatransfer.Transferable;
 import java.awt.dnd.DnDConstants;
 import java.awt.dnd.DropTarget;
 import java.awt.dnd.DropTargetAdapter;
+import java.awt.dnd.DropTargetDragEvent;
 import java.awt.dnd.DropTargetDropEvent;
+import java.awt.dnd.DropTargetEvent;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseMotionAdapter;
 import java.awt.event.MouseWheelListener;
 import java.io.File;
 import java.io.PrintWriter;
@@ -157,6 +160,34 @@ public class PlanningPanel extends JPanel {
   private static final DateTimeFormatter SIMPLE_DAY_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
   private static final DateTimeFormatter SIMPLE_DAY_TIME_FORMAT = DateTimeFormatter.ofPattern("dd/MM HH:mm");
   private final PlanningBoard board = new PlanningBoard();
+  // Canvas calendrier avec peinture custom (hover/ghost)
+  private final JPanel calendarContainer = new JPanel(new BorderLayout()){
+    @Override public void paint(Graphics g){
+      super.paint(g);
+      Graphics2D g2 = (Graphics2D) g.create();
+      try {
+        Rectangle hoverRect = PlanningPanel.this.rowBoundsToContainer(hoverRowBounds);
+        if (hoverRect != null && hoverRect.height > 0){
+          g2.setColor(new Color(30, 144, 255, 40));
+          g2.fillRect(0, hoverRect.y, getWidth(), hoverRect.height);
+          g2.setColor(new Color(30, 144, 255, 120));
+          g2.drawLine(0, hoverRect.y, getWidth(), hoverRect.y);
+          g2.drawLine(0, hoverRect.y + hoverRect.height - 1, getWidth(), hoverRect.y + hoverRect.height - 1);
+        }
+        Rectangle ghostRect = PlanningPanel.this.boardRectToContainer(ghostBoardRect);
+        if (ghostRect != null && ghostRect.width > 0 && ghostRect.height > 0){
+          g2.setColor(new Color(0, 0, 0, 40));
+          g2.fillRect(ghostRect.x, ghostRect.y, ghostRect.width, ghostRect.height);
+          g2.setColor(new Color(0, 0, 0, 90));
+          g2.drawRect(ghostRect.x, ghostRect.y, ghostRect.width, ghostRect.height);
+        }
+      } finally {
+        g2.dispose();
+      }
+    }
+  };
+  private RowBounds hoverRowBounds;
+  private Rectangle ghostBoardRect;
   private final AgendaBoard agenda = new AgendaBoard();
   private final JButton bulkQuoteBtn = new JButton("Générer devis", IconRegistry.small("file-plus"));
   private final JButton exportIcsBtn = new JButton("Exporter .ics", IconRegistry.small("calendar"));
@@ -210,7 +241,8 @@ public class PlanningPanel extends JPanel {
     super(new BorderLayout());
     add(buildToolbar(), BorderLayout.NORTH);
 
-    planningScroll = new JScrollPane(board, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+    calendarContainer.add(board, BorderLayout.CENTER);
+    planningScroll = new JScrollPane(calendarContainer, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
     // ===== Scroll natif rétabli + réglages douceur =====
     planningScroll.setWheelScrollingEnabled(true);
     if (planningScroll.getVerticalScrollBar() != null){
@@ -220,6 +252,19 @@ public class PlanningPanel extends JPanel {
     // Pour s'assurer que la roue agit sur la vue scrollée
     planningScroll.getViewport().setScrollMode(JViewport.BLIT_SCROLL_MODE);
     board.setAutoscrolls(true);
+    board.addMouseMotionListener(new MouseMotionAdapter(){
+      @Override public void mouseMoved(MouseEvent e){
+        updateHoverRow(e.getPoint());
+      }
+      @Override public void mouseDragged(MouseEvent e){
+        updateHoverRow(e.getPoint());
+      }
+    });
+    board.addMouseListener(new MouseAdapter(){
+      @Override public void mouseExited(MouseEvent e){
+        clearDropPreview();
+      }
+    });
     DayHeader header = new DayHeader(board);
     planningScroll.setColumnHeaderView(header);
     planningScroll.getHorizontalScrollBar().addAdjustmentListener(e -> header.repaint());
@@ -2530,12 +2575,25 @@ public class PlanningPanel extends JPanel {
   private void installCardDropTarget(){
     try {
       new DropTarget(board, new DropTargetAdapter(){
+        @Override public void dragEnter(DropTargetDragEvent dtde){
+          handleDrag(dtde);
+        }
+
+        @Override public void dragOver(DropTargetDragEvent dtde){
+          handleDrag(dtde);
+        }
+
+        @Override public void dragExit(DropTargetEvent dte){
+          clearDropPreview();
+        }
+
         @Override public void drop(DropTargetDropEvent dtde){
-          if (!dtde.isDataFlavorSupported(DataFlavor.stringFlavor)){
-            dtde.rejectDrop();
-            return;
-          }
           try {
+            if (!dtde.isDataFlavorSupported(DataFlavor.stringFlavor)){
+              dtde.rejectDrop();
+              clearDropPreview();
+              return;
+            }
             dtde.acceptDrop(DnDConstants.ACTION_MOVE);
             Transferable transferable = dtde.getTransferable();
             String id = (String) transferable.getTransferData(DataFlavor.stringFlavor);
@@ -2550,7 +2608,20 @@ public class PlanningPanel extends JPanel {
             }
           } catch (Exception ex){
             dtde.dropComplete(false);
+          } finally {
+            updateHoverRow(dtde.getLocation());
+            clearGhostPreview();
           }
+        }
+
+        private void handleDrag(DropTargetDragEvent dtde){
+          if (!dtde.isDataFlavorSupported(DataFlavor.stringFlavor)){
+            dtde.rejectDrag();
+            clearDropPreview();
+            return;
+          }
+          dtde.acceptDrag(DnDConstants.ACTION_MOVE);
+          updateDropPreview(dtde.getLocation());
         }
       });
     } catch (Exception ignore){
@@ -2578,6 +2649,14 @@ public class PlanningPanel extends JPanel {
   }
 
   private ResourceRef resourceAt(Point point){
+    RowHit hit = findRowHit(point);
+    if (hit == null || hit.resource == null){
+      return null;
+    }
+    return toResourceRef(hit.resource);
+  }
+
+  private RowHit findRowHit(Point point){
     if (point == null){
       return null;
     }
@@ -2593,11 +2672,127 @@ public class PlanningPanel extends JPanel {
       }
       int rowHeight = Math.max(1, board.rowHeight(resource.getId()));
       if (y >= offset && y < offset + rowHeight){
-        return toResourceRef(resource);
+        return new RowHit(resource, new RowBounds(offset, rowHeight));
       }
       offset += rowHeight;
     }
     return null;
+  }
+
+  private void updateHoverRow(Point boardPoint){
+    if (boardPoint == null){
+      if (hoverRowBounds != null){
+        hoverRowBounds = null;
+        repaintCalendarOverlay();
+      }
+      return;
+    }
+    RowHit hit = findRowHit(boardPoint);
+    RowBounds bounds = hit != null ? hit.bounds : null;
+    if (bounds == null){
+      if (hoverRowBounds != null){
+        hoverRowBounds = null;
+        repaintCalendarOverlay();
+      }
+      return;
+    }
+    if (!bounds.equals(hoverRowBounds)){
+      hoverRowBounds = bounds;
+      repaintCalendarOverlay();
+    }
+  }
+
+  private void updateDropPreview(Point location){
+    if (location == null){
+      clearDropPreview();
+      return;
+    }
+    RowHit hit = findRowHit(location);
+    RowBounds bounds = hit != null ? hit.bounds : null;
+    if (bounds == null){
+      clearDropPreview();
+      return;
+    }
+    Rectangle ghost = computeGhostRectangle(location, bounds);
+    boolean changed = false;
+    if (!bounds.equals(hoverRowBounds)){
+      hoverRowBounds = bounds;
+      changed = true;
+    }
+    if (!Objects.equals(ghost, ghostBoardRect)){
+      ghostBoardRect = ghost;
+      changed = true;
+    }
+    if (changed){
+      repaintCalendarOverlay();
+    }
+  }
+
+  private Rectangle computeGhostRectangle(Point location, RowBounds bounds){
+    if (location == null || bounds == null){
+      return null;
+    }
+    int slotWidth = Math.max(1, board.getSlotWidth());
+    int slotMinutes = Math.max(1, board.getSlotMinutes());
+    int slotsForHour = Math.max(1, (int) Math.ceil(60d / slotMinutes));
+    int width = slotWidth * slotsForHour;
+    if (width < slotWidth){
+      width = slotWidth;
+    }
+    int x = Math.max(0, location.x);
+    x -= x % slotWidth;
+    int boardWidth = board.getWidth();
+    if (boardWidth > 0){
+      width = Math.min(width, Math.max(1, boardWidth - x));
+    }
+    if (width <= 0){
+      return null;
+    }
+    return new Rectangle(x, bounds.y, width, bounds.height);
+  }
+
+  private Rectangle rowBoundsToContainer(RowBounds bounds){
+    if (bounds == null){
+      return null;
+    }
+    Rectangle boardRect = new Rectangle(0, bounds.y, 1, bounds.height);
+    Rectangle containerRect = SwingUtilities.convertRectangle(board, boardRect, calendarContainer);
+    containerRect.x = 0;
+    containerRect.width = calendarContainer.getWidth();
+    return containerRect;
+  }
+
+  private Rectangle boardRectToContainer(Rectangle rect){
+    if (rect == null){
+      return null;
+    }
+    return SwingUtilities.convertRectangle(board, rect, calendarContainer);
+  }
+
+  private void clearDropPreview(){
+    boolean changed = false;
+    if (hoverRowBounds != null){
+      hoverRowBounds = null;
+      changed = true;
+    }
+    if (ghostBoardRect != null){
+      ghostBoardRect = null;
+      changed = true;
+    }
+    if (changed){
+      repaintCalendarOverlay();
+    }
+  }
+
+  private void clearGhostPreview(){
+    if (ghostBoardRect != null){
+      ghostBoardRect = null;
+      repaintCalendarOverlay();
+    }
+  }
+
+  private void repaintCalendarOverlay(){
+    calendarContainer.repaint();
   }
 
   private ResourceRef toResourceRef(Resource resource){
@@ -3329,5 +3524,40 @@ public class PlanningPanel extends JPanel {
     getInputMap(WHEN).put(KeyStroke.getKeyStroke("control Y"), "redo");
     getActionMap().put("undo", new AbstractAction(){ public void actionPerformed(java.awt.event.ActionEvent e){ CommandBus.get().undo(); refreshPlanning(); }});
     getActionMap().put("redo", new AbstractAction(){ public void actionPerformed(java.awt.event.ActionEvent e){ CommandBus.get().redo(); refreshPlanning(); }});
+  }
+
+  private static final class RowBounds {
+    final int y;
+    final int height;
+
+    RowBounds(int y, int height){
+      this.y = y;
+      this.height = height;
+    }
+
+    @Override public boolean equals(Object obj){
+      if (this == obj){
+        return true;
+      }
+      if (obj == null || getClass() != obj.getClass()){
+        return false;
+      }
+      RowBounds other = (RowBounds) obj;
+      return y == other.y && height == other.height;
+    }
+
+    @Override public int hashCode(){
+      return Objects.hash(y, height);
+    }
+  }
+
+  private static final class RowHit {
+    final Resource resource;
+    final RowBounds bounds;
+
+    RowHit(Resource resource, RowBounds bounds){
+      this.resource = resource;
+      this.bounds = bounds;
+    }
   }
 }
