@@ -368,7 +368,7 @@ public class PlanningPanel extends JPanel {
     tableView.setSelectionListener(this::updateSelectionLater);
 
     ganttContainer = center;
-    planningTabContainer = PlanningOverlay.wrap(center);
+    planningTabContainer = center;
     tabs = new JTabbedPane();
     tabs.addTab("Planning", IconRegistry.small("task"), planningTabContainer);
     tabs.addTab("Calendrier", IconRegistry.small("calendar"), buildCalendarTab());
