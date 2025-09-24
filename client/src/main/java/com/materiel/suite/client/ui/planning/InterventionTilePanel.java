@@ -3,90 +3,141 @@ package com.materiel.suite.client.ui.planning;
 import com.materiel.suite.client.model.Intervention;
 import com.materiel.suite.client.model.InterventionType;
 import com.materiel.suite.client.model.ResourceRef;
+import org.apache.commons.text.StringEscapeUtils;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseWheelEvent;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 
-/** Tuile d'intervention compacte : résumé + actions rapides. */
+/**
+ * Lightweight panel used in the planning module to display an intervention as a "card".
+ * It exposes a listener for common actions (open, edit, mark done, adjust time).
+ */
 public class InterventionTilePanel extends JPanel {
   public interface Listener {
     void onOpen(Intervention intervention);
     void onEdit(Intervention intervention);
     void onMarkDone(Intervention intervention);
+    void onTimeAdjust(Intervention intervention, boolean start, int minutesDelta);
   }
 
-  private static final DateTimeFormatter START_FORMAT =
-      DateTimeFormatter.ofPattern("EEE dd/MM HH:mm", Locale.FRENCH);
-  private static final DateTimeFormatter END_TIME_FORMAT =
-      DateTimeFormatter.ofPattern("HH:mm", Locale.FRENCH);
+  private static final DateTimeFormatter DAY_FORMAT =
+      DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.FRENCH);
+  private static final DateTimeFormatter DATE_SHORT =
+      DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.FRENCH);
+  private static final DateTimeFormatter DATE_TIME =
+      DateTimeFormatter.ofPattern("dd/MM HH:mm", Locale.FRENCH);
+
+  private static final Color STATUS_DEFAULT = new Color(0x1F4ED8);
+  private static final Color STATUS_DONE = new Color(0x2E7D32);
+  private static final Color STATUS_IN_PROGRESS = new Color(0xF59E0B);
+  private static final Color STATUS_CANCELLED = new Color(0xB91C1C);
 
   private final Intervention intervention;
   private final Listener listener;
-  private final JLabel statusDot = new JLabel("●");
-  private final JLabel statusLabel = new JLabel();
-  private final JLabel alertBadge = new JLabel();
+  private boolean compact;
 
   public InterventionTilePanel(Intervention intervention, Listener listener){
     this.intervention = intervention;
     this.listener = listener;
-    setLayout(new BorderLayout());
     setOpaque(true);
     setBackground(Color.WHITE);
-    setBorder(BorderFactory.createCompoundBorder(
-        BorderFactory.createLineBorder(new Color(230, 230, 230)),
-        new EmptyBorder(12, 14, 12, 14)));
+    setLayout(new BorderLayout(0, 8));
+    setToolTipText("Ctrl + molette : ajuster début · Maj + molette : ajuster fin");
+    buildUI();
+    installInteractions();
+  }
 
+  private void installInteractions(){
+    addMouseListener(new MouseAdapter(){
+      @Override public void mouseClicked(MouseEvent e){
+        if (listener != null && SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2){
+          listener.onOpen(intervention);
+        }
+      }
+    });
+    addMouseWheelListener(this::onMouseWheel);
+  }
+
+  private void onMouseWheel(MouseWheelEvent event){
+    if (listener == null){
+      return;
+    }
+    boolean ctrl = event.isControlDown();
+    boolean shift = event.isShiftDown();
+    if (!ctrl && !shift){
+      return;
+    }
+    int rotation = event.getWheelRotation();
+    if (rotation == 0){
+      return;
+    }
+    int minutes = (rotation > 0 ? 1 : -1) * 15;
+    if (ctrl){
+      listener.onTimeAdjust(intervention, true, minutes);
+      event.consume();
+    } else if (shift){
+      listener.onTimeAdjust(intervention, false, minutes);
+      event.consume();
+    }
+  }
+
+  private void buildUI(){
+    removeAll();
+    setBorder(new EmptyBorder(compact ? 6 : 10, compact ? 8 : 12, compact ? 6 : 10, compact ? 8 : 12));
     add(buildHeader(), BorderLayout.NORTH);
     add(buildBody(), BorderLayout.CENTER);
     add(buildFooter(), BorderLayout.SOUTH);
+    revalidate();
+    repaint();
   }
 
   private JComponent buildHeader(){
-    JPanel header = new JPanel(new BorderLayout(8, 8));
+    JPanel header = new JPanel(new BorderLayout(8, 0));
     header.setOpaque(false);
 
-    String client = nonBlank(intervention != null ? intervention.getClientName() : null, "—");
-    String title = nonBlank(intervention != null ? intervention.getLabel() : null, "Intervention");
-    JLabel left = new JLabel("<html><b>" + escape(client) + "</b> — " + escape(title) + "</html>");
-    left.setOpaque(false);
-    header.add(left, BorderLayout.WEST);
-
-    JLabel center = new JLabel(rangeText(intervention));
-    center.setOpaque(false);
-    header.add(center, BorderLayout.CENTER);
+    String client = escape(nonBlank(intervention != null ? intervention.getClientName() : null, "Client"));
+    String title = escape(nonBlank(intervention != null ? intervention.getLabel() : null, "Intervention"));
+    JLabel label = new JLabel("<html><b>" + client + "</b> — " + title + "</html>");
+    label.setFont(label.getFont().deriveFont(Font.PLAIN, adjustFont(label.getFont().getSize2D(), compact ? -0.5f : 0f)));
+    header.add(label, BorderLayout.CENTER);
 
     JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
     right.setOpaque(false);
-    Status status = Status.from(intervention != null ? intervention.getStatus() : null);
-    statusDot.setForeground(status.color);
-    statusLabel.setText(status.icon + " " + status.label);
-    statusLabel.setForeground(status.color);
-    right.add(statusDot);
-    right.add(statusLabel);
 
-    boolean late = isLate(intervention);
-    boolean missing = missingResources(intervention);
-    if (late || missing){
-      alertBadge.setText("  !  ");
-      alertBadge.setOpaque(true);
-      alertBadge.setBackground(new Color(220, 53, 69));
-      alertBadge.setForeground(Color.WHITE);
-      alertBadge.setBorder(new EmptyBorder(2, 6, 2, 6));
-      if (late && missing){
-        alertBadge.setToolTipText("Retard · Ressources manquantes");
-      } else if (late){
-        alertBadge.setToolTipText("Retard");
-      } else {
-        alertBadge.setToolTipText("Ressources manquantes");
-      }
-      right.add(alertBadge);
+    JLabel dot = new JLabel("●");
+    dot.setForeground(colorForStatus(intervention != null ? intervention.getStatus() : null));
+    right.add(dot);
+
+    JLabel status = new JLabel(escape(statusLabel()));
+    Font statusFont = status.getFont();
+    if (statusFont != null){
+      status.setFont(statusFont.deriveFont(Font.BOLD, adjustFont(statusFont.getSize2D(), compact ? -1f : 0f)));
+    }
+    right.add(status);
+
+    String badgeText = badgeText();
+    if (!badgeText.isEmpty()){
+      JLabel badge = new JLabel(badgeText);
+      badge.setOpaque(true);
+      badge.setForeground(new Color(0x0F172A));
+      badge.setBackground(new Color(0xE2E8F0));
+      badge.setBorder(new EmptyBorder(1, 6, 1, 6));
+      right.add(badge);
     }
 
     header.add(right, BorderLayout.EAST);
@@ -100,34 +151,53 @@ public class InterventionTilePanel extends JPanel {
     gc.gridx = 0;
     gc.gridy = 0;
     gc.anchor = GridBagConstraints.WEST;
-    gc.insets = new Insets(4, 0, 4, 0);
-    gc.fill = GridBagConstraints.HORIZONTAL;
-    gc.weightx = 1.0;
+    gc.insets = new Insets(compact ? 2 : 4, 0, compact ? 2 : 4, 0);
 
-    body.add(row("Ressources", resourcesLine(intervention)), gc);
+    body.add(row("Date", formatDateRange()), gc);
     gc.gridy++;
-    body.add(row("Adresse", addressLine(intervention)), gc);
+    body.add(row("Horaire", formatTimeRange()), gc);
     gc.gridy++;
-    body.add(row("Infos", infoLine(intervention)), gc);
+    body.add(row("Ressources", formatResources()), gc);
+    gc.gridy++;
+    body.add(row("Infos", formatInfos()), gc);
 
     return body;
   }
 
-  private JComponent buildFooter(){
-    JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+  private JPanel buildFooter(){
+    JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
     footer.setOpaque(false);
+
     JButton open = new JButton("Ouvrir");
     JButton edit = new JButton("Éditer");
     JButton done = new JButton("Terminer");
 
-    open.addActionListener(e -> { if (listener != null){ listener.onOpen(intervention); } });
-    edit.addActionListener(e -> { if (listener != null){ listener.onEdit(intervention); } });
-    done.addActionListener(e -> { if (listener != null){ listener.onMarkDone(intervention); } });
-
-    Status status = Status.from(intervention != null ? intervention.getStatus() : null);
-    if (status == Status.TERMINE || status == Status.ANNULE){
-      done.setEnabled(false);
+    if (compact){
+      Dimension dim = new Dimension(80, 24);
+      open.setPreferredSize(dim);
+      edit.setPreferredSize(dim);
+      done.setPreferredSize(new Dimension(90, 24));
+      float size = adjustFont(open.getFont().getSize2D(), -1f);
+      open.setFont(open.getFont().deriveFont(size));
+      edit.setFont(edit.getFont().deriveFont(size));
+      done.setFont(done.getFont().deriveFont(size));
     }
+
+    open.addActionListener(e -> {
+      if (listener != null){
+        listener.onOpen(intervention);
+      }
+    });
+    edit.addActionListener(e -> {
+      if (listener != null){
+        listener.onEdit(intervention);
+      }
+    });
+    done.addActionListener(e -> {
+      if (listener != null){
+        listener.onMarkDone(intervention);
+      }
+    });
 
     footer.add(open);
     footer.add(edit);
@@ -135,243 +205,204 @@ public class InterventionTilePanel extends JPanel {
     return footer;
   }
 
-  /* ---------- helpers ---------- */
-
   private JPanel row(String label, String valueHtml){
-    JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-    panel.setOpaque(false);
-    JLabel l = new JLabel("<html><span style='color:#666666'>" + escape(label) + "</span>: " + valueHtml + "</html>");
-    panel.add(l);
-    return panel;
+    JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+    row.setOpaque(false);
+    String escapedLabel = escape(label);
+    JLabel l = new JLabel("<html><span style='color:#666666'>" + escapedLabel + "</span>: " + valueHtml + "</html>");
+    if (compact){
+      l.setFont(l.getFont().deriveFont(adjustFont(l.getFont().getSize2D(), -1f)));
+    }
+    row.add(l);
+    return row;
   }
 
-  private String resourcesLine(Intervention it){
-    if (it == null){
+  private String formatDateRange(){
+    LocalDate start = toLocalDate(intervention != null ? intervention.getDateHeureDebut() : null);
+    LocalDate end = toLocalDate(intervention != null ? intervention.getDateHeureFin() : null);
+    if (start == null && end == null){
+      return "<i>—</i>";
+    }
+    if (start != null && end != null && start.equals(end)){
+      return escape(DAY_FORMAT.format(start));
+    }
+    String from = start != null ? escape(DATE_SHORT.format(start)) : "—";
+    String to = end != null ? escape(DATE_SHORT.format(end)) : "—";
+    return from + " → " + to;
+  }
+
+  private String formatTimeRange(){
+    LocalDateTime start = intervention != null ? intervention.getDateHeureDebut() : null;
+    LocalDateTime end = intervention != null ? intervention.getDateHeureFin() : null;
+    if (start == null && end == null){
+      return "<i>—</i>";
+    }
+    if (start != null && end != null){
+      return escape(start.format(DATE_TIME)) + " → " + escape(end.format(DATE_TIME));
+    }
+    if (start != null){
+      return escape(start.format(DATE_TIME));
+    }
+    return escape(end.format(DATE_TIME));
+  }
+
+  private String formatResources(){
+    if (intervention == null){
       return "<i>Aucune</i>";
     }
-    List<ResourceRef> list = it.getResources();
-    if (list == null || list.isEmpty()){
+    List<ResourceRef> refs = intervention.getResources();
+    if (refs == null || refs.isEmpty()){
       return "<i>Aucune</i>";
     }
     List<String> parts = new ArrayList<>();
-    for (ResourceRef ref : list){
+    for (ResourceRef ref : refs){
       if (ref == null){
         continue;
       }
-      String name = nonBlank(ref.getName(), "Ressource");
-      String icon = iconFor(ref);
-      parts.add(icon + " " + escape(name));
+      String label = escape(nonBlank(ref.getName(), "Ressource"));
+      Icon icon = IconUtil.colored(nonBlank(ref.getIcon(), label), compact ? 14 : 16);
+      if (icon != null){
+        parts.add(img(icon) + " " + label);
+      } else {
+        parts.add("🔧 " + label);
+      }
     }
     return String.join("  •  ", parts);
   }
 
-  private String addressLine(Intervention it){
-    String address = it != null ? it.getAddress() : null;
-    if (address == null || address.isBlank()){
-      address = it != null ? it.getSiteLabel() : null;
-    }
-    return "📍 " + escape(nonBlank(address, "—"));
-  }
-
-  private String infoLine(Intervention it){
-    String duration = plannedDuration(it);
-    String type = "—";
-    if (it != null){
-      InterventionType interventionType = it.getType();
-      if (interventionType != null){
-        type = nonBlank(interventionType.getLabel(), interventionType.getCode());
+  private String formatInfos(){
+    List<String> parts = new ArrayList<>();
+    parts.add("⏱ " + escape(formatDuration()));
+    InterventionType type = intervention != null ? intervention.getType() : null;
+    if (type != null){
+      String label = nonBlank(type.getLabel(), type.getCode());
+      if (!label.isEmpty()){
+        parts.add("🧾 " + escape(label));
       }
     }
-    String responsible = it != null ? nonBlank(it.getDriverName(), it.getCraneName(), it.getTruckName(), "—") : "—";
-    return "⏱ " + escape(duration)
-        + "   •   🧾 " + escape(type)
-        + "   •   👤 " + escape(responsible);
+    String agency = intervention != null ? nonBlank(intervention.getAgency(), intervention.getAgencyId()) : "";
+    if (!agency.isEmpty()){
+      parts.add("🏢 " + escape(agency));
+    }
+    return String.join("   •   ", parts);
   }
 
-  private String rangeText(Intervention it){
-    if (it == null){
-      return "?";
-    }
-    LocalDateTime start = effectiveStart(it);
-    LocalDateTime end = effectiveEnd(it);
-    if (start == null){
-      return "?";
-    }
-    String startText = START_FORMAT.format(start);
-    if (end == null){
-      return startText;
-    }
-    if (end.toLocalDate().equals(start.toLocalDate())){
-      return startText + " → " + END_TIME_FORMAT.format(end);
-    }
-    return startText + " → " + START_FORMAT.format(end);
-  }
-
-  private String plannedDuration(Intervention it){
-    LocalDateTime start = effectiveStart(it);
-    LocalDateTime end = effectiveEnd(it);
+  private String formatDuration(){
+    LocalDateTime start = intervention != null ? intervention.getDateHeureDebut() : null;
+    LocalDateTime end = intervention != null ? intervention.getDateHeureFin() : null;
     if (start == null || end == null){
-      return "—";
+      return "Durée inconnue";
     }
     long minutes = Duration.between(start, end).toMinutes();
     if (minutes <= 0){
-      return "—";
+      return "< 15 min";
     }
     long hours = minutes / 60;
-    long mins = minutes % 60;
+    long rest = minutes % 60;
+    if (hours > 0 && rest > 0){
+      return hours + "h" + String.format(Locale.FRENCH, "%02d", rest);
+    }
     if (hours > 0){
-      return hours + "h" + String.format(Locale.ROOT, "%02d", mins);
+      return hours + "h";
     }
-    return mins + " min";
+    return minutes + " min";
   }
 
-  private static LocalDateTime effectiveStart(Intervention it){
-    if (it == null){
-      return null;
+  private String statusLabel(){
+    if (intervention == null){
+      return "Planifiée";
     }
-    LocalDateTime value = it.getDateHeureDebut();
-    return value != null ? value : it.getStartDateTime();
+    String status = intervention.getStatus();
+    if (status != null && !status.isBlank()){
+      return status;
+    }
+    return "Planifiée";
   }
 
-  private static LocalDateTime effectiveEnd(Intervention it){
-    if (it == null){
-      return null;
+  private Color colorForStatus(String status){
+    if (status == null){
+      return STATUS_DEFAULT;
     }
-    LocalDateTime value = it.getDateHeureFin();
-    return value != null ? value : it.getEndDateTime();
+    String value = status.toLowerCase(Locale.ROOT);
+    if (value.contains("done") || value.contains("term")){
+      return STATUS_DONE;
+    }
+    if (value.contains("cours") || value.contains("progress")){
+      return STATUS_IN_PROGRESS;
+    }
+    if (value.contains("annul") || value.contains("cancel")){
+      return STATUS_CANCELLED;
+    }
+    return STATUS_DEFAULT;
   }
 
-  private static boolean missingResources(Intervention it){
-    if (it == null){
-      return true;
+  private String badgeText(){
+    if (intervention == null){
+      return "";
     }
-    List<ResourceRef> list = it.getResources();
-    return list == null || list.isEmpty();
+    StringBuilder sb = new StringBuilder();
+    if (intervention.isFavorite()){
+      sb.append('★');
+    }
+    if (intervention.isLocked()){
+      if (sb.length() > 0){
+        sb.append(' ');
+      }
+      sb.append('🔒');
+    }
+    return sb.toString();
   }
 
-  private static boolean isLate(Intervention it){
-    if (it == null){
-      return false;
+  private String img(Icon icon){
+    if (icon == null){
+      return "";
     }
-    Status status = Status.from(it.getStatus());
-    if (status == Status.TERMINE || status == Status.ANNULE){
-      return false;
+    int width = Math.max(1, icon.getIconWidth());
+    int height = Math.max(1, icon.getIconHeight());
+    BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+    Graphics2D g2 = image.createGraphics();
+    try {
+      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+      icon.paintIcon(null, g2, 0, 0);
+    } finally {
+      g2.dispose();
     }
-    LocalDateTime end = effectiveEnd(it);
-    if (end == null){
-      return false;
+    try {
+      ByteArrayOutputStream baos = new ByteArrayOutputStream();
+      ImageIO.write(image, "png", baos);
+      String b64 = Base64.getEncoder().encodeToString(baos.toByteArray());
+      return "<img src='data:image/png;base64," + b64 + "' height='" + height + "' valign='middle'/>";
+    } catch (Exception ex){
+      return "";
     }
-    return end.isBefore(LocalDateTime.now());
-  }
-
-  private static String iconFor(ResourceRef ref){
-    if (ref == null){
-      return "🔧";
-    }
-    String iconKey = nonBlank(ref.getIcon(), null);
-    if (iconKey != null){
-      return iconForKey(iconKey);
-    }
-    String name = nonBlank(ref.getName(), null);
-    if (name != null){
-      return iconForKey(name);
-    }
-    return "🔧";
-  }
-
-  private static String iconForKey(String value){
-    if (value == null){
-      return "🔧";
-    }
-    String lower = value.toLowerCase(Locale.ROOT);
-    if (lower.contains("grue") || lower.contains("crane")){
-      return "🏗️";
-    }
-    if (lower.contains("truck") || lower.contains("camion")){
-      return "🚚";
-    }
-    if (lower.contains("driver") || lower.contains("chauffeur")
-        || lower.contains("tech") || lower.contains("operator")
-        || lower.contains("manut") || lower.contains("crew")){
-      return "👷";
-    }
-    if (lower.contains("nacelle") || lower.contains("lift")){
-      return "🛠️";
-    }
-    return "🔧";
   }
 
   private static String escape(String text){
-    if (text == null){
-      return "";
-    }
-    return text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace("\"", "&quot;");
+    return StringEscapeUtils.escapeHtml4(text == null ? "" : text);
   }
 
   private static String nonBlank(String value, String fallback){
-    if (value == null || value.isBlank()){
-      return fallback;
-    }
-    return value;
-  }
-
-  private static String nonBlank(String first, String second, String third, String fallback){
-    String value = nonBlank(first, null);
-    if (value != null){
+    if (value != null && !value.isBlank()){
       return value;
     }
-    value = nonBlank(second, null);
-    if (value != null){
-      return value;
-    }
-    value = nonBlank(third, null);
-    return value != null ? value : fallback;
+    return fallback != null ? fallback : "";
   }
 
-  private enum Status {
-    PLANIFIE("Planifié", "🔵", new Color(30, 144, 255)),
-    BROUILLON("Brouillon", "🟡", new Color(255, 165, 0)),
-    TERMINE("Terminé", "🟢", new Color(40, 167, 69)),
-    ANNULE("Annulé", "🔴", new Color(220, 53, 69)),
-    ENCOURS("En cours", "🔵", new Color(0, 123, 255));
+  private static float adjustFont(float base, float delta){
+    float size = base + delta;
+    return Math.max(10f, size);
+  }
 
-    final String label;
-    final String icon;
-    final Color color;
+  private static LocalDate toLocalDate(LocalDateTime dateTime){
+    return dateTime != null ? dateTime.toLocalDate() : null;
+  }
 
-    Status(String label, String icon, Color color){
-      this.label = label;
-      this.icon = icon;
-      this.color = color;
+  public void setCompact(boolean compact){
+    if (this.compact == compact){
+      return;
     }
+    this.compact = compact;
+    buildUI();
 
-    static Status from(String value){
-      if (value == null){
-        return PLANIFIE;
-      }
-      String normalized = value.trim().toUpperCase(Locale.ROOT)
-          .replace('-', '_')
-          .replace('É', 'E')
-          .replace('È', 'E')
-          .replace('Ê', 'E');
-      if (normalized.contains("TERMINE") || normalized.contains("DONE")
-          || normalized.contains("COMPLET")){
-        return TERMINE;
-      }
-      if (normalized.contains("ANNUL") || normalized.contains("CANCEL")){
-        return ANNULE;
-      }
-      if (normalized.contains("BROU") || normalized.contains("DRAFT")){
-        return BROUILLON;
-      }
-      if (normalized.contains("COURS") || normalized.contains("PROGRESS")
-          || normalized.contains("RUN")){
-        return ENCOURS;
-      }
-      return PLANIFIE;
-    }
   }
 }

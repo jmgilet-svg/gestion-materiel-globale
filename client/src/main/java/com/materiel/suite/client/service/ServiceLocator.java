@@ -4,6 +4,7 @@ import com.materiel.suite.client.agency.AgencyContext;
 import com.materiel.suite.client.auth.AuthService;
 import com.materiel.suite.client.model.InterventionType;
 import com.materiel.suite.client.model.Resource;
+import com.materiel.suite.client.model.ResourceType;
 import com.materiel.suite.client.net.ServiceFactory;
 import com.materiel.suite.client.service.AgencyConfigGateway;
 import com.materiel.suite.client.service.DocumentTemplateService;
@@ -104,6 +105,11 @@ public final class ServiceLocator {
     public List<Resource> listAll(){
       PlanningService svc = ServiceFactory.planning();
       return svc != null ? svc.listResources() : List.of();
+    }
+
+    public List<ResourceType> listTypes(){
+      PlanningService svc = ServiceFactory.planning();
+      return svc != null ? svc.listResourceTypes() : List.of();
     }
 
     public Resource save(Resource resource){

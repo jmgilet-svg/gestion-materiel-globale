@@ -19,6 +19,13 @@ import java.awt.Insets;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Toolkit;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.StringSelection;
+import java.awt.datatransfer.Transferable;
+import java.awt.dnd.DnDConstants;
+import java.awt.dnd.DropTarget;
+import java.awt.dnd.DropTargetAdapter;
+import java.awt.dnd.DropTargetDropEvent;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -43,9 +50,11 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.nio.charset.StandardCharsets;
@@ -54,12 +63,14 @@ import java.util.Objects;
 import javax.swing.AbstractAction;
 import javax.swing.ActionMap;
 import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
+import javax.swing.JCheckBox;
 import javax.swing.InputMap;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -71,6 +82,7 @@ import javax.swing.JViewport;
 import javax.swing.JSeparator;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
+import javax.swing.DefaultComboBoxModel;
 import javax.swing.JTabbedPane;
 import javax.swing.JToggleButton;
 import javax.swing.JTextArea;
@@ -81,6 +93,7 @@ import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingConstants;
 import javax.swing.JPopupMenu;
+import javax.swing.TransferHandler;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -181,6 +194,15 @@ public class PlanningPanel extends JPanel {
   private List<Intervention> allInterventions = List.of();
   private List<Intervention> currentSelection = List.of();
   private boolean kanbanHasError;
+  private JPanel cardsPanel;
+  private JPanel cardsContainer;
+  private JComboBox<String> cardsStatusFilter;
+  private JCheckBox cardsToQuoteFilter;
+  private JComboBox<String> cardsResourceTypeFilter;
+  private JComboBox<String> cardsAgencyFilter;
+  private JToggleButton cardsDensityToggle;
+  private List<Intervention> cardItems = List.of();
+  private final Map<UUID, Resource> resourceCatalog = new HashMap<>();
 
   public PlanningPanel(){
     super(new BorderLayout());
@@ -281,6 +303,8 @@ public class PlanningPanel extends JPanel {
     tabs.addTab("Calendrier", IconRegistry.small("calendar"), buildCalendarTab());
     tabs.addTab("Liste", IconRegistry.small("file"), tableView.getComponent());
     tabs.addTab("Pipeline", IconRegistry.small("invoice"), kanbanView);
+    cardsPanel = buildCardsTab();
+    tabs.addTab("Cartes", IconRegistry.small("info"), cardsPanel);
     tabs.addChangeListener(e -> updateModeToggleState());
     add(tabs, BorderLayout.CENTER);
     kanbanView.setListener(new KanbanPanel.Listener(){
@@ -309,6 +333,8 @@ public class PlanningPanel extends JPanel {
       @Override public void removeUpdate(DocumentEvent e){ applySearch(); }
       @Override public void changedUpdate(DocumentEvent e){ applySearch(); }
     });
+    installCardDropTarget();
+    reloadCardFilters();
     updateModeToggleState();
 
     // Injecte un renderer « propre » si le board expose l’API.
@@ -1738,6 +1764,18 @@ public class PlanningPanel extends JPanel {
     return value == null ? "" : value.trim();
   }
 
+  private static String firstNonBlank(String... values){
+    if (values == null){
+      return "";
+    }
+    for (String value : values){
+      if (value != null && !value.isBlank()){
+        return value;
+      }
+    }
+    return "";
+  }
+
   private static String csvRow(String[] values){
     if (values == null || values.length == 0){
       return "";
@@ -2015,6 +2053,7 @@ public class PlanningPanel extends JPanel {
     }
     calendarView.setMode(isMonthSelected() ? "Mois" : "Semaine");
     allInterventions = sanitizeInterventions(list);
+    reloadCardFilters();
     updateFilteredSimpleViews();
     if (success){
       Toasts.info(this, allInterventions.size() + " intervention(s) chargée(s)");
@@ -2081,6 +2120,7 @@ public class PlanningPanel extends JPanel {
       calendarView.setData(filtered);
       tableView.setData(filtered);
     }
+    updateCardDataset(dataset);
     if (!kanbanHasError){
       kanbanView.setData(dataset);
       applySearch();
@@ -2264,6 +2304,427 @@ public class PlanningPanel extends JPanel {
       } else {
         Toasts.error(this, message);
       }
+    }
+  }
+
+  private JPanel buildCardsTab(){
+    JPanel panel = new JPanel(new BorderLayout());
+    panel.setOpaque(false);
+
+    JPanel filterBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 8));
+    filterBar.setOpaque(false);
+    cardsStatusFilter = new JComboBox<>(new String[]{"Tous", "Planifié", "En cours", "Terminé", "Annulé", "Brouillon"});
+    cardsToQuoteFilter = new JCheckBox("À deviser");
+    cardsResourceTypeFilter = new JComboBox<>(new String[]{"Tous"});
+    cardsAgencyFilter = new JComboBox<>(new String[]{"Toutes"});
+    cardsDensityToggle = new JToggleButton("Mode compact");
+    cardsDensityToggle.setToolTipText("Réduire l'espacement des cartes");
+
+    filterBar.add(new JLabel("Statut"));
+    filterBar.add(cardsStatusFilter);
+    filterBar.add(cardsToQuoteFilter);
+    filterBar.add(new JLabel("Type res."));
+    filterBar.add(cardsResourceTypeFilter);
+    filterBar.add(new JLabel("Agence"));
+    filterBar.add(cardsAgencyFilter);
+    filterBar.add(cardsDensityToggle);
+
+    cardsContainer = new JPanel();
+    cardsContainer.setOpaque(false);
+    cardsContainer.setLayout(new BoxLayout(cardsContainer, BoxLayout.Y_AXIS));
+    cardsContainer.setBorder(new EmptyBorder(12, 12, 12, 12));
+
+    JScrollPane scroll = new JScrollPane(cardsContainer,
+        JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+        JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+    scroll.getVerticalScrollBar().setUnitIncrement(24);
+    scroll.getViewport().setBackground(Color.WHITE);
+    scroll.setBorder(null);
+
+    panel.add(filterBar, BorderLayout.NORTH);
+    panel.add(scroll, BorderLayout.CENTER);
+
+    cardsStatusFilter.addActionListener(e -> applyCardFilters());
+    cardsToQuoteFilter.addActionListener(e -> applyCardFilters());
+    cardsResourceTypeFilter.addActionListener(e -> applyCardFilters());
+    cardsAgencyFilter.addActionListener(e -> applyCardFilters());
+    cardsDensityToggle.addActionListener(e -> applyCardFilters());
+
+    return panel;
+  }
+
+  private void updateCardDataset(List<Intervention> dataset){
+    cardItems = dataset == null ? List.of() : List.copyOf(dataset);
+    applyCardFilters();
+  }
+
+  private void applyCardFilters(){
+    if (cardsContainer == null){
+      return;
+    }
+    List<Intervention> base = cardItems != null ? cardItems : List.of();
+    String status = cardsStatusFilter != null ? String.valueOf(cardsStatusFilter.getSelectedItem()) : "Tous";
+    boolean onlyToQuote = cardsToQuoteFilter != null && cardsToQuoteFilter.isSelected();
+    String resourceType = cardsResourceTypeFilter != null ? String.valueOf(cardsResourceTypeFilter.getSelectedItem()) : "Tous";
+    String agency = cardsAgencyFilter != null ? String.valueOf(cardsAgencyFilter.getSelectedItem()) : "Toutes";
+    boolean compact = cardsDensityToggle != null && cardsDensityToggle.isSelected();
+
+    List<Intervention> filtered = new ArrayList<>();
+    for (Intervention intervention : base){
+      if (intervention == null){
+        continue;
+      }
+      if (!"Tous".equals(status) && !matchesStatus(intervention, status)){
+        continue;
+      }
+      if (onlyToQuote && intervention.hasQuote()){
+        continue;
+      }
+      if (!"Tous".equals(resourceType) && !resourceType.isBlank() && !hasResourceType(intervention, resourceType)){
+        continue;
+      }
+      if (!"Toutes".equals(agency) && !matchesAgency(intervention, agency)){
+        continue;
+      }
+      filtered.add(intervention);
+    }
+    renderCards(filtered, compact);
+  }
+
+  private boolean matchesStatus(Intervention intervention, String filter){
+    String status = intervention.getStatus();
+    if (status == null){
+      return "Planifié".equals(filter) || "Tous".equals(filter);
+    }
+    String lower = status.toLowerCase(Locale.ROOT);
+    return switch (filter) {
+      case "Planifié" -> lower.contains("plan");
+      case "En cours" -> lower.contains("cours") || lower.contains("progress");
+      case "Terminé" -> lower.contains("term") || lower.contains("done");
+      case "Annulé" -> lower.contains("annul") || lower.contains("cancel");
+      case "Brouillon" -> lower.contains("brou") || lower.contains("draft");
+      default -> true;
+    };
+  }
+
+  private boolean matchesAgency(Intervention intervention, String filter){
+    if (filter == null || filter.isBlank()){
+      return true;
+    }
+    String agencyName = intervention.getAgency();
+    if (agencyName != null && agencyName.equalsIgnoreCase(filter)){
+      return true;
+    }
+    String agencyId = intervention.getAgencyId();
+    return agencyId != null && agencyId.equalsIgnoreCase(filter);
+  }
+
+  private boolean hasResourceType(Intervention intervention, String filter){
+    if (intervention == null || filter == null || filter.isBlank()){
+      return false;
+    }
+    String expected = filter.trim().toLowerCase(Locale.ROOT);
+    List<ResourceRef> refs = intervention.getResources();
+    if (refs == null || refs.isEmpty()){
+      return false;
+    }
+    for (ResourceRef ref : refs){
+      if (ref == null){
+        continue;
+      }
+      Resource resource = ref.getId() != null ? resourceCatalog.get(ref.getId()) : null;
+      if (resource != null){
+        String label = resource.getTypeLabel();
+        if (label != null && label.trim().equalsIgnoreCase(filter)){
+          return true;
+        }
+        String code = resource.getTypeCode();
+        if (code != null && code.trim().equalsIgnoreCase(expected)){
+          return true;
+        }
+      }
+      String icon = ref.getIcon();
+      if (icon != null && icon.trim().equalsIgnoreCase(expected)){
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private void renderCards(List<Intervention> items, boolean compact){
+    cardsContainer.removeAll();
+    if (items == null || items.isEmpty()){
+      JLabel empty = new JLabel("Aucune intervention ne correspond aux filtres.");
+      empty.setForeground(UiTokens.textMuted());
+      empty.setBorder(new EmptyBorder(20, 12, 20, 12));
+      cardsContainer.add(empty);
+    } else {
+      boolean first = true;
+      for (Intervention intervention : items){
+        if (!first){
+          cardsContainer.add(Box.createVerticalStrut(compact ? 6 : 12));
+        }
+        first = false;
+        Intervention current = intervention;
+        InterventionTilePanel tile = new InterventionTilePanel(current, new InterventionTilePanel.Listener(){
+          @Override public void onOpen(Intervention it){ openInterventionEditor(it); }
+          @Override public void onEdit(Intervention it){ openInterventionEditor(it); }
+          @Override public void onMarkDone(Intervention it){ markInterventionDone(it); }
+          @Override public void onTimeAdjust(Intervention it, boolean start, int minutesDelta){
+            adjustInterventionTime(it, start, minutesDelta);
+          }
+        });
+        tile.setCompact(compact);
+        tile.setAlignmentX(Component.LEFT_ALIGNMENT);
+        tile.setMaximumSize(new Dimension(Integer.MAX_VALUE, tile.getPreferredSize().height));
+        tile.setTransferHandler(new TransferHandler(){
+          @Override public int getSourceActions(JComponent c){
+            return MOVE;
+          }
+          @Override protected Transferable createTransferable(JComponent c){
+            if (current == null || current.getId() == null){
+              return null;
+            }
+            return new StringSelection(current.getId().toString());
+          }
+        });
+        tile.addMouseListener(new MouseAdapter(){
+          @Override public void mousePressed(MouseEvent e){
+            JComponent src = (JComponent) e.getSource();
+            TransferHandler handler = src.getTransferHandler();
+            if (handler != null){
+              handler.exportAsDrag(src, e, TransferHandler.MOVE);
+            }
+          }
+        });
+        cardsContainer.add(tile);
+      }
+    }
+    cardsContainer.revalidate();
+    cardsContainer.repaint();
+  }
+
+  private void reloadCardFilters(){
+    if (cardsResourceTypeFilter != null){
+      String selection = String.valueOf(cardsResourceTypeFilter.getSelectedItem());
+      List<String> options = new ArrayList<>();
+      options.add("Tous");
+      try {
+        var gateway = ServiceLocator.resources();
+        if (gateway != null){
+          for (var type : gateway.listTypes()){
+            if (type == null){
+              continue;
+            }
+            String label = firstNonBlank(type.getName(), type.getLabel(), type.getCode());
+            if (!label.isBlank() && !options.contains(label)){
+              options.add(label);
+            }
+          }
+        }
+      } catch (Exception ignore){
+      }
+      cardsResourceTypeFilter.setModel(new DefaultComboBoxModel<>(options.toArray(new String[0])));
+      if (selection != null && options.contains(selection)){
+        cardsResourceTypeFilter.setSelectedItem(selection);
+      }
+    }
+    if (cardsAgencyFilter != null){
+      String selection = String.valueOf(cardsAgencyFilter.getSelectedItem());
+      Set<String> agencies = new LinkedHashSet<>();
+      agencies.add("Toutes");
+      if (allInterventions != null){
+        for (Intervention intervention : allInterventions){
+          if (intervention == null){
+            continue;
+          }
+          String label = firstNonBlank(intervention.getAgency(), intervention.getAgencyId());
+          if (!label.isBlank()){
+            agencies.add(label);
+          }
+        }
+      }
+      cardsAgencyFilter.setModel(new DefaultComboBoxModel<>(agencies.toArray(new String[0])));
+      if (selection != null && agencies.contains(selection)){
+        cardsAgencyFilter.setSelectedItem(selection);
+      }
+    }
+    loadResourceCatalog();
+    applyCardFilters();
+  }
+
+  private void loadResourceCatalog(){
+    resourceCatalog.clear();
+    PlanningService planning = ServiceFactory.planning();
+    if (planning == null){
+      return;
+    }
+    try {
+      List<Resource> resources = planning.listResources();
+      if (resources != null){
+        for (Resource resource : resources){
+          if (resource != null && resource.getId() != null){
+            resourceCatalog.put(resource.getId(), resource);
+          }
+        }
+      }
+    } catch (Exception ignore){
+    }
+  }
+
+  private void installCardDropTarget(){
+    try {
+      new DropTarget(board, new DropTargetAdapter(){
+        @Override public void drop(DropTargetDropEvent dtde){
+          if (!dtde.isDataFlavorSupported(DataFlavor.stringFlavor)){
+            dtde.rejectDrop();
+            return;
+          }
+          try {
+            dtde.acceptDrop(DnDConstants.ACTION_MOVE);
+            Transferable transferable = dtde.getTransferable();
+            String id = (String) transferable.getTransferData(DataFlavor.stringFlavor);
+            Point location = dtde.getLocation();
+            LocalDateTime when = boardTimeAt(location);
+            if (id != null && when != null){
+              moveInterventionStart(id, when);
+              dtde.dropComplete(true);
+            } else {
+              dtde.dropComplete(false);
+            }
+          } catch (Exception ex){
+            dtde.dropComplete(false);
+          }
+        }
+      });
+    } catch (Exception ignore){
+    }
+  }
+
+  private LocalDateTime boardTimeAt(Point point){
+    if (point == null){
+      return null;
+    }
+    int slotWidth = Math.max(1, board.getSlotWidth());
+    int slotMinutes = Math.max(1, board.getSlotMinutes());
+    int slotsPerDay = Math.max(1, board.getSlotsPerDay());
+    int x = Math.max(0, point.x);
+    int slot = x / slotWidth;
+    int dayIndex = slot / slotsPerDay;
+    int slotInDay = slot % slotsPerDay;
+    LocalDate startDate = board.getStartDate();
+    if (startDate == null){
+      startDate = LocalDate.now().with(DayOfWeek.MONDAY);
+    }
+    LocalDate day = startDate.plusDays(dayIndex);
+    int minutes = slotInDay * slotMinutes;
+    return day.atStartOfDay().plusMinutes(minutes);
+  }
+
+  private void moveInterventionStart(String id, LocalDateTime newStart){
+    if (id == null || id.isBlank() || newStart == null){
+      return;
+    }
+    UUID uuid;
+    try {
+      uuid = UUID.fromString(id);
+    } catch (IllegalArgumentException ex){
+      return;
+    }
+    Intervention target = null;
+    for (Intervention intervention : allInterventions){
+      if (intervention != null && uuid.equals(intervention.getId())){
+        target = intervention;
+        break;
+      }
+    }
+    if (target == null){
+      return;
+    }
+    PlanningService planning = ServiceFactory.planning();
+    if (planning == null){
+      Toasts.error(this, "Service planning indisponible.");
+      return;
+    }
+    try {
+      LocalDateTime oldStart = target.getDateHeureDebut();
+      LocalDateTime oldEnd = target.getDateHeureFin();
+      long duration = 60;
+      if (oldStart != null && oldEnd != null){
+        duration = Duration.between(oldStart, oldEnd).toMinutes();
+        if (duration <= 0){
+          duration = 15;
+        }
+      }
+      LocalDateTime newEnd = newStart.plusMinutes(duration);
+      target.setDateHeureDebut(newStart);
+      target.setDateHeureFin(newEnd);
+      planning.saveIntervention(target);
+      Toasts.success(this, "Intervention déplacée à " + newStart.format(SIMPLE_DAY_TIME_FORMAT));
+      refreshPlanning();
+    } catch (Exception ex){
+      Toasts.error(this, "Déplacement impossible : " + ex.getMessage());
+    }
+  }
+
+  private void adjustInterventionTime(Intervention intervention, boolean start, int minutesDelta){
+    if (intervention == null || minutesDelta == 0){
+      return;
+    }
+    PlanningService planning = ServiceFactory.planning();
+    if (planning == null){
+      Toasts.error(this, "Service planning indisponible.");
+      return;
+    }
+    try {
+      if (start){
+        LocalDateTime base = intervention.getDateHeureDebut();
+        if (base == null){
+          base = intervention.getStartDateTime();
+        }
+        LocalDateTime updated = base.plusMinutes(minutesDelta);
+        intervention.setDateHeureDebut(updated);
+        LocalDateTime end = intervention.getDateHeureFin();
+        if (end != null && !end.isAfter(updated)){
+          intervention.setDateHeureFin(updated.plusMinutes(15));
+        }
+      } else {
+        LocalDateTime base = intervention.getDateHeureFin();
+        if (base == null){
+          base = intervention.getEndDateTime();
+        }
+        LocalDateTime updated = base.plusMinutes(minutesDelta);
+        LocalDateTime startDt = intervention.getDateHeureDebut();
+        if (startDt != null && !updated.isAfter(startDt)){
+          updated = startDt.plusMinutes(15);
+        }
+        intervention.setDateHeureFin(updated);
+      }
+      planning.saveIntervention(intervention);
+      String delta = minutesDelta > 0 ? "+" + minutesDelta : String.valueOf(minutesDelta);
+      Toasts.success(this, (start ? "Début" : "Fin") + " ajusté(e) de " + delta + " min");
+      refreshPlanning();
+    } catch (Exception ex){
+      Toasts.error(this, "Ajustement impossible : " + ex.getMessage());
+    }
+  }
+
+  private void markInterventionDone(Intervention intervention){
+    if (intervention == null){
+      return;
+    }
+    PlanningService planning = ServiceFactory.planning();
+    if (planning == null){
+      Toasts.error(this, "Service planning indisponible.");
+      return;
+    }
+    try {
+      intervention.setStatus("DONE");
+      planning.saveIntervention(intervention);
+      Toasts.success(this, "Intervention marquée comme terminée");
+      refreshPlanning();
+    } catch (Exception ex){
+      Toasts.error(this, "Impossible de mettre à jour l'intervention : " + ex.getMessage());
     }
   }
 
