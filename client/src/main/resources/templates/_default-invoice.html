@@ -42,11 +42,13 @@
     </tbody>
     <tfoot>
       <tr><td colspan="3" class="right">Total HT</td><td class="right">{{invoice.totalHt}} €</td></tr>
-      <tr><td colspan="3" class="right">TVA</td><td class="right">{{agency.vatRate}}</td></tr>
+      <tr><td colspan="3" class="right">TVA ({{tax.rate}})</td><td class="right">{{agency.vatRate}}</td></tr>
       <tr><td colspan="3" class="right">Total TTC</td><td class="right">{{invoice.totalTtc}} €</td></tr>
+      <tr><td colspan="3" class="right">Net à payer</td><td class="right"><b>{{amount.netToPay}} €</b></td></tr>
       <tr><td colspan="3" class="right">Statut</td><td class="right">{{invoice.status}}</td></tr>
     </tfoot>
   </table>
 
-  <p class="muted">{{agency.cgvHtml}}</p>
+  <p><img style="height:80px" src="{{qr:https://example.local/facture/{{invoice.number}}}}" alt="QR code facture"></p>
+  <p class="muted">{{agency.cgvHtml}}{{>partial:cgv}}</p>
 </body></html>

@@ -1,31 +1,50 @@
 package com.materiel.suite.client.ui.sales;
 
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.MultiFormatWriter;
+import com.google.zxing.client.j2se.MatrixToImageWriter;
+import com.google.zxing.common.BitMatrix;
 import com.materiel.suite.client.model.InvoiceV2;
 import com.materiel.suite.client.model.QuoteV2;
 import com.materiel.suite.client.service.AgencyConfigGateway;
 import com.materiel.suite.client.service.DocumentTemplateService;
 import com.materiel.suite.client.service.PdfService;
 import com.materiel.suite.client.service.ServiceLocator;
+import com.materiel.suite.client.service.TemplatesGateway;
+import com.materiel.suite.client.util.Money;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** Fusion très simple {{var}} + appel backend HTML->PDF. */
 public final class PdfTemplateEngine {
   private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ISO_LOCAL_DATE;
+  private static final Pattern PARTIAL_PATTERN = Pattern.compile("\\{\\{>partial:([a-zA-Z0-9._-]+)\\}\\}");
+  private static final Pattern ASSET_PATTERN = Pattern.compile("\\{\\{asset:([a-zA-Z0-9._-]+)\\}\\}");
+  private static final Pattern QR_PATTERN = Pattern.compile("\\{\\{qr:([^}]+)\\}\\}");
 
   private PdfTemplateEngine(){
   }
 
   public static byte[] renderQuote(QuoteV2 quote, String logoBase64){
-    String html = loadTemplate("QUOTE", "default", defaultQuoteTemplate());
+    return renderQuote(quote, logoBase64, null);
+  }
+
+  public static byte[] renderQuote(QuoteV2 quote, String logoBase64, String templateKey){
+    String html = loadTemplate("QUOTE", templateKey, defaultQuoteTemplate());
     Map<String, String> values = new LinkedHashMap<>();
     populateAgency(values);
     values.put("client.name", nz(quote == null ? null : quote.getClientName()));
@@ -36,13 +55,19 @@ public final class PdfTemplateEngine {
     values.put("quote.totalTtc", formatAmount(quote == null ? null : quote.getTotalTtc()));
     values.put("lines.rows", EmailTableBuilder.rowsHtml(quote == null ? null : quote.getLines()));
     values.put("lines.tableHtml", EmailTableBuilder.tableHtml(quote == null ? null : quote.getLines()));
-    html = merge(html, values);
-    html = html.replace("{{logo.cdi}}", logoBase64 == null ? "" : "cid:logo");
+    values.put("tax.rate", vatPercent());
+    values.put("amount.netToPay", formatAmount(quote == null ? null : quote.getTotalTtc()));
+    html = mergeValues(html, values);
+    html = enrichAssetsAndMacros(html, logoBase64);
     return renderHtml(html, logoBase64);
   }
 
   public static byte[] renderInvoice(InvoiceV2 invoice, String logoBase64){
-    String html = loadTemplate("INVOICE", "default", defaultInvoiceTemplate());
+    return renderInvoice(invoice, logoBase64, null);
+  }
+
+  public static byte[] renderInvoice(InvoiceV2 invoice, String logoBase64, String templateKey){
+    String html = loadTemplate("INVOICE", templateKey, defaultInvoiceTemplate());
     Map<String, String> values = new LinkedHashMap<>();
     populateAgency(values);
     values.put("client.name", nz(invoice == null ? null : invoice.getClientName()));
@@ -54,8 +79,10 @@ public final class PdfTemplateEngine {
     values.put("invoice.status", nz(invoice == null ? null : invoice.getStatus()));
     values.put("lines.rows", EmailTableBuilder.rowsHtml(invoice == null ? null : invoice.getLines()));
     values.put("lines.tableHtml", EmailTableBuilder.tableHtml(invoice == null ? null : invoice.getLines()));
-    html = merge(html, values);
-    html = html.replace("{{logo.cdi}}", logoBase64 == null ? "" : "cid:logo");
+    values.put("tax.rate", vatPercent());
+    values.put("amount.netToPay", formatAmount(invoice == null ? null : invoice.getTotalTtc()));
+    html = mergeValues(html, values);
+    html = enrichAssetsAndMacros(html, logoBase64);
     return renderHtml(html, logoBase64);
   }
 
@@ -70,31 +97,182 @@ public final class PdfTemplateEngine {
   }
 
   private static String loadTemplate(String type, String key, String fallback){
+    String content = null;
     DocumentTemplateService svc = ServiceLocator.documentTemplates();
     if (svc != null){
       try {
         List<DocumentTemplateService.Template> list = svc.list(type);
-        for (DocumentTemplateService.Template template : list){
-          if (template.getKey() != null && template.getKey().equalsIgnoreCase(key)){
-            String content = template.getContent();
-            if (content != null && !content.isBlank()){
-              return content;
+        if (list != null && !list.isEmpty()){
+          String preferredKey = key == null || key.isBlank() ? "default" : key;
+          for (DocumentTemplateService.Template template : list){
+            if (template.getKey() != null && template.getKey().equalsIgnoreCase(preferredKey)){
+              content = template.getContent();
+              break;
+            }
+          }
+          if ((content == null || content.isBlank()) && !"default".equalsIgnoreCase(preferredKey)){
+            for (DocumentTemplateService.Template template : list){
+              if (template.getKey() != null && template.getKey().equalsIgnoreCase("default")){
+                content = template.getContent();
+                break;
+              }
+            }
+          }
+          if (content == null || content.isBlank()){
+            for (DocumentTemplateService.Template template : list){
+              if (template.getContent() != null && !template.getContent().isBlank()){
+                content = template.getContent();
+                break;
+              }
             }
           }
         }
       } catch (Exception ignore){
-        // fallback below
+        content = null;
       }
     }
-    return fallback;
+    if (content == null || content.isBlank()){
+      content = fallback;
+    }
+    return applyPartials(content);
   }
 
-  private static String merge(String template, Map<String, String> values){
-    String out = template;
+  public static String merge(String template, Map<String, String> values){
+    String withPartials = applyPartials(template);
+    String merged = mergeValues(withPartials, values);
+    return enrichAssetsAndMacros(merged, null);
+  }
+
+  private static String mergeValues(String template, Map<String, String> values){
+    String out = template == null ? "" : template;
+    if (values == null || values.isEmpty()){
+      return out;
+    }
     for (Map.Entry<String, String> entry : values.entrySet()){
-      out = out.replace("{{" + entry.getKey() + "}}", entry.getValue() == null ? "" : entry.getValue());
+      String key = entry.getKey();
+      if (key == null){
+        continue;
+      }
+      String value = entry.getValue() == null ? "" : entry.getValue();
+      out = out.replace("{{" + key + "}}", value);
     }
     return out;
+  }
+
+  private static String applyPartials(String html){
+    if (html == null){
+      return "";
+    }
+    Matcher matcher = PARTIAL_PATTERN.matcher(html);
+    if (!matcher.find()){
+      return html;
+    }
+    Map<String, String> partials = loadPartials();
+    matcher.reset();
+    StringBuffer buffer = new StringBuffer();
+    while (matcher.find()){
+      String key = matcher.group(1);
+      String replacement = partials.getOrDefault(key == null ? "" : key.toLowerCase(Locale.ROOT), "");
+      matcher.appendReplacement(buffer, Matcher.quoteReplacement(replacement));
+    }
+    matcher.appendTail(buffer);
+    return buffer.toString();
+  }
+
+  private static Map<String, String> loadPartials(){
+    TemplatesGateway gateway = ServiceLocator.templates();
+    Map<String, String> partials = new HashMap<>();
+    if (gateway == null){
+      return partials;
+    }
+    try {
+      List<TemplatesGateway.Template> list = gateway.list("PARTIAL");
+      for (TemplatesGateway.Template template : list){
+        if (template != null && template.key() != null){
+          String key = template.key().toLowerCase(Locale.ROOT);
+          String value = template.content() == null ? "" : template.content();
+          partials.put(key, value);
+        }
+      }
+    } catch (Exception ignore){
+      // ignore errors and keep partials empty
+    }
+    return partials;
+  }
+
+  private static String enrichAssetsAndMacros(String html, String logoBase64){
+    String out = html == null ? "" : html;
+    String logoValue = logoBase64 == null || logoBase64.isBlank() ? "" : "cid:logo";
+    out = out.replace("{{logo.cdi}}", logoValue);
+    out = replaceAssetTokens(out);
+    out = replaceQrTokens(out);
+    return out;
+  }
+
+  private static String replaceAssetTokens(String html){
+    TemplatesGateway gateway = ServiceLocator.templates();
+    if (gateway == null){
+      return html;
+    }
+    Map<String, TemplatesGateway.Asset> assets = new HashMap<>();
+    try {
+      List<TemplatesGateway.Asset> list = gateway.listAssets();
+      for (TemplatesGateway.Asset asset : list){
+        if (asset != null && asset.key() != null){
+          assets.put(asset.key().toLowerCase(Locale.ROOT), asset);
+        }
+      }
+    } catch (Exception ignore){
+      return html;
+    }
+    if (assets.isEmpty()){
+      return html;
+    }
+    Matcher matcher = ASSET_PATTERN.matcher(html);
+    StringBuffer buffer = new StringBuffer();
+    while (matcher.find()){
+      String key = matcher.group(1);
+      TemplatesGateway.Asset asset = key == null ? null : assets.get(key.toLowerCase(Locale.ROOT));
+      String replacement = "";
+      if (asset != null && asset.base64() != null && !asset.base64().isBlank()){
+        String type = asset.contentType();
+        if (type == null || type.isBlank()){
+          type = "application/octet-stream";
+        }
+        replacement = "data:" + type + ";base64," + asset.base64();
+      }
+      matcher.appendReplacement(buffer, Matcher.quoteReplacement(replacement));
+    }
+    matcher.appendTail(buffer);
+    return buffer.toString();
+  }
+
+  private static String replaceQrTokens(String html){
+    Matcher matcher = QR_PATTERN.matcher(html);
+    if (!matcher.find()){
+      return html;
+    }
+    matcher.reset();
+    StringBuffer buffer = new StringBuffer();
+    while (matcher.find()){
+      String payload = matcher.group(1);
+      String replacement = createQrDataUri(payload);
+      matcher.appendReplacement(buffer, Matcher.quoteReplacement(replacement));
+    }
+    matcher.appendTail(buffer);
+    return buffer.toString();
+  }
+
+  private static String createQrDataUri(String payload){
+    try {
+      String text = payload == null ? "" : payload;
+      BitMatrix matrix = new MultiFormatWriter().encode(text, BarcodeFormat.QR_CODE, 256, 256);
+      ByteArrayOutputStream out = new ByteArrayOutputStream();
+      MatrixToImageWriter.writeToStream(matrix, "PNG", out);
+      return "data:image/png;base64," + Base64.getEncoder().encodeToString(out.toByteArray());
+    } catch (Exception ex){
+      return "";
+    }
   }
 
   private static void populateAgency(Map<String, String> values){
@@ -134,6 +312,30 @@ public final class PdfTemplateEngine {
         ? Map.of()
         : Map.of("logo", logoBase64);
     return svc.render(html, images, null);
+  }
+
+  private static String vatPercent(){
+    Double agencyRate = null;
+    AgencyConfigGateway gateway = ServiceLocator.agencyConfig();
+    if (gateway != null){
+      try {
+        AgencyConfigGateway.AgencyConfig cfg = gateway.get();
+        if (cfg != null){
+          agencyRate = cfg.vatRate();
+        }
+      } catch (Exception ignore){
+        agencyRate = null;
+      }
+    }
+    double percent = agencyRate != null ? agencyRate : Money.vatPercent().doubleValue();
+    if (percent <= 0){
+      return "";
+    }
+    double rounded = Math.rint(percent);
+    if (Math.abs(percent - rounded) < 0.01){
+      return String.format(Locale.ROOT, "%.0f%%", rounded);
+    }
+    return String.format(Locale.ROOT, "%.2f%%", percent);
   }
 
   private static String formatAmount(BigDecimal amount){
@@ -217,10 +419,11 @@ public final class PdfTemplateEngine {
   <!-- Variante pour emails: {{lines.tableHtml}} -->
   <table class=\"totals\">
     <tr><td>Total HT</td><td style=\"text-align:right\">{{quote.totalHt}} €</td></tr>
-    <tr><td>TVA</td><td style=\"text-align:right\">{{agency.vatRate}}</td></tr>
+    <tr><td>TVA ({{tax.rate}})</td><td style=\"text-align:right\">{{agency.vatRate}}</td></tr>
     <tr><td>Total TTC</td><td style=\"text-align:right\"><b>{{quote.totalTtc}} €</b></td></tr>
+    <tr><td>Net à payer</td><td style=\"text-align:right\"><b>{{amount.netToPay}} €</b></td></tr>
   </table>
-  <div class=\"cgv\">{{agency.cgvHtml}}</div>
+  <div class=\"cgv\">{{agency.cgvHtml}}{{>partial:cgv}}</div>
 </body></html>
 """;
   }
@@ -254,11 +457,13 @@ public final class PdfTemplateEngine {
   <!-- Variante pour emails: {{lines.tableHtml}} -->
   <table class=\"totals\">
     <tr><td>Total HT</td><td style=\"text-align:right\">{{invoice.totalHt}} €</td></tr>
-    <tr><td>TVA</td><td style=\"text-align:right\">{{agency.vatRate}}</td></tr>
+    <tr><td>TVA ({{tax.rate}})</td><td style=\"text-align:right\">{{agency.vatRate}}</td></tr>
     <tr><td>Total TTC</td><td style=\"text-align:right\"><b>{{invoice.totalTtc}} €</b></td></tr>
+    <tr><td>Net à payer</td><td style=\"text-align:right\"><b>{{amount.netToPay}} €</b></td></tr>
     <tr><td>Statut</td><td style=\"text-align:right\">{{invoice.status}}</td></tr>
   </table>
-  <div class=\"cgv\">{{agency.cgvHtml}}</div>
+  <div style=\"margin-top:24px\"><img style=\"height:90px\" src=\"{{qr:https://example.local/facture/{{invoice.number}}}}\"/></div>
+  <div class=\"cgv\">{{agency.cgvHtml}}{{>partial:cgv}}</div>
 </body></html>
 """;
   }

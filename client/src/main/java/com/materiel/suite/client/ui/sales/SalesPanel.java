@@ -7,6 +7,7 @@ import com.materiel.suite.client.service.AgencyConfigGateway;
 import com.materiel.suite.client.service.MailService;
 import com.materiel.suite.client.service.SalesService;
 import com.materiel.suite.client.service.ServiceLocator;
+import com.materiel.suite.client.service.TemplatesGateway;
 import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.sales.pdf.PdfMini;
 import com.materiel.suite.client.ui.sales.xls.ExcelXml;
@@ -325,7 +326,8 @@ public class SalesPanel extends JPanel {
       return;
     }
     try {
-      byte[] pdf = PdfTemplateEngine.renderQuote(quote, loadAgencyLogoBase64());
+      String templateKey = pickTemplateKey("QUOTE");
+      byte[] pdf = PdfTemplateEngine.renderQuote(quote, loadAgencyLogoBase64(), templateKey);
       Files.write(chooser.getSelectedFile().toPath(), pdf);
       Toasts.success(this, "PDF exporté : " + chooser.getSelectedFile().getName());
     } catch (Exception ex){
@@ -538,7 +540,8 @@ public class SalesPanel extends JPanel {
       return;
     }
     try {
-      byte[] pdf = PdfTemplateEngine.renderInvoice(invoice, loadAgencyLogoBase64());
+      String templateKey = pickTemplateKey("INVOICE");
+      byte[] pdf = PdfTemplateEngine.renderInvoice(invoice, loadAgencyLogoBase64(), templateKey);
       Files.write(chooser.getSelectedFile().toPath(), pdf);
       Toasts.success(this, "PDF exporté : " + chooser.getSelectedFile().getName());
     } catch (Exception ex){
@@ -909,7 +912,8 @@ public class SalesPanel extends JPanel {
       }
       row = quotesTable.convertRowIndexToModel(row);
       QuoteV2 quote = quotesModel.getAt(row);
-      byte[] pdf = PdfTemplateEngine.renderQuote(quote, loadAgencyLogoBase64());
+      String templateKey = pickTemplateKey("QUOTE");
+      byte[] pdf = PdfTemplateEngine.renderQuote(quote, loadAgencyLogoBase64(), templateKey);
       File file = File.createTempFile("devis-detail-", ".pdf");
       file.deleteOnExit();
       Files.write(file.toPath(), pdf);
@@ -928,7 +932,8 @@ public class SalesPanel extends JPanel {
       }
       row = invoicesTable.convertRowIndexToModel(row);
       InvoiceV2 invoice = invoicesModel.getAt(row);
-      byte[] pdf = PdfTemplateEngine.renderInvoice(invoice, loadAgencyLogoBase64());
+      String templateKey = pickTemplateKey("INVOICE");
+      byte[] pdf = PdfTemplateEngine.renderInvoice(invoice, loadAgencyLogoBase64(), templateKey);
       File file = File.createTempFile("facture-detail-", ".pdf");
       file.deleteOnExit();
       Files.write(file.toPath(), pdf);
@@ -949,6 +954,12 @@ public class SalesPanel extends JPanel {
     } catch (IOException ex){
       return null;
     }
+  }
+
+  private String pickTemplateKey(String type){
+    TemplatePickerDialog dialog = new TemplatePickerDialog(SwingUtilities.getWindowAncestor(this), type);
+    TemplatesGateway.Template template = dialog.pick();
+    return template == null ? null : template.key();
   }
 
   private void onOpenTemplates(){

@@ -11,11 +11,15 @@ import java.util.concurrent.ConcurrentHashMap;
 /** Stockage en mémoire de templates HTML avec valeurs par défaut. */
 public class MockDocumentTemplateService implements DocumentTemplateService {
   private final Map<String, Template> store = new ConcurrentHashMap<>();
+  private final Map<String, Asset> assets = new ConcurrentHashMap<>();
 
   public MockDocumentTemplateService(){
     saveInternal(defaultTemplate("QUOTE", "default", "Modèle devis"));
     saveInternal(defaultTemplate("INVOICE", "default", "Modèle facture"));
     saveInternal(defaultTemplate("EMAIL", "default", "Modèle email"));
+    Template partial = defaultTemplate("PARTIAL", "cgv", "Conditions générales");
+    partial.setContent("<p>Conditions générales de vente</p>");
+    saveInternal(partial);
   }
 
   @Override
@@ -46,6 +50,32 @@ public class MockDocumentTemplateService implements DocumentTemplateService {
     }
   }
 
+  @Override
+  public List<Asset> listAssets(){
+    List<Asset> result = new ArrayList<>();
+    for (Asset asset : assets.values()){
+      result.add(copy(asset));
+    }
+    return result;
+  }
+
+  @Override
+  public Asset saveAsset(Asset asset){
+    Asset copy = asset == null ? new Asset() : copy(asset);
+    if (copy.getId() == null || copy.getId().isBlank()){
+      copy.setId(UUID.randomUUID().toString());
+    }
+    assets.put(copy.getId(), copy(copy));
+    return copy(copy);
+  }
+
+  @Override
+  public void deleteAsset(String id){
+    if (id != null){
+      assets.remove(id);
+    }
+  }
+
   private void saveInternal(Template template){
     store.put(template.getId(), copy(template));
   }
@@ -59,6 +89,17 @@ public class MockDocumentTemplateService implements DocumentTemplateService {
     t.setName(src.getName());
     t.setContent(src.getContent());
     return t;
+  }
+
+  private Asset copy(Asset src){
+    Asset asset = new Asset();
+    asset.setId(src.getId());
+    asset.setAgencyId(src.getAgencyId());
+    asset.setKey(src.getKey());
+    asset.setName(src.getName());
+    asset.setContentType(src.getContentType());
+    asset.setBase64(src.getBase64());
+    return asset;
   }
 
   private Template defaultTemplate(String type, String key, String name){
