@@ -280,17 +280,7 @@ public class EmailPrompt extends JDialog {
   }
 
   private static String merge(String template, Map<String, String> vars){
-    if (template == null){
-      return "";
-    }
-    String out = template;
-    if (vars != null){
-      for (Map.Entry<String, String> entry : vars.entrySet()){
-        String value = entry.getValue();
-        out = out.replace("{{" + entry.getKey() + "}}", value == null ? "" : value);
-      }
-    }
-    return out;
+    return PdfTemplateEngine.merge(template, vars);
   }
 
   private static List<String> split(String value){

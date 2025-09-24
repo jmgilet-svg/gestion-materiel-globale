@@ -25,7 +25,7 @@ import java.util.Map;
  * Panneau d'administration des modèles HTML (devis, factures, emails).
  */
 public class TemplatesSettingsPanel extends JPanel {
-  private final JComboBox<String> type = new JComboBox<>(new String[]{"QUOTE", "INVOICE", "EMAIL"});
+  private final JComboBox<String> type = new JComboBox<>(new String[]{"QUOTE", "INVOICE", "EMAIL", "PARTIAL"});
   private final DefaultListModel<TemplatesGateway.Template> listModel = new DefaultListModel<>();
   private final JList<TemplatesGateway.Template> list = new JList<>(listModel);
   private final JTextField key = new JTextField(16);
@@ -295,6 +295,11 @@ public class TemplatesSettingsPanel extends JPanel {
     varsList.add("logo.cdi");
     varsList.add("lines.rows");
     varsList.add("lines.tableHtml");
+    varsList.add("tax.rate");
+    varsList.add("amount.netToPay");
+    varsList.add(">partial:cgv");
+    varsList.add("asset:mon-image");
+    varsList.add("qr:https://votre-lien");
     if ("QUOTE".equalsIgnoreCase(selectedType) || "EMAIL".equalsIgnoreCase(selectedType)){
       varsList.addAll(List.of("quote.reference", "quote.date", "quote.totalHt", "quote.totalTtc"));
     }
@@ -407,6 +412,7 @@ public class TemplatesSettingsPanel extends JPanel {
     }
     return switch (selectedType.toUpperCase(Locale.ROOT)) {
       case "EMAIL" -> "email";
+      case "PARTIAL" -> "partial";
       default -> "default";
     };
   }
@@ -420,6 +426,7 @@ public class TemplatesSettingsPanel extends JPanel {
       case "QUOTE" -> "Modèle devis";
       case "INVOICE" -> "Modèle facture";
       case "EMAIL" -> "Modèle email";
+      case "PARTIAL" -> "Bloc partiel";
       default -> "Modèle";
     };
   }
@@ -449,6 +456,11 @@ public class TemplatesSettingsPanel extends JPanel {
 {{lines.tableHtml}}
 {{agency.emailSignatureHtml}}
 </body></html>
+""";
+    }
+    if ("PARTIAL".equalsIgnoreCase(selectedType)){
+      return """
+<div style=\"font-size:12px;color:#666\">Vos conditions générales ici.</div>
 """;
     }
     return """

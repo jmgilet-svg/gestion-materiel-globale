@@ -16,7 +16,7 @@ import java.util.Locale;
  * Dialog simple pour gérer les modèles HTML (devis, factures, emails) par agence.
  */
 public class TemplateManagerDialog extends JDialog {
-  private final JComboBox<String> typeCombo = new JComboBox<>(new String[]{"QUOTE", "INVOICE", "EMAIL"});
+  private final JComboBox<String> typeCombo = new JComboBox<>(new String[]{"QUOTE", "INVOICE", "EMAIL", "PARTIAL"});
   private final DefaultListModel<TemplatesGateway.Template> listModel = new DefaultListModel<>();
   private final JList<TemplatesGateway.Template> list = new JList<>(listModel);
   private final JTextField keyField = new JTextField();
@@ -26,6 +26,9 @@ public class TemplateManagerDialog extends JDialog {
   private final JButton saveBtn = new JButton("Enregistrer");
   private final JButton deleteBtn = new JButton("Supprimer");
   private final JButton previewBtn = new JButton("Prévisualiser PDF");
+  private final JButton insertVarBtn = new JButton("Insérer variable");
+  private final JButton insertPartialBtn = new JButton("Insérer partial");
+  private final JButton insertQrBtn = new JButton("Insérer QR");
 
   public TemplateManagerDialog(Window owner){
     super(owner, "Modèles (templates) par agence", ModalityType.APPLICATION_MODAL);
@@ -81,6 +84,9 @@ public class TemplateManagerDialog extends JDialog {
     buttons.add(saveBtn);
     buttons.add(deleteBtn);
     buttons.add(previewBtn);
+    buttons.add(insertVarBtn);
+    buttons.add(insertPartialBtn);
+    buttons.add(insertQrBtn);
     editor.add(buttons, gc);
 
     JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, listScroll, editor);
@@ -94,6 +100,9 @@ public class TemplateManagerDialog extends JDialog {
     saveBtn.addActionListener(e -> onSave());
     deleteBtn.addActionListener(e -> onDelete());
     previewBtn.addActionListener(e -> onPreview());
+    insertVarBtn.addActionListener(e -> insertAtCaret("{{client.name}}"));
+    insertPartialBtn.addActionListener(e -> insertAtCaret("{{>partial:cgv}}"));
+    insertQrBtn.addActionListener(e -> insertAtCaret("{{qr:https://votre-lien}}"));
 
     setSize(1100, 700);
     setLocationRelativeTo(owner);
@@ -184,6 +193,15 @@ public class TemplateManagerDialog extends JDialog {
     }
   }
 
+  private void insertAtCaret(String token){
+    if (token == null){
+      return;
+    }
+    int pos = contentArea.getCaretPosition();
+    contentArea.insert(token, pos);
+    contentArea.requestFocusInWindow();
+  }
+
   private void reload(String selectId){
     listModel.clear();
     TemplatesGateway gateway = ServiceLocator.templates();
@@ -236,7 +254,11 @@ public class TemplateManagerDialog extends JDialog {
     if (selectedType == null){
       return "default";
     }
-    return "EMAIL".equalsIgnoreCase(selectedType) ? "email" : "default";
+    return switch (selectedType.toUpperCase(Locale.ROOT)) {
+      case "EMAIL" -> "email";
+      case "PARTIAL" -> "partial";
+      default -> "default";
+    };
   }
 
   private String defaultName(){
@@ -248,6 +270,7 @@ public class TemplateManagerDialog extends JDialog {
       case "QUOTE" -> "Modèle devis";
       case "INVOICE" -> "Modèle facture";
       case "EMAIL" -> "Modèle email";
+      case "PARTIAL" -> "Bloc partiel";
       default -> "Modèle";
     };
   }

@@ -42,10 +42,11 @@
     </tbody>
     <tfoot>
       <tr><td colspan="3" class="right">Total HT</td><td class="right">{{quote.totalHt}} €</td></tr>
-      <tr><td colspan="3" class="right">TVA</td><td class="right">{{agency.vatRate}}</td></tr>
+      <tr><td colspan="3" class="right">TVA ({{tax.rate}})</td><td class="right">{{agency.vatRate}}</td></tr>
       <tr><td colspan="3" class="right">Total TTC</td><td class="right">{{quote.totalTtc}} €</td></tr>
+      <tr><td colspan="3" class="right">Net à payer</td><td class="right"><b>{{amount.netToPay}} €</b></td></tr>
     </tfoot>
   </table>
 
-  <p class="muted">{{agency.cgvHtml}}</p>
+  <p class="muted">{{agency.cgvHtml}}{{>partial:cgv}}</p>
 </body></html>

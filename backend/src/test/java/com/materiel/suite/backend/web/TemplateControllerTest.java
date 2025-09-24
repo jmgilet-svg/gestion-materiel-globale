@@ -70,6 +70,25 @@ class TemplateControllerTest {
     assertEquals("agency-Z", saved.agencyId(), "agency comes from header when body missing");
   }
 
+  @Test
+  void partialTemplatesAreHandledLikeOthers(){
+    TemplateController.TemplateDto input = new TemplateController.TemplateDto(
+        null,
+        "agency-partial",
+        TemplateController.TemplateType.PARTIAL,
+        "cgv",
+        "Conditions",
+        "<p>CGV</p>"
+    );
+
+    TemplateController.TemplateDto saved = controller.upsert("agency-partial", input);
+    assertEquals(TemplateController.TemplateType.PARTIAL, saved.type());
+
+    List<TemplateController.TemplateDto> partials = controller.list("agency-partial", TemplateController.TemplateType.PARTIAL);
+    assertEquals(1, partials.size());
+    assertEquals("cgv", partials.get(0).key());
+  }
+
   private void clearStore(){
     controller.list(null, null).forEach(t -> {
       if (t != null && t.id() != null){

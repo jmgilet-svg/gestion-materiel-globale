@@ -43,6 +43,17 @@
       <artifactId>openhtmltopdf-slf4j</artifactId>
       <version>1.0.10</version>
     </dependency>
+    <!-- QR code generation -->
+    <dependency>
+      <groupId>com.google.zxing</groupId>
+      <artifactId>core</artifactId>
+      <version>3.5.3</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.zxing</groupId>
+      <artifactId>javase</artifactId>
+      <version>3.5.3</version>
+    </dependency>
     <!-- JACKSON -->
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
