@@ -2594,8 +2594,9 @@ public class PlanningPanel extends JPanel {
             String id = (String) transferable.getTransferData(DataFlavor.stringFlavor);
             Point location = dtde.getLocation();
             LocalDateTime when = boardTimeAt(location);
+            ResourceRef target = resourceAt(location);
             if (id != null && when != null){
-              moveInterventionStart(id, when);
+              moveInterventionStart(id, when, target);
               dtde.dropComplete(true);
             } else {
               dtde.dropComplete(false);
@@ -2629,7 +2630,41 @@ public class PlanningPanel extends JPanel {
     return day.atStartOfDay().plusMinutes(minutes);
   }
 
-  private void moveInterventionStart(String id, LocalDateTime newStart){
+  private ResourceRef resourceAt(Point point){
+    if (point == null){
+      return null;
+    }
+    List<Resource> resources = board.getResourcesList();
+    if (resources == null || resources.isEmpty()){
+      return null;
+    }
+    int y = Math.max(0, point.y);
+    int offset = 0;
+    for (Resource resource : resources){
+      if (resource == null){
+        continue;
+      }
+      int rowHeight = Math.max(1, board.rowHeight(resource.getId()));
+      if (y >= offset && y < offset + rowHeight){
+        return toResourceRef(resource);
+      }
+      offset += rowHeight;
+    }
+    return null;
+  }
+
+  private ResourceRef toResourceRef(Resource resource){
+    if (resource == null){
+      return null;
+    }
+    String icon = null;
+    if (resource.getType() != null){
+      icon = resource.getType().getIcon();
+    }
+    return new ResourceRef(resource.getId(), resource.getName(), icon);
+  }
+
+  private void moveInterventionStart(String id, LocalDateTime newStart, ResourceRef newResource){
     if (id == null || id.isBlank() || newStart == null){
       return;
     }
@@ -2664,6 +2699,9 @@ public class PlanningPanel extends JPanel {
           duration = 15;
         }
       }
+      if (newResource != null){
+        applyPrimaryResource(target, newResource);
+      }
       LocalDateTime newEnd = newStart.plusMinutes(duration);
       target.setDateHeureDebut(newStart);
       target.setDateHeureFin(newEnd);
@@ -2673,6 +2711,24 @@ public class PlanningPanel extends JPanel {
     } catch (Exception ex){
       Toasts.error(this, "Déplacement impossible : " + ex.getMessage());
     }
+  }
+
+  private void applyPrimaryResource(Intervention intervention, ResourceRef primary){
+    if (intervention == null || primary == null){
+      return;
+    }
+    List<ResourceRef> existing = intervention.getResources();
+    List<ResourceRef> updated = new ArrayList<>();
+    updated.add(new ResourceRef(primary.getId(), primary.getName(), primary.getIcon()));
+    if (existing != null && !existing.isEmpty()){
+      for (int i = 1; i < existing.size(); i++){
+        ResourceRef ref = existing.get(i);
+        if (ref != null){
+          updated.add(new ResourceRef(ref.getId(), ref.getName(), ref.getIcon()));
+        }
+      }
+    }
+    intervention.setResources(updated);
   }
 
   private void adjustInterventionTime(Intervention intervention, boolean start, int minutesDelta){
