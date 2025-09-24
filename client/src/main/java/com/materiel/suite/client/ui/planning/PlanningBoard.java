@@ -601,7 +601,7 @@ public class PlanningBoard extends JComponent implements Scrollable {
           it == hovered,
           it.hasQuote(),
           it.getStatus(),
-          it.getAgencyName(),
+          it.getAgency(),
           null);
     }
     return new TileRenderer.State(

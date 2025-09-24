@@ -7,6 +7,7 @@ import com.materiel.suite.client.service.AgencyConfigGateway;
 import com.materiel.suite.client.service.MailService;
 import com.materiel.suite.client.service.SalesService;
 import com.materiel.suite.client.service.ServiceLocator;
+import com.materiel.suite.client.service.TemplatesGateway;
 import com.materiel.suite.client.settings.GeneralSettings;
 
 import com.materiel.suite.client.ui.common.Toasts;

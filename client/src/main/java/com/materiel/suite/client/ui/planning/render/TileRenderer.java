@@ -19,7 +19,7 @@ public interface TileRenderer {
   default State inferState(Intervention it, boolean selected){
     boolean quoted = it != null && it.hasQuote();
     String status = it != null && it.getStatus() != null ? it.getStatus() : "";
-    String agency = it != null ? it.getAgencyName() : null;
+    String agency = it != null ? it.getAgency() : null;
     return new State(selected, false, quoted, status, agency, null);
   }
 }

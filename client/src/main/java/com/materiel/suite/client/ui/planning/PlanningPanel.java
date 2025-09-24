@@ -33,6 +33,9 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelListener;
 import java.io.File;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
@@ -43,8 +46,6 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.time.temporal.WeekFields;
-import java.text.DecimalFormat;
-import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
@@ -54,57 +55,60 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import java.nio.charset.StandardCharsets;
-import java.util.Objects;
 
 import javax.swing.AbstractAction;
 import javax.swing.ActionMap;
+import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListModel;
+import javax.swing.InputMap;
 import javax.swing.JButton;
-import javax.swing.JFileChooser;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
-import javax.swing.JCheckBox;
-import javax.swing.InputMap;
+import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
-import javax.swing.JViewport;
 import javax.swing.JSeparator;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
-import javax.swing.DefaultComboBoxModel;
 import javax.swing.JTabbedPane;
-import javax.swing.JToggleButton;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.JToggleButton;
+import javax.swing.JViewport;
+import javax.swing.KeyStroke;
 import javax.swing.SpinnerDateModel;
 import javax.swing.SpinnerNumberModel;
-import javax.swing.KeyStroke;
-import javax.swing.SwingUtilities;
 import javax.swing.SwingConstants;
-import javax.swing.JPopupMenu;
+import javax.swing.SwingUtilities;
 import javax.swing.TransferHandler;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+
+import org.apache.commons.text.StringEscapeUtils;
 
 import com.materiel.suite.client.agency.AgencyContext;
 import com.materiel.suite.client.model.BillingLine;
 import com.materiel.suite.client.model.Conflict;
 import com.materiel.suite.client.model.DocumentLine;
 import com.materiel.suite.client.model.DocumentTotals;
-import com.materiel.suite.client.model.Invoice;
 import com.materiel.suite.client.model.Intervention;
+import com.materiel.suite.client.model.Invoice;
+import com.materiel.suite.client.model.Quote;
 import com.materiel.suite.client.model.QuoteV2;
 import com.materiel.suite.client.model.Resource;
 import com.materiel.suite.client.model.ResourceRef;
@@ -115,25 +119,24 @@ import com.materiel.suite.client.service.SalesService;
 import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.service.TimelineService;
 import com.materiel.suite.client.settings.EmailSettings;
+import com.materiel.suite.client.ui.MainFrame;
+import com.materiel.suite.client.ui.commands.CommandBus;
 import com.materiel.suite.client.ui.common.Accessible;
+import com.materiel.suite.client.ui.common.Badge;
 import com.materiel.suite.client.ui.common.EmailPreviewDialog;
 import com.materiel.suite.client.ui.common.KeymapUtil;
+import com.materiel.suite.client.ui.common.Pill;
 import com.materiel.suite.client.ui.common.Toasts;
 import com.materiel.suite.client.ui.common.Tooltips;
-import com.materiel.suite.client.ui.commands.CommandBus;
-import com.materiel.suite.client.ui.MainFrame;
 import com.materiel.suite.client.ui.icons.IconRegistry;
 import com.materiel.suite.client.ui.interventions.InterventionDialog;
 import com.materiel.suite.client.ui.interventions.PreDevisUtil;
 import com.materiel.suite.client.ui.interventions.QuoteGenerator;
 import com.materiel.suite.client.ui.planning.render.DefaultTileRenderer;
 import com.materiel.suite.client.ui.planning.render.TileRenderer;
-import com.materiel.suite.client.ui.common.Badge;
-import com.materiel.suite.client.ui.common.Pill;
 import com.materiel.suite.client.ui.theme.ThemeManager;
 import com.materiel.suite.client.ui.theme.UiTokens;
 import com.materiel.suite.client.util.MailSender;
-import org.apache.commons.text.StringEscapeUtils;
 
 public class PlanningPanel extends JPanel {
   private enum QuoteFilter {
@@ -180,7 +183,7 @@ public class PlanningPanel extends JPanel {
   private final InterventionView tableView = new InterventionTableView();
   private final KanbanPanel kanbanView = new KanbanPanel();
   private final JToggleButton cardsToggle = new JToggleButton("Vue cartes");
-  private final JPanel cardsContainer = new JPanel(new GridBagLayout());
+  private JPanel cardsContainer = new JPanel(new GridBagLayout());
   private final JScrollPane cardsScroll = new JScrollPane(cardsContainer);
   private List<Intervention> cardsData = List.of();
   private JScrollPane planningScroll;
@@ -195,7 +198,6 @@ public class PlanningPanel extends JPanel {
   private List<Intervention> currentSelection = List.of();
   private boolean kanbanHasError;
   private JPanel cardsPanel;
-  private JPanel cardsContainer;
   private JComboBox<String> cardsStatusFilter;
   private JCheckBox cardsToQuoteFilter;
   private JComboBox<String> cardsResourceTypeFilter;
@@ -2173,6 +2175,12 @@ public class PlanningPanel extends JPanel {
           @Override public void onMarkDone(Intervention value){
             markInterventionDone(value);
           }
+
+		  @Override
+		public void onTimeAdjust(Intervention intervention, boolean start, int minutesDelta) {
+			// TODO Auto-generated method stub
+			
+		}
         });
         tile.setAlignmentX(Component.LEFT_ALIGNMENT);
         cardsContainer.add(tile, gc);
@@ -2709,24 +2717,6 @@ public class PlanningPanel extends JPanel {
     }
   }
 
-  private void markInterventionDone(Intervention intervention){
-    if (intervention == null){
-      return;
-    }
-    PlanningService planning = ServiceFactory.planning();
-    if (planning == null){
-      Toasts.error(this, "Service planning indisponible.");
-      return;
-    }
-    try {
-      intervention.setStatus("DONE");
-      planning.saveIntervention(intervention);
-      Toasts.success(this, "Intervention marquée comme terminée");
-      refreshPlanning();
-    } catch (Exception ex){
-      Toasts.error(this, "Impossible de mettre à jour l'intervention : " + ex.getMessage());
-    }
-  }
 
   private void installKeyAndWheelShortcuts(){
     int mask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();

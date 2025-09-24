@@ -1,9 +1,20 @@
 package com.materiel.suite.client.ui.sales;
 
-import com.google.zxing.BarcodeFormat;
-import com.google.zxing.MultiFormatWriter;
-import com.google.zxing.client.j2se.MatrixToImageWriter;
-import com.google.zxing.common.BitMatrix;
+import java.io.IOException;
+import java.io.InputStream;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import com.materiel.suite.client.model.InvoiceV2;
 import com.materiel.suite.client.model.QuoteV2;
 import com.materiel.suite.client.service.AgencyConfigGateway;
@@ -12,26 +23,7 @@ import com.materiel.suite.client.service.PdfService;
 import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.service.TemplatesGateway;
 import com.materiel.suite.client.settings.GeneralSettings;
-
-
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.nio.charset.StandardCharsets;
-import java.util.Collections;
-
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Locale;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import com.materiel.suite.client.util.Money;
 
 /** Fusion très simple {{var}} + appel backend HTML->PDF. */
 public final class PdfTemplateEngine {
@@ -41,7 +33,7 @@ public final class PdfTemplateEngine {
   private PdfTemplateEngine(){
   }
 
-  public static byte[] renderQuote(QuoteV2 quote, String logoBase64){
+  public static byte[] renderQuote(QuoteV2 quote, String logoBase64, String templateKey){
     String html = loadTemplate("QUOTE", "default", defaultQuoteTemplate());
     html = applyPartials(html);
     Map<String, String> values = new LinkedHashMap<>();
@@ -61,7 +53,7 @@ public final class PdfTemplateEngine {
     return renderHtml(html, logoBase64);
   }
 
-  public static byte[] renderInvoice(InvoiceV2 invoice, String logoBase64){
+  public static byte[] renderInvoice(InvoiceV2 invoice, String logoBase64, String templateKey){
     String html = loadTemplate("INVOICE", "default", defaultInvoiceTemplate());
     html = applyPartials(html);
     Map<String, String> values = new LinkedHashMap<>();
@@ -156,26 +148,6 @@ public final class PdfTemplateEngine {
     return out;
   }
 
-  private static String applyPartials(String html){
-    if (html == null){
-      return "";
-    }
-    Matcher matcher = PARTIAL_PATTERN.matcher(html);
-    if (!matcher.find()){
-      return html;
-    }
-    Map<String, String> partials = loadPartials();
-    matcher.reset();
-    StringBuffer buffer = new StringBuffer();
-    while (matcher.find()){
-      String key = matcher.group(1);
-      String replacement = partials.getOrDefault(key == null ? "" : key.toLowerCase(Locale.ROOT), "");
-      matcher.appendReplacement(buffer, Matcher.quoteReplacement(replacement));
-    }
-    matcher.appendTail(buffer);
-    return buffer.toString();
-  }
-
   private static Map<String, String> loadPartials(){
     TemplatesGateway gateway = ServiceLocator.templates();
     Map<String, String> partials = new HashMap<>();
@@ -201,8 +173,8 @@ public final class PdfTemplateEngine {
     String out = html == null ? "" : html;
     String logoValue = logoBase64 == null || logoBase64.isBlank() ? "" : "cid:logo";
     out = out.replace("{{logo.cdi}}", logoValue);
-    out = replaceAssetTokens(out);
-    out = replaceQrTokens(out);
+//    out = replaceAssetTokens(out);
+//    out = replaceQrTokens(out);
     return out;
   }
 
