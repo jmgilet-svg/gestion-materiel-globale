@@ -69,6 +69,51 @@ public class ApiDocumentTemplateService implements DocumentTemplateService {
     }
   }
 
+  @Override
+  public List<Asset> listAssets(){
+    try {
+      String json = rc.get("/api/v2/template-assets");
+      Object parsed = SimpleJson.parse(json);
+      List<Object> arr = SimpleJson.asArr(parsed);
+      List<Asset> result = new ArrayList<>();
+      for (Object item : arr){
+        result.add(assetFromMap(SimpleJson.asObj(item)));
+      }
+      return result;
+    } catch (Exception ex){
+      if (fallback != null){
+        return fallback.listAssets();
+      }
+      throw new RuntimeException(ex);
+    }
+  }
+
+  @Override
+  public Asset saveAsset(Asset asset){
+    try {
+      String json = rc.post("/api/v2/template-assets", assetToJson(asset));
+      return assetFromMap(SimpleJson.asObj(SimpleJson.parse(json)));
+    } catch (Exception ex){
+      if (fallback != null){
+        return fallback.saveAsset(asset);
+      }
+      throw new RuntimeException(ex);
+    }
+  }
+
+  @Override
+  public void deleteAsset(String id){
+    try {
+      rc.delete("/api/v2/template-assets/" + id);
+    } catch (Exception ex){
+      if (fallback != null){
+        fallback.deleteAsset(id);
+        return;
+      }
+      throw new RuntimeException(ex);
+    }
+  }
+
   private Template fromMap(Map<String, Object> map){
     Template t = new Template();
     t.setId(SimpleJson.str(map.get("id")));
@@ -89,6 +134,30 @@ public class ApiDocumentTemplateService implements DocumentTemplateService {
     first = append(sb, first, "key", template.getKey());
     first = append(sb, first, "name", template.getName());
     append(sb, first, "content", template.getContent());
+    sb.append('}');
+    return sb.toString();
+  }
+
+  private Asset assetFromMap(Map<String, Object> map){
+    Asset asset = new Asset();
+    asset.setId(SimpleJson.str(map.get("id")));
+    asset.setAgencyId(SimpleJson.str(map.get("agencyId")));
+    asset.setKey(SimpleJson.str(map.get("key")));
+    asset.setName(SimpleJson.str(map.get("name")));
+    asset.setContentType(SimpleJson.str(map.get("contentType")));
+    asset.setBase64(SimpleJson.str(map.get("base64")));
+    return asset;
+  }
+
+  private String assetToJson(Asset asset){
+    StringBuilder sb = new StringBuilder("{");
+    boolean first = true;
+    first = append(sb, first, "id", asset == null ? null : asset.getId());
+    first = append(sb, first, "agencyId", asset == null ? null : asset.getAgencyId());
+    first = append(sb, first, "key", asset == null ? null : asset.getKey());
+    first = append(sb, first, "name", asset == null ? null : asset.getName());
+    first = append(sb, first, "contentType", asset == null ? null : asset.getContentType());
+    append(sb, first, "base64", asset == null ? null : asset.getBase64());
     sb.append('}');
     return sb.toString();
   }

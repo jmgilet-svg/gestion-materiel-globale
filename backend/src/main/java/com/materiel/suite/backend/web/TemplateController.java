@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/v2/templates")
 public class TemplateController {
-  public enum TemplateType { QUOTE, INVOICE, EMAIL }
+  public enum TemplateType { QUOTE, INVOICE, EMAIL, PARTIAL }
 
   public record TemplateDto(String id, String agencyId, TemplateType type, String key, String name, String content){}
 

@@ -467,6 +467,11 @@ public class TemplatesSettingsPanel extends JPanel {
 </body></html>
 """;
     }
+    if ("PARTIAL".equalsIgnoreCase(selectedType)){
+      return """
+<div style=\"font-size:12px;color:#666\">Vos conditions générales ici.</div>
+""";
+    }
     return """
 <!DOCTYPE html><html><body>
 <h1>Devis {{quote.reference}}</h1>

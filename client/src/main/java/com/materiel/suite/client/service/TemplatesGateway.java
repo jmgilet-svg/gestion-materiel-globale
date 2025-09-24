@@ -29,20 +29,6 @@ public final class TemplatesGateway {
     }
   }
 
-  private Template copy(DocumentTemplateService.Template template){
-    if (template == null){
-      return null;
-    }
-    return new Template(
-        template.getId(),
-        template.getAgencyId(),
-        template.getType(),
-        template.getKey(),
-        template.getName(),
-        template.getContent()
-    );
-  }
-
   public Template save(Template template){
     DocumentTemplateService svc = ServiceLocator.documentTemplates();
     if (svc == null){
@@ -75,6 +61,68 @@ public final class TemplatesGateway {
     svc.delete(id);
   }
 
+  public List<Asset> listAssets(){
+    DocumentTemplateService svc = ServiceLocator.documentTemplates();
+    if (svc == null){
+      return List.of();
+    }
+    try {
+      List<DocumentTemplateService.Asset> assets = svc.listAssets();
+      if (assets == null || assets.isEmpty()){
+        return List.of();
+      }
+      List<Asset> out = new ArrayList<>();
+      for (DocumentTemplateService.Asset asset : assets){
+        Asset copy = copy(asset);
+        if (copy != null){
+          out.add(copy);
+        }
+      }
+      return out.isEmpty() ? List.of() : List.copyOf(out);
+    } catch (Exception ignore){
+      return List.of();
+    }
+  }
+
+  public Asset saveAsset(Asset asset){
+    DocumentTemplateService svc = ServiceLocator.documentTemplates();
+    if (svc == null){
+      return asset;
+    }
+    try {
+      DocumentTemplateService.Asset dto = toDocumentAsset(asset);
+      DocumentTemplateService.Asset saved = svc.saveAsset(dto);
+      return saved == null ? asset : copy(saved);
+    } catch (Exception ex){
+      throw new RuntimeException(ex);
+    }
+  }
+
+  public void deleteAsset(String id){
+    if (id == null || id.isBlank()){
+      return;
+    }
+    DocumentTemplateService svc = ServiceLocator.documentTemplates();
+    if (svc == null){
+      return;
+    }
+    svc.deleteAsset(id);
+  }
+
+  private Template copy(DocumentTemplateService.Template template){
+    if (template == null){
+      return null;
+    }
+    return new Template(
+        template.getId(),
+        template.getAgencyId(),
+        template.getType(),
+        template.getKey(),
+        template.getName(),
+        template.getContent()
+    );
+  }
+
   private DocumentTemplateService.Template toDocumentTemplate(Template template){
     DocumentTemplateService.Template dto = new DocumentTemplateService.Template();
     if (template == null){
@@ -94,7 +142,53 @@ public final class TemplatesGateway {
     return dto;
   }
 
+  private Asset copy(DocumentTemplateService.Asset asset){
+    if (asset == null){
+      return null;
+    }
+    return new Asset(
+        asset.getId(),
+        asset.getAgencyId(),
+        asset.getKey(),
+        asset.getName(),
+        asset.getContentType(),
+        asset.getBase64()
+    );
+  }
+
+  private DocumentTemplateService.Asset toDocumentAsset(Asset asset){
+    DocumentTemplateService.Asset dto = new DocumentTemplateService.Asset();
+    if (asset == null){
+      dto.setAgencyId(ServiceLocator.agencyId());
+      return dto;
+    }
+    dto.setId(asset.id());
+    String agency = asset.agencyId();
+    if (agency == null || agency.isBlank()){
+      agency = ServiceLocator.agencyId();
+    }
+    dto.setAgencyId(agency);
+    dto.setKey(asset.key());
+    dto.setName(asset.name());
+    dto.setContentType(asset.contentType());
+    dto.setBase64(asset.base64());
+    return dto;
+  }
+
   public record Template(String id, String agencyId, String type, String key, String name, String content) {
+    @Override
+    public String toString(){
+      if (name != null && !name.isBlank()){
+        return name;
+      }
+      if (key != null && !key.isBlank()){
+        return key;
+      }
+      return id == null ? "" : id;
+    }
+  }
+
+  public record Asset(String id, String agencyId, String key, String name, String contentType, String base64) {
     @Override
     public String toString(){
       if (name != null && !name.isBlank()){

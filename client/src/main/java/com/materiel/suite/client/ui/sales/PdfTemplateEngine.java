@@ -1,5 +1,9 @@
 package com.materiel.suite.client.ui.sales;
 
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.MultiFormatWriter;
+import com.google.zxing.client.j2se.MatrixToImageWriter;
+import com.google.zxing.common.BitMatrix;
 import com.materiel.suite.client.model.InvoiceV2;
 import com.materiel.suite.client.model.QuoteV2;
 import com.materiel.suite.client.service.AgencyConfigGateway;
@@ -9,16 +13,21 @@ import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.service.TemplatesGateway;
 import com.materiel.suite.client.settings.GeneralSettings;
 
+
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
+
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -48,6 +57,7 @@ public final class PdfTemplateEngine {
     html = merge(html, values);
     html = applyPartials(html);
     html = html.replace("{{logo.cdi}}", logoBase64 == null ? "" : "cid:logo");
+
     return renderHtml(html, logoBase64);
   }
 
@@ -68,6 +78,7 @@ public final class PdfTemplateEngine {
     html = merge(html, values);
     html = applyPartials(html);
     html = html.replace("{{logo.cdi}}", logoBase64 == null ? "" : "cid:logo");
+
     return renderHtml(html, logoBase64);
   }
 
@@ -83,30 +94,115 @@ public final class PdfTemplateEngine {
   }
 
   private static String loadTemplate(String type, String key, String fallback){
+    String content = null;
     DocumentTemplateService svc = ServiceLocator.documentTemplates();
     if (svc != null){
       try {
         List<DocumentTemplateService.Template> list = svc.list(type);
-        for (DocumentTemplateService.Template template : list){
-          if (template.getKey() != null && template.getKey().equalsIgnoreCase(key)){
-            String content = template.getContent();
-            if (content != null && !content.isBlank()){
-              return content;
+        if (list != null && !list.isEmpty()){
+          String preferredKey = key == null || key.isBlank() ? "default" : key;
+          for (DocumentTemplateService.Template template : list){
+            if (template.getKey() != null && template.getKey().equalsIgnoreCase(preferredKey)){
+              content = template.getContent();
+              break;
+            }
+          }
+          if ((content == null || content.isBlank()) && !"default".equalsIgnoreCase(preferredKey)){
+            for (DocumentTemplateService.Template template : list){
+              if (template.getKey() != null && template.getKey().equalsIgnoreCase("default")){
+                content = template.getContent();
+                break;
+              }
+            }
+          }
+          if (content == null || content.isBlank()){
+            for (DocumentTemplateService.Template template : list){
+              if (template.getContent() != null && !template.getContent().isBlank()){
+                content = template.getContent();
+                break;
+              }
             }
           }
         }
       } catch (Exception ignore){
-        // fallback below
+        content = null;
       }
     }
-    return fallback;
+    if (content == null || content.isBlank()){
+      content = fallback;
+    }
+    return applyPartials(content);
   }
 
-  private static String merge(String template, Map<String, String> values){
-    String out = template;
-    for (Map.Entry<String, String> entry : values.entrySet()){
-      out = out.replace("{{" + entry.getKey() + "}}", entry.getValue() == null ? "" : entry.getValue());
+  public static String merge(String template, Map<String, String> values){
+    String withPartials = applyPartials(template);
+    String merged = mergeValues(withPartials, values);
+    return enrichAssetsAndMacros(merged, null);
+  }
+
+  private static String mergeValues(String template, Map<String, String> values){
+    String out = template == null ? "" : template;
+    if (values == null || values.isEmpty()){
+      return out;
     }
+    for (Map.Entry<String, String> entry : values.entrySet()){
+      String key = entry.getKey();
+      if (key == null){
+        continue;
+      }
+      String value = entry.getValue() == null ? "" : entry.getValue();
+      out = out.replace("{{" + key + "}}", value);
+    }
+    return out;
+  }
+
+  private static String applyPartials(String html){
+    if (html == null){
+      return "";
+    }
+    Matcher matcher = PARTIAL_PATTERN.matcher(html);
+    if (!matcher.find()){
+      return html;
+    }
+    Map<String, String> partials = loadPartials();
+    matcher.reset();
+    StringBuffer buffer = new StringBuffer();
+    while (matcher.find()){
+      String key = matcher.group(1);
+      String replacement = partials.getOrDefault(key == null ? "" : key.toLowerCase(Locale.ROOT), "");
+      matcher.appendReplacement(buffer, Matcher.quoteReplacement(replacement));
+    }
+    matcher.appendTail(buffer);
+    return buffer.toString();
+  }
+
+  private static Map<String, String> loadPartials(){
+    TemplatesGateway gateway = ServiceLocator.templates();
+    Map<String, String> partials = new HashMap<>();
+    if (gateway == null){
+      return partials;
+    }
+    try {
+      List<TemplatesGateway.Template> list = gateway.list("PARTIAL");
+      for (TemplatesGateway.Template template : list){
+        if (template != null && template.key() != null){
+          String key = template.key().toLowerCase(Locale.ROOT);
+          String value = template.content() == null ? "" : template.content();
+          partials.put(key, value);
+        }
+      }
+    } catch (Exception ignore){
+      // ignore errors and keep partials empty
+    }
+    return partials;
+  }
+
+  private static String enrichAssetsAndMacros(String html, String logoBase64){
+    String out = html == null ? "" : html;
+    String logoValue = logoBase64 == null || logoBase64.isBlank() ? "" : "cid:logo";
+    out = out.replace("{{logo.cdi}}", logoValue);
+    out = replaceAssetTokens(out);
+    out = replaceQrTokens(out);
     return out;
   }
 
@@ -265,6 +361,30 @@ public final class PdfTemplateEngine {
     return svc.render(html, images, null);
   }
 
+  private static String vatPercent(){
+    Double agencyRate = null;
+    AgencyConfigGateway gateway = ServiceLocator.agencyConfig();
+    if (gateway != null){
+      try {
+        AgencyConfigGateway.AgencyConfig cfg = gateway.get();
+        if (cfg != null){
+          agencyRate = cfg.vatRate();
+        }
+      } catch (Exception ignore){
+        agencyRate = null;
+      }
+    }
+    double percent = agencyRate != null ? agencyRate : Money.vatPercent().doubleValue();
+    if (percent <= 0){
+      return "";
+    }
+    double rounded = Math.rint(percent);
+    if (Math.abs(percent - rounded) < 0.01){
+      return String.format(Locale.ROOT, "%.0f%%", rounded);
+    }
+    return String.format(Locale.ROOT, "%.2f%%", percent);
+  }
+
   private static String formatAmount(BigDecimal amount){
     if (amount == null){
       return "0.00";
@@ -346,10 +466,11 @@ public final class PdfTemplateEngine {
   <!-- Variante pour emails: {{lines.tableHtml}} -->
   <table class=\"totals\">
     <tr><td>Total HT</td><td style=\"text-align:right\">{{quote.totalHt}} €</td></tr>
-    <tr><td>TVA</td><td style=\"text-align:right\">{{agency.vatRate}}</td></tr>
+    <tr><td>TVA ({{tax.rate}})</td><td style=\"text-align:right\">{{agency.vatRate}}</td></tr>
     <tr><td>Total TTC</td><td style=\"text-align:right\"><b>{{quote.totalTtc}} €</b></td></tr>
+    <tr><td>Net à payer</td><td style=\"text-align:right\"><b>{{amount.netToPay}} €</b></td></tr>
   </table>
-  <div class=\"cgv\">{{agency.cgvHtml}}</div>
+  <div class=\"cgv\">{{agency.cgvHtml}}{{>partial:cgv}}</div>
 </body></html>
 """;
   }
@@ -383,11 +504,13 @@ public final class PdfTemplateEngine {
   <!-- Variante pour emails: {{lines.tableHtml}} -->
   <table class=\"totals\">
     <tr><td>Total HT</td><td style=\"text-align:right\">{{invoice.totalHt}} €</td></tr>
-    <tr><td>TVA</td><td style=\"text-align:right\">{{agency.vatRate}}</td></tr>
+    <tr><td>TVA ({{tax.rate}})</td><td style=\"text-align:right\">{{agency.vatRate}}</td></tr>
     <tr><td>Total TTC</td><td style=\"text-align:right\"><b>{{invoice.totalTtc}} €</b></td></tr>
+    <tr><td>Net à payer</td><td style=\"text-align:right\"><b>{{amount.netToPay}} €</b></td></tr>
     <tr><td>Statut</td><td style=\"text-align:right\">{{invoice.status}}</td></tr>
   </table>
-  <div class=\"cgv\">{{agency.cgvHtml}}</div>
+  <div style=\"margin-top:24px\"><img style=\"height:90px\" src=\"{{qr:https://example.local/facture/{{invoice.number}}}}\"/></div>
+  <div class=\"cgv\">{{agency.cgvHtml}}{{>partial:cgv}}</div>
 </body></html>
 """;
   }
