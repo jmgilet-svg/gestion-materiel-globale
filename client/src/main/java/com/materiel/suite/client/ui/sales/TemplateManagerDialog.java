@@ -2,9 +2,13 @@ package com.materiel.suite.client.ui.sales;
 
 import com.materiel.suite.client.service.ServiceLocator;
 import com.materiel.suite.client.service.TemplatesGateway;
+import com.materiel.suite.client.ui.common.PdfPreviewPanel;
+import com.materiel.suite.client.ui.common.RichHtmlToolbar;
 import com.materiel.suite.client.ui.common.Toasts;
 
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.event.ListSelectionEvent;
 import java.awt.*;
 import java.io.File;
@@ -21,7 +25,8 @@ public class TemplateManagerDialog extends JDialog {
   private final JList<TemplatesGateway.Template> list = new JList<>(listModel);
   private final JTextField keyField = new JTextField();
   private final JTextField nameField = new JTextField();
-  private final JTextArea contentArea = new JTextArea(24, 80);
+  private final JEditorPane contentArea = new JEditorPane("text/html", "");
+  private final JCheckBox livePreview = new JCheckBox("Prévisualisation live", true);
   private final JButton newBtn = new JButton("Nouveau");
   private final JButton saveBtn = new JButton("Enregistrer");
   private final JButton deleteBtn = new JButton("Supprimer");
@@ -69,10 +74,10 @@ public class TemplateManagerDialog extends JDialog {
     gc.weightx = 1.0;
     gc.weighty = 1.0;
     gc.fill = GridBagConstraints.BOTH;
-    contentArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
-    contentArea.setLineWrap(false);
-    contentArea.setWrapStyleWord(false);
-    editor.add(new JScrollPane(contentArea), gc);
+    final PdfPreviewPanel previewPanel = new PdfPreviewPanel();
+    JSplitPane verticalSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(contentArea), previewPanel);
+    verticalSplit.setResizeWeight(0.65);
+    editor.add(verticalSplit, gc);
 
     gc.gridy++;
     gc.gridwidth = 2;
@@ -87,12 +92,14 @@ public class TemplateManagerDialog extends JDialog {
     buttons.add(insertVarBtn);
     buttons.add(insertPartialBtn);
     buttons.add(insertQrBtn);
+    buttons.add(livePreview);
     editor.add(buttons, gc);
 
     JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, listScroll, editor);
     split.setResizeWeight(0.25);
     split.setContinuousLayout(true);
     add(split, BorderLayout.CENTER);
+    add(new RichHtmlToolbar(contentArea), BorderLayout.SOUTH);
 
     typeCombo.addActionListener(e -> reload(null));
     list.addListSelectionListener(this::onSelect);
@@ -103,6 +110,48 @@ public class TemplateManagerDialog extends JDialog {
     insertVarBtn.addActionListener(e -> insertAtCaret("{{client.name}}"));
     insertPartialBtn.addActionListener(e -> insertAtCaret("{{>partial:cgv}}"));
     insertQrBtn.addActionListener(e -> insertAtCaret("{{qr:https://votre-lien}}"));
+    Timer previewTimer = new Timer(450, e -> {
+      if (!livePreview.isSelected()){
+        return;
+      }
+      String html = contentArea.getText();
+      if (html == null || html.isBlank()){
+        previewPanel.setPdf(null);
+        return;
+      }
+      try {
+        byte[] pdf = PdfTemplateEngine.renderHtmlForPreview(html, null);
+        previewPanel.setPdf(pdf);
+      } catch (Exception ignore){
+      }
+    });
+    previewTimer.setRepeats(false);
+    DocumentListener listener = new DocumentListener() {
+      private void trigger(){
+        previewTimer.restart();
+      }
+
+      @Override
+      public void insertUpdate(DocumentEvent e){
+        trigger();
+      }
+
+      @Override
+      public void removeUpdate(DocumentEvent e){
+        trigger();
+      }
+
+      @Override
+      public void changedUpdate(DocumentEvent e){
+        trigger();
+      }
+    };
+    contentArea.getDocument().addDocumentListener(listener);
+    livePreview.addActionListener(e -> {
+      if (livePreview.isSelected()){
+        previewTimer.restart();
+      }
+    });
 
     setSize(1100, 700);
     setLocationRelativeTo(owner);
@@ -197,8 +246,7 @@ public class TemplateManagerDialog extends JDialog {
     if (token == null){
       return;
     }
-    int pos = contentArea.getCaretPosition();
-    contentArea.insert(token, pos);
+    contentArea.replaceSelection(token);
     contentArea.requestFocusInWindow();
   }
 
